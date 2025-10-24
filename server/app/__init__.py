@@ -106,6 +106,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import api
     
     app.register_blueprint(api.bp)
+
+
+def create_app(config: Type[BaseConfig] = None) -> Flask:
     """Create and configure Flask application.
     
     Args:

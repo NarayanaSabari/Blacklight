@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: blacklight-postgres-local
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: blacklight
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blacklight-local-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: blacklight-redis-local
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_local_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blacklight-local-network
+
+  # pgAdmin (Optional - Database Management UI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: blacklight-pgadmin-local
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - blacklight-local-network
+    profiles:
+      - tools
+
+  # Redis Commander (Optional - Redis Management UI)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: blacklight-redis-commander-local
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - blacklight-local-network
+    profiles:
+      - tools
+
+volumes:
+  postgres_local_data:
+  redis_local_data:
+
+networks:
+  blacklight-local-network:
+    driver: bridge
