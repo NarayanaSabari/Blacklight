@@ -1,8 +1,64 @@
 # Blacklight AI Coding Agent Instructions
 
+# Project Overview
+This is a HR Recruiting App, a multi-tenant, role-based web application designed for HR Bench Sales recruiters. The platform streamlines the recruitment process by providing tools for candidate management, job postings, interview scheduling, and client communications. It supports multiple tenants (companies) with isolated data and configurations, ensuring secure and efficient operations.
+
+The platform includes two web applications:
+- Main Application (ui/portal): 
+	- Tenant-specific recruiter and admin interfaces
+    - Candidate tracking, job management, interview scheduling, and reporting tools.
+    - Role-based access control for recruiters, hiring managers, and admins.
+    - Tenant user management and settings.
+- Central Management Platform (ui/centralD): 
+	- Super-admin interface for managing tenants, users, and global settings.
+    - Analytics dashboard for monitoring platform usage and performance across tenants.
+    - System-wide configurations and updates.
+
 ## Project Architecture
 
 Blacklight is a monorepo with a production-ready Flask backend (`server/`) and React frontend UIs (`ui/`). The server follows **Flask Application Factory** pattern with strict separation of concerns.
+
+### Frontend Design Patterns
+
+**UI Component System**
+- **ONLY use shadcn/ui components** - Never install or use other UI libraries (Material-UI, Ant Design, Chakra, etc.)
+- **ONLY use Tailwind CSS for styling** - No CSS-in-JS, styled-components, or custom CSS files except for global styles
+- All components are in `ui/[portal|centralD]/src/components/ui/` - use these shadcn primitives
+- Customize shadcn components via Tailwind utility classes, not inline styles
+- Follow shadcn's composition patterns for building complex UIs from primitives
+
+**Styling Guidelines**
+- Use Tailwind utility classes exclusively: `className="flex items-center gap-4 p-6"`
+- Leverage Tailwind's responsive modifiers: `md:grid-cols-2 lg:grid-cols-3`
+- Use CSS variables from shadcn theme in `index.css` for colors (e.g., `bg-primary`, `text-muted-foreground`)
+- Never write custom CSS classes unless absolutely necessary for animations
+- Maintain consistent spacing using Tailwind's spacing scale (4, 8, 12, 16, etc.)
+
+**Component Patterns**
+```tsx
+// Good: shadcn + Tailwind
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+
+function MyComponent() {
+  return (
+    <Card className="w-full max-w-2xl">
+      <CardHeader className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">Title</h2>
+      </CardHeader>
+      <CardContent>
+        <Button variant="default" size="lg" className="w-full">
+          Action
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Bad: Custom UI library or inline styles
+import { MaterialButton } from "@mui/material"  // ❌ Never do this
+<div style={{display: "flex"}}>  // ❌ Use Tailwind instead
+```
 
 ### Core Architectural Patterns
 
