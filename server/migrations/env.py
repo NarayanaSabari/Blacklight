@@ -15,7 +15,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Import the config settings
 from config.settings import settings
 from app import create_app, db
-from app.models import User, AuditLog
+from app.models import (
+    AuditLog,
+    SubscriptionPlan,
+    Tenant,
+    PMAdminUser,
+    PortalUser,
+    TenantSubscriptionHistory
+)
 
 # This is the Alembic Config object, which provides the values of the [alembic] section
 # of the alembic.ini file as the `config` object to your migration scripts

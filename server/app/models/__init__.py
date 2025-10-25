@@ -26,27 +26,6 @@ class BaseModel(db.Model):
         return f"<{self.__class__.__name__} id={self.id}>"
 
 
-class User(BaseModel):
-    """User model."""
-    
-    __tablename__ = "users"
-    
-    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    is_active = db.Column(db.Boolean, nullable=False, default=True)
-    
-    def to_dict(self):
-        """Convert model to dictionary."""
-        data = super().to_dict()
-        data.update({
-            "username": self.username,
-            "email": self.email,
-            "is_active": self.is_active,
-        })
-        return data
-
-
 class AuditLog(BaseModel):
     """Audit log model for tracking changes."""
     
@@ -56,7 +35,8 @@ class AuditLog(BaseModel):
     entity_type = db.Column(db.String(100), nullable=False, index=True)
     entity_id = db.Column(db.Integer, nullable=False, index=True)
     changes = db.Column(db.JSON, nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Changed by: can be PM admin user ID or portal user ID (store as string with prefix)
+    changed_by = db.Column(db.String(100), nullable=True)
     
     def to_dict(self):
         """Convert model to dictionary."""
@@ -66,6 +46,14 @@ class AuditLog(BaseModel):
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,
             "changes": self.changes,
-            "user_id": self.user_id,
+            "changed_by": self.changed_by,
         })
         return data
+
+
+# Import tenant management models to ensure they're registered with SQLAlchemy
+from app.models.subscription_plan import SubscriptionPlan
+from app.models.tenant import Tenant, TenantStatus, BillingCycle
+from app.models.pm_admin_user import PMAdminUser
+from app.models.portal_user import PortalUser, PortalUserRole
+from app.models.tenant_subscription_history import TenantSubscriptionHistory
