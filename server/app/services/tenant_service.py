@@ -14,9 +14,9 @@ from app.models import (
     PortalUser,
     SubscriptionPlan,
     TenantSubscriptionHistory,
+    Role,
 )
 from app.models.tenant import TenantStatus, BillingCycle
-from app.models.portal_user import PortalUserRole
 from app.schemas.tenant_schema import (
     TenantCreateSchema,
     TenantUpdateSchema,
@@ -183,6 +183,13 @@ class TenantService:
             data.tenant_admin_password.encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
 
+        # Get TENANT_ADMIN role
+        tenant_admin_role = db.session.scalar(
+            select(Role).where(Role.name == "TENANT_ADMIN").where(Role.is_system_role == True)
+        )
+        if not tenant_admin_role:
+            raise ValueError("TENANT_ADMIN system role not found. Run migrations to seed roles.")
+
         # Create tenant admin user
         admin_user = PortalUser(
             tenant_id=tenant.id,
@@ -190,7 +197,7 @@ class TenantService:
             password_hash=password_hash,
             first_name=data.tenant_admin_first_name,
             last_name=data.tenant_admin_last_name,
-            role=PortalUserRole.TENANT_ADMIN,
+            role_id=tenant_admin_role.id,
             is_active=True,
         )
         db.session.add(admin_user)

@@ -31,7 +31,7 @@ def with_tenant_context(f):
             # Extract tenant_id and attach to Flask's g object
             g.tenant_id = portal_user.get("tenant_id")
             g.user_id = portal_user.get("user_id")
-            g.user_role = portal_user.get("role")
+            g.user_role = portal_user.get("role_name")
         
         return f(*args, **kwargs)
     

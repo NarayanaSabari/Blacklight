@@ -83,3 +83,15 @@ from app.schemas.pm_admin_schema import (
     ResetTenantAdminPasswordSchema,
 )
 
+from app.schemas.role_schema import (
+    PermissionBase,
+    PermissionResponse,
+    PermissionListResponse,
+    RoleBase,
+    RoleCreate,
+    RoleUpdate,
+    RoleResponse,
+    RoleWithPermissions,
+    RoleAssignPermissions,
+    RoleListResponse,
+)

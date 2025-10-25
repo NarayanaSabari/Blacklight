@@ -95,7 +95,7 @@ def require_tenant_admin(f):
             payload = PortalAuthService.validate_token(access_token)
             
             # Check if user is TENANT_ADMIN
-            if payload.get("role") != "TENANT_ADMIN":
+            if payload.get("role_name") != "TENANT_ADMIN":
                 return error_response(
                     "Access denied: TENANT_ADMIN role required",
                     403

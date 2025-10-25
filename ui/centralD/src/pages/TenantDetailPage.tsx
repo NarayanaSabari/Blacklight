@@ -16,12 +16,18 @@ import { TenantInfoCard } from '@/components/tenants/TenantInfoCard';
 import { CurrentPlanCard } from '@/components/tenants/CurrentPlanCard';
 import { TenantStatsCard } from '@/components/tenants/TenantStatsCard';
 import { DangerZone } from '@/components/tenants/DangerZone';
+import { TenantUsersTable } from '@/components/tenants/TenantUsersTable';
 import { DeleteTenantDialog } from '@/components/dialogs/DeleteTenantDialog';
 import { SuspendTenantDialog } from '@/components/dialogs/SuspendTenantDialog';
+import { ChangePlanDialog } from '@/components/dialogs/ChangePlanDialog';
 import { useTenant } from '@/hooks/api/useTenants';
+import { useTenantStats } from '@/hooks/api/useTenantStats';
+import { usePlans } from '@/hooks/api/usePlans';
+import { usePortalUsers } from '@/hooks/api/usePortalUsers';
 import { useSuspendTenant } from '@/hooks/api/useSuspendTenant';
 import { useActivateTenant } from '@/hooks/api/useActivateTenant';
 import { useDeleteTenant } from '@/hooks/api/useDeleteTenant';
+import { useChangeTenantPlan } from '@/hooks/api/useChangeTenantPlan';
 import { toast } from 'sonner';
 
 export function TenantDetailPage() {
@@ -31,12 +37,18 @@ export function TenantDetailPage() {
   const { data: tenant, isLoading, error } = useTenant(slug || '');
   const tenantId = tenant?.id || 0;
   
+  const { data: stats } = useTenantStats(slug);
+  const { data: plans = [] } = usePlans();
+  const { data: portalUsers = [], isLoading: isLoadingUsers } = usePortalUsers(slug);
+  
   const suspendTenant = useSuspendTenant(tenantId);
   const activateTenant = useActivateTenant(tenantId);
   const deleteTenant = useDeleteTenant(tenantId);
+  const changePlan = useChangeTenantPlan(tenantId);
 
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showChangePlanDialog, setShowChangePlanDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -92,6 +104,15 @@ export function TenantDetailPage() {
     }
   };
 
+  const handleChangePlan = async (data: { new_plan_id: number; billing_cycle: 'MONTHLY' | 'YEARLY' }) => {
+    try {
+      await changePlan.mutateAsync(data);
+      setShowChangePlanDialog(false);
+    } catch (error) {
+      console.error('Failed to change plan:', error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -110,6 +131,11 @@ export function TenantDetailPage() {
         {/* Left Column - Main Info */}
         <div className="lg:col-span-2 space-y-6">
           <TenantInfoCard tenant={tenant} />
+          <TenantUsersTable 
+            tenantId={tenantId} 
+            users={portalUsers} 
+            isLoading={isLoadingUsers}
+          />
           <DangerZone
             tenant={tenant}
             onSuspend={() => setShowSuspendDialog(true)}
@@ -122,16 +148,23 @@ export function TenantDetailPage() {
         <div className="space-y-6">
           <CurrentPlanCard
             tenant={tenant}
-            onChangePlan={() => {
-              // TODO: Implement change plan dialog
-              toast.info('Change plan feature coming soon');
-            }}
+            onChangePlan={() => setShowChangePlanDialog(true)}
           />
           <TenantStatsCard tenant={tenant} />
         </div>
       </div>
 
       {/* Dialogs */}
+      <ChangePlanDialog
+        open={showChangePlanDialog}
+        onOpenChange={setShowChangePlanDialog}
+        tenant={tenant}
+        stats={stats || null}
+        plans={plans}
+        onSubmit={handleChangePlan}
+        isLoading={changePlan.isPending}
+      />
+
       <SuspendTenantDialog
         open={showSuspendDialog}
         onOpenChange={setShowSuspendDialog}

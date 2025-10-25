@@ -55,5 +55,8 @@ class AuditLog(BaseModel):
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.tenant import Tenant, TenantStatus, BillingCycle
 from app.models.pm_admin_user import PMAdminUser
-from app.models.portal_user import PortalUser, PortalUserRole
+from app.models.portal_user import PortalUser
 from app.models.tenant_subscription_history import TenantSubscriptionHistory
+from app.models.role import Role
+from app.models.permission import Permission
+from app.models.role_permission import RolePermission

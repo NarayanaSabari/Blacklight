@@ -40,7 +40,8 @@ class PortalAuthService:
             "user_id": user.id,
             "email": user.email,
             "tenant_id": user.tenant_id,
-            "role": user.role.value,
+            "role_id": user.role_id,
+            "role_name": user.role.name,
             "type": "portal",
             "exp": datetime.utcnow() + PortalAuthService.ACCESS_TOKEN_EXPIRY,
             "iat": datetime.utcnow(),
@@ -112,9 +113,14 @@ class PortalAuthService:
             ValueError: If authentication fails, account inactive, or tenant suspended
         """
         from sqlalchemy import select
+        from sqlalchemy.orm import joinedload
 
-        # Get user by email (globally unique)
-        user = db.session.scalar(select(PortalUser).where(PortalUser.email == email))
+        # Get user by email (globally unique) with relationships eagerly loaded
+        user = db.session.scalar(
+            select(PortalUser)
+            .where(PortalUser.email == email)
+            .options(joinedload(PortalUser.role), joinedload(PortalUser.tenant))
+        )
 
         if not user:
             raise ValueError("Invalid email or password")

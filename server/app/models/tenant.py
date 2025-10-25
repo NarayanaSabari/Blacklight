@@ -78,6 +78,14 @@ class Tenant(BaseModel):
         passive_deletes=True
     )
     
+    custom_roles = db.relationship(
+        'Role',
+        back_populates='tenant',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        passive_deletes=True
+    )
+    
     subscription_history = db.relationship(
         'TenantSubscriptionHistory',
         back_populates='tenant',

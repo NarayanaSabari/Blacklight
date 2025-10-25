@@ -60,3 +60,28 @@ def root():
             "info": "/api/info",
         },
     }), 200
+
+
+@bp.route("/debug/routes", methods=["GET"])
+def debug_routes():
+    """Debug endpoint to list all registered routes."""
+    import sys
+    
+    routes = []
+    for rule in current_app.url_map.iter_rules():
+        routes.append({
+            "endpoint": rule.endpoint,
+            "methods": sorted(list(rule.methods - {"HEAD", "OPTIONS"})),
+            "path": rule.rule,
+        })
+    
+    # Sort by path
+    routes.sort(key=lambda x: x["path"])
+    
+    return jsonify({
+        "python_executable": sys.executable,
+        "python_version": sys.version,
+        "total_routes": len(routes),
+        "tenant_routes": [r for r in routes if "tenant" in r["path"]],
+        "all_routes": routes,
+    }), 200

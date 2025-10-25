@@ -109,6 +109,18 @@ def create_migration(app: Flask, message: str) -> None:
         print(f"Migration created with message: {message}")
 
 
+def stamp_db(app: Flask, revision: str = "001") -> None:
+    """Stamp database with a specific migration version without running it."""
+    from alembic.config import Config
+    from alembic import command
+    
+    alembic_cfg = Config("alembic.ini")
+    
+    with app.app_context():
+        command.stamp(alembic_cfg, revision)
+        print(f"Database stamped with revision: {revision}")
+
+
 if __name__ == "__main__":
     app = create_app()
     
@@ -118,6 +130,7 @@ if __name__ == "__main__":
         "seed": lambda: seed_db(app),
         "migrate": lambda: migrate(app),
         "create-migration": lambda: create_migration(app, sys.argv[2] if len(sys.argv) > 2 else "auto"),
+        "stamp": lambda: stamp_db(app, sys.argv[2] if len(sys.argv) > 2 else "001"),
         "seed-plans": lambda: seed_plans(app),
         "seed-pm-admin": lambda: seed_pm_admin_user(
             app, 
@@ -138,6 +151,8 @@ if __name__ == "__main__":
         print("  drop                - Drop all tables")
         print("  migrate             - Run migrations")
         print("  create-migration    - Create new migration")
+        print("  stamp               - Mark database as at specific revision")
+        print("                        Usage: stamp [revision] (default: 001)")
         print("  seed                - Seed legacy sample data")
         print("\nTenant Management Commands:")
         print("  seed-plans          - Seed subscription plans")

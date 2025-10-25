@@ -264,18 +264,16 @@ class PMAdminService:
         Raises:
             ValueError: If user not found or not a TENANT_ADMIN
         """
-        from app.models.portal_user import PortalUserRole
-
         # Get portal user
         portal_user = db.session.get(PortalUser, data.portal_user_id)
         if not portal_user:
             raise ValueError(f"Portal user with ID {data.portal_user_id} not found")
 
         # Verify user is TENANT_ADMIN
-        if portal_user.role != PortalUserRole.TENANT_ADMIN:
+        if portal_user.role.name != "TENANT_ADMIN":
             raise ValueError(
                 f"User {data.portal_user_id} is not a TENANT_ADMIN "
-                f"(current role: {portal_user.role.value})"
+                f"(current role: {portal_user.role.name})"
             )
 
         # Hash new password

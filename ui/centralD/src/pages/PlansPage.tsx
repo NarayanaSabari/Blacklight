@@ -2,15 +2,43 @@
  * Subscription Plans Page (Read-only)
  */
 
-import { CheckCircle2, CreditCard, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, CreditCard, AlertCircle, Check, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { usePlans } from '@/hooks/api';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import type { BillingCycle } from '@/types/tenant';
 
 export function PlansPage() {
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('MONTHLY');
   const { data: plans, isLoading, error } = usePlans();
+
+  const getPlanPrice = (priceMonthly: number | null, priceYearly: number | null | undefined) => {
+    if (billingCycle === 'MONTHLY') {
+      return priceMonthly || 0;
+    }
+    return priceYearly || 0;
+  };
+
+  const getSavingsPercent = (priceMonthly: number | null, priceYearly: number | null | undefined) => {
+    if (!priceMonthly || !priceYearly) return 0;
+    const yearlyMonthly = priceYearly / 12;
+    return Math.round(((priceMonthly - yearlyMonthly) / priceMonthly) * 100);
+  };
+
+  const additionalFeatures = [
+    { feature: 'Custom Domain', plans: ['ENTERPRISE'] },
+    { feature: 'API Access', plans: ['PROFESSIONAL', 'ENTERPRISE'] },
+    { feature: 'Advanced Analytics', plans: ['PROFESSIONAL', 'ENTERPRISE'] },
+    { feature: 'Priority Support', plans: ['PROFESSIONAL', 'ENTERPRISE'] },
+    { feature: 'Dedicated Account Manager', plans: ['ENTERPRISE'] },
+    { feature: 'SLA Guarantee', plans: ['ENTERPRISE'] },
+  ];
 
   return (
     <div className="space-y-6">
@@ -21,6 +49,40 @@ export function PlansPage() {
           View all available subscription plans and their features
         </p>
       </div>
+
+      {/* Billing Cycle Toggle */}
+      {!isLoading && !error && (
+        <div className="flex items-center justify-center gap-4 py-4">
+          <Label 
+            htmlFor="billing-cycle" 
+            className={cn(
+              "text-sm font-medium cursor-pointer",
+              billingCycle === 'MONTHLY' ? "text-foreground" : "text-muted-foreground"
+            )}
+          >
+            Monthly
+          </Label>
+          <Switch
+            id="billing-cycle"
+            checked={billingCycle === 'YEARLY'}
+            onCheckedChange={(checked) => setBillingCycle(checked ? 'YEARLY' : 'MONTHLY')}
+          />
+          <Label 
+            htmlFor="billing-cycle" 
+            className={cn(
+              "text-sm font-medium cursor-pointer",
+              billingCycle === 'YEARLY' ? "text-foreground" : "text-muted-foreground"
+            )}
+          >
+            Yearly
+            {plans && plans.length > 0 && getSavingsPercent(plans[0].price_monthly, plans[0].price_yearly) > 0 && (
+              <Badge variant="secondary" className="ml-2">
+                Save {getSavingsPercent(plans[0].price_monthly, plans[0].price_yearly)}%
+              </Badge>
+            )}
+          </Label>
+        </div>
+      )}
 
       {/* Loading State */}
       {isLoading && (
@@ -56,36 +118,55 @@ export function PlansPage() {
 
       {/* Plans Grid */}
       {plans && plans.length > 0 && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <Card key={plan.id} className={plan.is_active ? '' : 'opacity-60'}>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-primary" />
-                  <CardTitle>{plan.name}</CardTitle>
-                </div>
-                <CardDescription>{plan.description || 'No description'}</CardDescription>
-                {!plan.is_active && (
-                  <Badge variant="secondary" className="w-fit">Inactive</Badge>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {plans.map((plan) => {
+            const isPopular = plan.name === 'PROFESSIONAL';
+            const price = getPlanPrice(plan.price_monthly, plan.price_yearly);
+            
+            return (
+              <Card 
+                key={plan.id} 
+                className={cn(
+                  'relative flex flex-col',
+                  !plan.is_active && 'opacity-60',
+                  isPopular && 'border-primary shadow-lg'
                 )}
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <span className="text-4xl font-bold">${plan.price_monthly}</span>
-                    <span className="text-muted-foreground">/month</span>
+              >
+                {isPopular && plan.is_active && (
+                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    Most Popular
+                  </Badge>
+                )}
+                
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                    <CardTitle className="capitalize">{plan.name.toLowerCase()}</CardTitle>
                   </div>
-                  
-                  {plan.price_yearly && (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Yearly:</span>
-                        <span className="font-medium">${plan.price_yearly}/year</span>
-                      </div>
-                    </div>
+                  <CardDescription>{plan.description || 'No description'}</CardDescription>
+                  {!plan.is_active && (
+                    <Badge variant="secondary" className="w-fit">Inactive</Badge>
                   )}
+                </CardHeader>
+                
+                <CardContent className="flex-1 flex flex-col">
+                  {/* Pricing */}
+                  <div className="mb-6">
+                    <div className="text-4xl font-bold">
+                      ${price}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        /{billingCycle === 'MONTHLY' ? 'mo' : 'yr'}
+                      </span>
+                    </div>
+                    {billingCycle === 'YEARLY' && price > 0 && (
+                      <div className="text-sm text-muted-foreground mt-1">
+                        ${(price / 12).toFixed(2)}/month billed annually
+                      </div>
+                    )}
+                  </div>
 
-                  <div className="border-t pt-4 space-y-2">{/* continuation */}
+                  {/* Plan Limits */}
+                  <div className="space-y-3 mb-6">
                     <p className="text-sm font-medium text-muted-foreground">Limits:</p>
                     <ul className="space-y-2 text-sm">
                       <li className="flex items-center gap-2">
@@ -106,12 +187,45 @@ export function PlansPage() {
                           {plan.max_jobs === -1 ? 'Unlimited' : plan.max_jobs} jobs
                         </span>
                       </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-primary" />
+                        <span>
+                          {plan.max_storage_gb === -1 ? 'Unlimited' : `${plan.max_storage_gb}GB`} storage
+                        </span>
+                      </li>
                     </ul>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  {/* Additional Features */}
+                  <div className="space-y-2 pt-4 border-t mt-auto">
+                    <p className="text-sm font-medium text-muted-foreground mb-3">Features:</p>
+                    {additionalFeatures.map(({ feature, plans: includedPlans }) => {
+                      const isIncluded = includedPlans.includes(plan.name);
+                      
+                      return (
+                        <div
+                          key={feature}
+                          className={cn(
+                            'flex items-start gap-2 text-sm',
+                            !isIncluded && 'text-muted-foreground'
+                          )}
+                        >
+                          {isIncluded ? (
+                            <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          ) : (
+                            <X className="h-4 w-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
+                          )}
+                          <span className={!isIncluded ? 'line-through' : ''}>
+                            {feature}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 

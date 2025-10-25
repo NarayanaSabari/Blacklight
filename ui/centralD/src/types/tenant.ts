@@ -114,3 +114,22 @@ export interface TenantDeleteResponse {
   message: string;
   users_deleted: number;
 }
+
+export interface TenantSubscriptionHistory {
+  id: number;
+  tenant_id: number;
+  subscription_plan_id: number;
+  subscription_plan?: SubscriptionPlan;
+  billing_cycle: BillingCycle | null;
+  started_at: string;
+  ended_at: string | null;
+  changed_by: string;
+  changed_by_admin?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    email: string;
+  };
+  notes: string | null;
+  created_at: string;
+}

@@ -3,9 +3,8 @@
 from datetime import datetime
 import bcrypt
 from app import db
-from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory
+from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory, Role
 from app.models.tenant import TenantStatus, BillingCycle
-from app.models.portal_user import PortalUserRole
 
 
 def generate_slug(name):
@@ -114,6 +113,14 @@ def seed_sample_tenants(count=3):
         db.session.add(tenant)
         db.session.flush()  # Get tenant ID
         
+        # Get TENANT_ADMIN role
+        tenant_admin_role = db.session.query(Role).filter_by(
+            name="TENANT_ADMIN", is_system_role=True
+        ).first()
+        
+        if not tenant_admin_role:
+            raise ValueError("TENANT_ADMIN system role not found. Run migrations to seed roles.")
+        
         # Create tenant admin user
         admin_user = PortalUser(
             tenant_id=tenant.id,
@@ -123,7 +130,7 @@ def seed_sample_tenants(count=3):
             ).decode("utf-8"),
             first_name=tenant_data["admin"]["first_name"],
             last_name=tenant_data["admin"]["last_name"],
-            role=PortalUserRole.TENANT_ADMIN,
+            role_id=tenant_admin_role.id,
             is_active=True,
         )
         db.session.add(admin_user)

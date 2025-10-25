@@ -1,16 +1,8 @@
 """Pydantic schemas for Portal Users."""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
 from datetime import datetime
-from enum import Enum
-
-
-class PortalUserRoleEnum(str, Enum):
-    """Portal user role enumeration."""
-    TENANT_ADMIN = "TENANT_ADMIN"
-    RECRUITER = "RECRUITER"
-    HIRING_MANAGER = "HIRING_MANAGER"
 
 
 class PortalUserCreateSchema(BaseModel):
@@ -21,7 +13,7 @@ class PortalUserCreateSchema(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100, description="First name")
     last_name: str = Field(..., min_length=1, max_length=100, description="Last name")
     phone: Optional[str] = Field(None, max_length=20, description="Phone number")
-    role: PortalUserRoleEnum = Field(default=PortalUserRoleEnum.RECRUITER, description="User role")
+    role_id: int = Field(..., description="Role ID (must be a system role or tenant's custom role)")
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -32,7 +24,7 @@ class PortalUserUpdateSchema(BaseModel):
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
-    role: Optional[PortalUserRoleEnum] = None
+    role_id: Optional[int] = Field(None, description="Role ID")
     is_active: Optional[bool] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -56,7 +48,8 @@ class PortalUserResponseSchema(BaseModel):
     last_name: str
     full_name: str
     phone: Optional[str]
-    role: str
+    role: Dict[str, Any]  # Role object with id, name, display_name, etc.
+    role_id: int
     is_active: bool
     last_login: Optional[datetime]
     is_locked: bool
@@ -68,6 +61,42 @@ class PortalUserResponseSchema(BaseModel):
     tenant: Optional[dict] = None
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('role', mode='before')
+    @classmethod
+    def serialize_role(cls, v):
+        """Convert Role SQLAlchemy model to dict."""
+        if v is None:
+            return None
+        # If already a dict, return as-is
+        if isinstance(v, dict):
+            return v
+        # If SQLAlchemy model, serialize it
+        return {
+            'id': v.id,
+            'name': v.name,
+            'display_name': v.display_name,
+            'description': v.description,
+            'is_system_role': v.is_system_role,
+            'tenant_id': v.tenant_id,
+        }
+    
+    @field_validator('tenant', mode='before')
+    @classmethod
+    def serialize_tenant(cls, v):
+        """Convert Tenant SQLAlchemy model to dict."""
+        if v is None:
+            return None
+        # If already a dict, return as-is
+        if isinstance(v, dict):
+            return v
+        # If SQLAlchemy model, serialize it
+        return {
+            'id': v.id,
+            'slug': v.slug,
+            'company_name': v.name,  # Tenant.name is the company name
+            'status': v.status.value if hasattr(v.status, 'value') else str(v.status),
+        }
 
 
 class PortalUserListResponseSchema(BaseModel):

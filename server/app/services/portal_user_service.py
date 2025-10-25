@@ -6,8 +6,7 @@ from sqlalchemy import select, or_
 import bcrypt
 
 from app import db
-from app.models import PortalUser, Tenant
-from app.models.portal_user import PortalUserRole
+from app.models import PortalUser, Tenant, Role
 from app.models.tenant import TenantStatus
 from app.schemas.portal_user_schema import (
     PortalUserCreateSchema,
@@ -75,7 +74,7 @@ class PortalUserService:
         if not creator:
             raise ValueError("Creator user not found")
 
-        if creator.role != PortalUserRole.TENANT_ADMIN:
+        if creator.role.name != "TENANT_ADMIN":
             raise ValueError("Only TENANT_ADMIN users can create new users")
 
         # Verify tenant exists and is active
@@ -103,15 +102,25 @@ class PortalUserService:
             data.password.encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
 
+        # Validate role_id exists and is accessible to the tenant
+        role = db.session.get(Role, data.role_id)
+        if not role:
+            raise ValueError(f"Role with ID {data.role_id} not found")
+        
+        # Verify role is either a system role or belongs to the creator's tenant
+        if role.tenant_id is not None and role.tenant_id != creator.tenant_id:
+            raise ValueError("Cannot assign role from another tenant")
+
         # Create user
         user = PortalUser(
-            tenant_id=data.tenant_id,
+            tenant_id=creator.tenant_id,
             email=data.email,
             password_hash=password_hash,
             first_name=data.first_name,
             last_name=data.last_name,
-            role=data.role,
-            is_active=data.is_active if data.is_active is not None else True,
+            phone=data.phone,
+            role_id=data.role_id,
+            is_active=True,
         )
         db.session.add(user)
         db.session.commit()
@@ -126,8 +135,8 @@ class PortalUserService:
                 "email": data.email,
                 "first_name": data.first_name,
                 "last_name": data.last_name,
-                "role": data.role.value,
-                "tenant_id": data.tenant_id,
+                "role_id": data.role_id,
+                "tenant_id": creator.tenant_id,
             },
         )
 
@@ -168,7 +177,7 @@ class PortalUserService:
         page: int = 1,
         per_page: int = 20,
         search: Optional[str] = None,
-        role: Optional[PortalUserRole] = None,
+        role_id: Optional[int] = None,
         is_active: Optional[bool] = None,
     ) -> PortalUserListResponseSchema:
         """
@@ -179,7 +188,7 @@ class PortalUserService:
             page: Page number (1-indexed)
             per_page: Items per page (max 100)
             search: Search term for email, first_name, last_name
-            role: Filter by user role
+            role_id: Filter by role ID
             is_active: Filter by active status
 
         Returns:
@@ -203,8 +212,8 @@ class PortalUserService:
                 )
             )
 
-        if role:
-            query = query.where(PortalUser.role == role)
+        if role_id:
+            query = query.where(PortalUser.role_id == role_id)
 
         if is_active is not None:
             query = query.where(PortalUser.is_active == is_active)
@@ -263,7 +272,7 @@ class PortalUserService:
         if not updater:
             raise ValueError("Updater user not found")
 
-        if updater.role != PortalUserRole.TENANT_ADMIN:
+        if updater.role.name != "TENANT_ADMIN":
             raise ValueError("Only TENANT_ADMIN users can update users")
 
         # Verify same tenant
@@ -271,12 +280,6 @@ class PortalUserService:
             raise ValueError("Cannot update users from other tenants")
 
         changes = {}
-
-        # Update email (with global uniqueness check)
-        if data.email is not None and data.email != user.email:
-            PortalUserService._validate_email_unique(data.email, exclude_user_id=user_id)
-            changes["email"] = (user.email, data.email)
-            user.email = data.email
 
         # Update first_name
         if data.first_name is not None and data.first_name != user.first_name:
@@ -288,10 +291,24 @@ class PortalUserService:
             changes["last_name"] = (user.last_name, data.last_name)
             user.last_name = data.last_name
 
-        # Update role
-        if data.role is not None and data.role != user.role:
-            changes["role"] = (user.role.value, data.role.value)
-            user.role = data.role
+        # Update phone
+        if data.phone is not None and data.phone != user.phone:
+            changes["phone"] = (user.phone, data.phone)
+            user.phone = data.phone
+
+        # Update role_id
+        if data.role_id is not None and data.role_id != user.role_id:
+            # Validate role exists and is accessible to the tenant
+            role = db.session.get(Role, data.role_id)
+            if not role:
+                raise ValueError(f"Role with ID {data.role_id} not found")
+            
+            # Verify role is either a system role or belongs to the updater's tenant
+            if role.tenant_id is not None and role.tenant_id != updater.tenant_id:
+                raise ValueError("Cannot assign role from another tenant")
+            
+            changes["role_id"] = (user.role_id, data.role_id)
+            user.role_id = data.role_id
 
         # Update is_active
         if data.is_active is not None and data.is_active != user.is_active:
@@ -340,7 +357,7 @@ class PortalUserService:
         if not deleter:
             raise ValueError("Deleter user not found")
 
-        if deleter.role != PortalUserRole.TENANT_ADMIN:
+        if deleter.role.name != "TENANT_ADMIN":
             raise ValueError("Only TENANT_ADMIN users can delete users")
 
         # Verify same tenant

@@ -6,15 +6,15 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { TenantStats } from '@/types';
 
-export function useTenantStats(tenantId: number | undefined) {
+export function useTenantStats(tenantSlug: string | undefined) {
   return useQuery({
-    queryKey: ['tenant-stats', tenantId],
+    queryKey: ['tenant-stats', tenantSlug],
     queryFn: async () => {
       const response = await apiClient.get<TenantStats>(
-        `/api/tenants/${tenantId}/stats`
+        `/api/tenants/${tenantSlug}/stats`
       );
       return response.data;
     },
-    enabled: !!tenantId,
+    enabled: !!tenantSlug,
   });
 }

@@ -9,7 +9,6 @@ from app.schemas.portal_user_schema import (
     PortalUserResetPasswordSchema,
     PortalLoginSchema,
 )
-from app.models.portal_user import PortalUserRole
 
 bp = Blueprint("portal_users", __name__, url_prefix="/api/portal")
 
@@ -191,16 +190,16 @@ def list_users():
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 20, type=int)
         search = request.args.get("search")
-        role_str = request.args.get("role")
+        role_id_str = request.args.get("role_id")
         is_active_str = request.args.get("is_active")
 
-        # Parse role enum
-        role = None
-        if role_str:
+        # Parse role_id
+        role_id = None
+        if role_id_str:
             try:
-                role = PortalUserRole(role_str)
+                role_id = int(role_id_str)
             except ValueError:
-                return error_response(f"Invalid role: {role_str}", 400)
+                return error_response(f"Invalid role_id: {role_id_str}", 400)
 
         # Parse is_active boolean
         is_active = None
@@ -212,7 +211,7 @@ def list_users():
             page=page,
             per_page=per_page,
             search=search,
-            role=role,
+            role_id=role_id,
             is_active=is_active,
         )
 
@@ -354,7 +353,7 @@ def reset_password(user_id: int):
 
         # Verify current user is TENANT_ADMIN
         current_user_obj = PortalUserService.get_user(current_user_id)
-        if current_user_obj.role != PortalUserRole.TENANT_ADMIN:
+        if current_user_obj.role["name"] != "TENANT_ADMIN":
             return error_response("Only TENANT_ADMIN can reset passwords", 403)
 
         data = PortalUserResetPasswordSchema.model_validate(request.get_json())

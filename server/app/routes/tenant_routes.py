@@ -1,7 +1,7 @@
 """Tenant API routes - Requires PM Admin authentication."""
 
 from flask import Blueprint, jsonify, request
-from app.services import TenantService
+from app.services import TenantService, PortalUserService
 from app.middleware import require_pm_admin
 from app.schemas.tenant_schema import (
     TenantCreateSchema,
@@ -118,11 +118,16 @@ def list_tenants():
         return error_response(str(e), 500)
 
 
-@bp.route("/<string:identifier>", methods=["GET"])
+# ============================================================================
+# SPECIFIC SUB-RESOURCE ROUTES - Must be defined BEFORE generic routes
+# ============================================================================
+
+
+@bp.route("/<string:identifier>/stats", methods=["GET"])
 @require_pm_admin
-def get_tenant(identifier: str):
+def get_tenant_stats(identifier: str):
     """
-    Get tenant by ID or slug.
+    Get tenant resource usage statistics.
     
     Requires: PM Admin authentication
     
@@ -130,48 +135,10 @@ def get_tenant(identifier: str):
         - identifier: Tenant ID (integer) or slug (string)
     
     Returns:
-        200: Tenant details
+        200: Usage statistics
         404: Tenant not found
     """
     try:
-        # Try to parse as integer ID first
-        try:
-            tenant_id = int(identifier)
-            tenant = TenantService.get_tenant(tenant_id)
-        except ValueError:
-            # Not an integer, treat as slug
-            tenant = TenantService.get_tenant(identifier)
-        
-        return jsonify(tenant.model_dump()), 200
-
-    except ValueError as e:
-        return error_response(str(e), 404)
-    except Exception as e:
-        return error_response(str(e), 500)
-
-
-@bp.route("/<string:identifier>", methods=["PATCH"])
-@require_pm_admin
-def update_tenant(identifier: str):
-    """
-    Update tenant basic information.
-    
-    Requires: PM Admin authentication
-    
-    Path params:
-        - identifier: Tenant ID (integer) or slug (string)
-    
-    Request body: TenantUpdateSchema
-    
-    Returns:
-        200: Updated tenant
-        400: Validation error
-        404: Tenant not found
-    """
-    try:
-        data = TenantUpdateSchema.model_validate(request.get_json())
-        changed_by = get_changed_by()
-
         # Convert identifier to int if possible
         try:
             tenant_id = int(identifier)
@@ -180,14 +147,84 @@ def update_tenant(identifier: str):
             tenant = TenantService.get_tenant(identifier)
             tenant_id = tenant.id
 
-        tenant = TenantService.update_tenant(tenant_id, data, changed_by)
+        stats = TenantService.get_usage_stats(tenant_id)
 
-        return jsonify(tenant.model_dump()), 200
+        return jsonify(stats.model_dump()), 200
 
     except ValueError as e:
-        status = 404 if "not found" in str(e).lower() else 400
-        return error_response(str(e), status)
+        return error_response(str(e), 404)
     except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/<string:identifier>/users", methods=["GET"])
+@require_pm_admin
+def get_tenant_users(identifier: str):
+    """
+    Get all users for a specific tenant.
+    
+    Requires: PM Admin authentication
+    
+    Path params:
+        - identifier: Tenant ID (integer) or slug (string)
+    
+    Query params:
+        - page: Page number (default: 1)
+        - per_page: Items per page (default: 20)
+        - search: Search in email, first_name, last_name
+        - role_id: Filter by role ID
+        - is_active: Filter by active status (true/false)
+    
+    Returns:
+        200: List of tenant users with pagination
+        404: Tenant not found
+    """
+    try:
+        # Convert identifier to int if possible
+        try:
+            tenant_id = int(identifier)
+        except ValueError:
+            # Get tenant by slug first to get ID
+            tenant = TenantService.get_tenant(identifier)
+            tenant_id = tenant.id
+        
+        # Get query params
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 20, type=int)
+        search = request.args.get("search")
+        role_id_str = request.args.get("role_id")
+        is_active_str = request.args.get("is_active")
+        
+        # Parse role_id
+        role_id = None
+        if role_id_str:
+            try:
+                role_id = int(role_id_str)
+            except ValueError:
+                return error_response(f"Invalid role_id: {role_id_str}", 400)
+        
+        # Parse is_active boolean
+        is_active = None
+        if is_active_str:
+            is_active = is_active_str.lower() == "true"
+        
+        # Get users from PortalUserService
+        result = PortalUserService.list_users(
+            tenant_id=tenant_id,
+            page=page,
+            per_page=per_page,
+            search=search,
+            role_id=role_id,
+            is_active=is_active,
+        )
+        
+        return jsonify(result.model_dump()), 200
+    
+    except ValueError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return error_response(str(e), 500)
 
 
@@ -311,25 +348,63 @@ def reactivate_tenant(identifier: str):
         return error_response(str(e), 500)
 
 
-@bp.route("/<string:identifier>", methods=["DELETE"])
+# ============================================================================
+# GENERIC IDENTIFIER ROUTES - Must be defined AFTER specific routes
+# ============================================================================
+
+
+@bp.route("/<string:identifier>", methods=["GET"])
 @require_pm_admin
-def delete_tenant(identifier: str):
+def get_tenant(identifier: str):
     """
-    Delete a tenant (CASCADE deletes all portal users).
+    Get tenant by ID or slug.
     
     Requires: PM Admin authentication
     
     Path params:
         - identifier: Tenant ID (integer) or slug (string)
     
-    Request body: TenantDeleteSchema
-    
     Returns:
-        200: Deletion confirmation
+        200: Tenant details
         404: Tenant not found
     """
     try:
-        data = TenantDeleteSchema.model_validate(request.get_json())
+        # Try to parse as integer ID first
+        try:
+            tenant_id = int(identifier)
+            tenant = TenantService.get_tenant(tenant_id)
+        except ValueError:
+            # Not an integer, treat as slug
+            tenant = TenantService.get_tenant(identifier)
+        
+        return jsonify(tenant.model_dump()), 200
+
+    except ValueError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/<string:identifier>", methods=["PATCH"])
+@require_pm_admin
+def update_tenant(identifier: str):
+    """
+    Update tenant basic information.
+    
+    Requires: PM Admin authentication
+    
+    Path params:
+        - identifier: Tenant ID (integer) or slug (string)
+    
+    Request body: TenantUpdateSchema
+    
+    Returns:
+        200: Updated tenant
+        400: Validation error
+        404: Tenant not found
+    """
+    try:
+        data = TenantUpdateSchema.model_validate(request.get_json())
         changed_by = get_changed_by()
 
         # Convert identifier to int if possible
@@ -340,9 +415,9 @@ def delete_tenant(identifier: str):
             tenant = TenantService.get_tenant(identifier)
             tenant_id = tenant.id
 
-        result = TenantService.delete_tenant(tenant_id, data, changed_by)
+        tenant = TenantService.update_tenant(tenant_id, data, changed_by)
 
-        return jsonify(result), 200
+        return jsonify(tenant.model_dump()), 200
 
     except ValueError as e:
         status = 404 if "not found" in str(e).lower() else 400
@@ -350,36 +425,3 @@ def delete_tenant(identifier: str):
     except Exception as e:
         return error_response(str(e), 500)
 
-
-@bp.route("/<string:identifier>/stats", methods=["GET"])
-@require_pm_admin
-def get_tenant_stats(identifier: str):
-    """
-    Get tenant resource usage statistics.
-    
-    Requires: PM Admin authentication
-    
-    Path params:
-        - identifier: Tenant ID (integer) or slug (string)
-    
-    Returns:
-        200: Usage statistics
-        404: Tenant not found
-    """
-    try:
-        # Convert identifier to int if possible
-        try:
-            tenant_id = int(identifier)
-        except ValueError:
-            # Get tenant by slug first to get ID
-            tenant = TenantService.get_tenant(identifier)
-            tenant_id = tenant.id
-
-        stats = TenantService.get_usage_stats(tenant_id)
-
-        return jsonify(stats.model_dump()), 200
-
-    except ValueError as e:
-        return error_response(str(e), 404)
-    except Exception as e:
-        return error_response(str(e), 500)

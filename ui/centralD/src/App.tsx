@@ -14,6 +14,7 @@ import { TenantsPage } from '@/pages/TenantsPage';
 import { CreateTenantPage } from '@/pages/CreateTenantPage';
 import { TenantDetailPage } from '@/pages/TenantDetailPage';
 import { PlansPage } from '@/pages/PlansPage';
+import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { env } from '@/lib/env';
 
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/tenants/new" element={<CreateTenantPage />} />
                 <Route path="/tenants/:slug" element={<TenantDetailPage />} />
                 <Route path="/plans" element={<PlansPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admins" element={<AdminsPage />} />
               </Route>
             </Route>
