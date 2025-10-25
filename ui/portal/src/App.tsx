@@ -1,7 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { PortalAuthProvider, usePortalAuth } from '@/contexts/PortalAuthContext';
+import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { CandidatesPage } from '@/pages/CandidatesPage';
+import { JobsPage } from '@/pages/JobsPage';
+import { ApplicationsPage } from '@/pages/ApplicationsPage';
+import { InterviewsPage } from '@/pages/InterviewsPage';
+import { UsersPage } from '@/pages/UsersPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
 
@@ -32,17 +39,30 @@ function App() {
     <BrowserRouter>
       <PortalAuthProvider>
         <Routes>
+          {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+
+          {/* Protected Routes with Layout */}
           <Route
-            path="/dashboard"
+            path="/*"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <Layout>
+                  <Routes>
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="/candidates" element={<CandidatesPage />} />
+                    <Route path="/jobs" element={<JobsPage />} />
+                    <Route path="/applications" element={<ApplicationsPage />} />
+                    <Route path="/interviews" element={<InterviewsPage />} />
+                    <Route path="/users" element={<UsersPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  </Routes>
+                </Layout>
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </PortalAuthProvider>
     </BrowserRouter>
