@@ -104,8 +104,19 @@ def setup_error_handlers(app: Flask) -> None:
 def register_blueprints(app: Flask) -> None:
     """Register Flask blueprints."""
     from app.routes import api
+    from app.routes import subscription_plan_routes
+    from app.routes import tenant_routes
+    from app.routes import portal_user_routes
+    from app.routes import pm_admin_routes
     
+    # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
+    
+    # Tenant Management System routes
+    app.register_blueprint(subscription_plan_routes.bp)
+    app.register_blueprint(tenant_routes.bp)
+    app.register_blueprint(portal_user_routes.bp)
+    app.register_blueprint(pm_admin_routes.bp)
 
 
 def create_app(config: Type[BaseConfig] = None) -> Flask:
@@ -143,6 +154,7 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     cors.init_app(app, resources={
         r"/*": {
             "origins": app.config.get("CORS_ORIGINS", ["*"]),
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": app.config.get("CORS_ALLOW_HEADERS", ["*"]),
             "expose_headers": app.config.get("CORS_EXPOSE_HEADERS", ["*"]),
             "supports_credentials": app.config.get("CORS_SUPPORTS_CREDENTIALS", True),
@@ -155,10 +167,6 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     
     # Setup error handlers
     setup_error_handlers(app)
-    
-    # Register middleware
-    from app.middleware import register_middleware
-    register_middleware(app)
     
     # Register blueprints
     register_blueprints(app)

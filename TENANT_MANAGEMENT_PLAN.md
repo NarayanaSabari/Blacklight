@@ -1105,16 +1105,40 @@ DEFAULT_SUBSCRIPTION_PLAN=FREE
 - Alembic (already installed)
 - Pydantic (already installed)
 - PyJWT (for JWT tokens) - **TO BE INSTALLED**
-- bcrypt or passlib (for password hashing) - **TO BE INSTALLED**
+- bcrypt (for password hashing) - **TO BE INSTALLED**
+- Redis (for refresh tokens) - **ALREADY AVAILABLE**
+
+### Phase 2 Implementation Decisions
+1. **Password Hashing**: bcrypt for production-grade security
+2. **Slug Generation**: Auto-generate from company name with validation, allow override
+3. **Usage Stats**: Placeholder functions with TODO comments for candidates/jobs (tables don't exist yet)
+4. **Audit Logging**: Format as `"pm_admin:1"` or `"portal_user:5"` for changed_by field
+5. **Error Handling**: Raise exceptions in services, handle in routes (cleaner separation)
+6. **JWT**: PyJWT with Redis for refresh tokens, 24h expiry for PM admin, 8h for portal
+7. **Pagination**: Default 20 items, max 100 per page
+8. **API Response**: Return data directly with proper HTTP status codes (RESTful)
 
 ### Frontend (Both ui/centralD and ui/portal)
-- shadcn/ui (already installed)
-- Tailwind CSS (already installed)
-- React Query (@tanstack/react-query) - **TO BE INSTALLED**
-- Zod (for form validation) - **TO BE INSTALLED**
-- React Hook Form (for forms) - **TO BE INSTALLED**
-- React Router (for routing) - **TO BE INSTALLED**
-- Axios or Fetch (for API calls) - **TO BE INSTALLED if not present**
+- shadcn/ui (already installed) ✅
+- Tailwind CSS (already installed) ✅
+- React 19 + TypeScript (already installed) ✅
+- React Hook Form (already installed) ✅
+- Zod (for form validation) (already installed) ✅
+- Sonner (toast notifications) (already installed) ✅
+- React Router (@tanstack/react-router) - **TO BE INSTALLED**
+- React Query (@tanstack/react-query + devtools) - **TO BE INSTALLED**
+- Axios (for API calls) - **TO BE INSTALLED**
+
+### Phase 3 Implementation Decisions
+1. **Authentication Storage**: httpOnly cookies for production security
+2. **Environment Config**: .env.local for API base URL and configuration
+3. **Implementation Scope**: Full feature set (all pages and functionality)
+4. **Design System**: Minimal patterns with shadcn/ui default themes
+5. **Layout**: Consistent sidebar navigation layout
+6. **UX Features**: Toast notifications (sonner), loading skeletons for all components
+7. **API Integration**: Manual Flask backend testing with real API calls
+8. **Routing**: React Router v6 for client-side navigation
+9. **State Management**: TanStack Query for server state, React Context for auth
 
 ---
 

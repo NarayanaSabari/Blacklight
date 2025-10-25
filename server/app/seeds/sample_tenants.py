@@ -1,7 +1,7 @@
 """Seed sample tenants for testing."""
 
 from datetime import datetime
-from werkzeug.security import generate_password_hash
+import bcrypt
 from app import db
 from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory
 from app.models.tenant import TenantStatus, BillingCycle
@@ -115,16 +115,18 @@ def seed_sample_tenants(count=3):
         db.session.flush()  # Get tenant ID
         
         # Create tenant admin user
-        admin = PortalUser(
+        admin_user = PortalUser(
             tenant_id=tenant.id,
             email=tenant_data["admin"]["email"],
-            password_hash=generate_password_hash(tenant_data["admin"]["password"]),
+            password_hash=bcrypt.hashpw(
+                tenant_data["admin"]["password"].encode("utf-8"), bcrypt.gensalt()
+            ).decode("utf-8"),
             first_name=tenant_data["admin"]["first_name"],
             last_name=tenant_data["admin"]["last_name"],
             role=PortalUserRole.TENANT_ADMIN,
-            is_active=True
+            is_active=True,
         )
-        db.session.add(admin)
+        db.session.add(admin_user)
         
         # Create subscription history entry
         history = TenantSubscriptionHistory(

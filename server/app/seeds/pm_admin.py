@@ -1,7 +1,7 @@
 """Seed default PM admin user."""
 
 import os
-from werkzeug.security import generate_password_hash
+import bcrypt
 from app import db
 from app.models import PMAdminUser
 
@@ -36,9 +36,11 @@ def seed_pm_admin(email=None, password=None, first_name="Super", last_name="Admi
         return existing_admin, False
     
     # Create new PM admin
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
     admin = PMAdminUser(
         email=email,
-        password_hash=generate_password_hash(password),
+        password_hash=password_hash,
         first_name=first_name,
         last_name=last_name,
         is_active=True

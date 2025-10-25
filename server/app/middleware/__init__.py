@@ -1,4 +1,35 @@
-"""Custom middleware package."""
+"""Middleware package for authentication and request processing."""
+
+from app.middleware.pm_admin import require_pm_admin, optional_pm_admin
+from app.middleware.portal_auth import (
+    require_portal_auth,
+    require_tenant_admin,
+    optional_portal_auth,
+)
+from app.middleware.tenant_context import (
+    with_tenant_context,
+    get_current_tenant_id,
+    get_current_user_id,
+    get_current_user_role,
+    require_role,
+)
+
+__all__ = [
+    # PM Admin middleware
+    "require_pm_admin",
+    "optional_pm_admin",
+    # Portal auth middleware
+    "require_portal_auth",
+    "require_tenant_admin",
+    "optional_portal_auth",
+    # Tenant context middleware
+    "with_tenant_context",
+    "get_current_tenant_id",
+    "get_current_user_id",
+    "get_current_user_role",
+    "require_role",
+]
+
 
 from flask import Flask, request, jsonify
 from datetime import datetime

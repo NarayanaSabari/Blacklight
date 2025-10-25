@@ -74,14 +74,16 @@ class Tenant(BaseModel):
         'PortalUser',
         back_populates='tenant',
         lazy='dynamic',
-        cascade='all, delete-orphan'
+        cascade='all, delete-orphan',
+        passive_deletes=True
     )
     
     subscription_history = db.relationship(
         'TenantSubscriptionHistory',
         back_populates='tenant',
         lazy='dynamic',
-        order_by='TenantSubscriptionHistory.started_at.desc()'
+        order_by='TenantSubscriptionHistory.started_at.desc()',
+        passive_deletes=True
     )
     
     def to_dict(self, include_plan=False, include_stats=False):

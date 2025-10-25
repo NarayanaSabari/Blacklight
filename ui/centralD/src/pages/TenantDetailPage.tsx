@@ -1,0 +1,152 @@
+/**
+ * Tenant Detail Page
+ * Shows detailed information about a specific tenant
+ */
+
+/**
+ * Tenant Detail Page
+ * Displays comprehensive information about a single tenant
+ */
+
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { TenantInfoCard } from '@/components/tenants/TenantInfoCard';
+import { CurrentPlanCard } from '@/components/tenants/CurrentPlanCard';
+import { TenantStatsCard } from '@/components/tenants/TenantStatsCard';
+import { DangerZone } from '@/components/tenants/DangerZone';
+import { DeleteTenantDialog } from '@/components/dialogs/DeleteTenantDialog';
+import { SuspendTenantDialog } from '@/components/dialogs/SuspendTenantDialog';
+import { useTenant } from '@/hooks/api/useTenants';
+import { useSuspendTenant } from '@/hooks/api/useSuspendTenant';
+import { useActivateTenant } from '@/hooks/api/useActivateTenant';
+import { useDeleteTenant } from '@/hooks/api/useDeleteTenant';
+import { toast } from 'sonner';
+
+export function TenantDetailPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+
+  const { data: tenant, isLoading, error } = useTenant(slug || '');
+  const tenantId = tenant?.id || 0;
+  
+  const suspendTenant = useSuspendTenant(tenantId);
+  const activateTenant = useActivateTenant(tenantId);
+  const deleteTenant = useDeleteTenant(tenantId);
+
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error || !tenant) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/tenants')}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Tenant Not Found</h1>
+        </div>
+        <p className="text-muted-foreground">
+          The tenant you're looking for doesn't exist or you don't have permission to view it.
+        </p>
+      </div>
+    );
+  }
+
+  const handleSuspend = async (reason: string) => {
+    try {
+      await suspendTenant.mutateAsync({ reason });
+      toast.success('Tenant suspended successfully');
+      setShowSuspendDialog(false);
+    } catch (error) {
+      console.error('Failed to suspend tenant:', error);
+    }
+  };
+
+  const handleActivate = async () => {
+    try {
+      await activateTenant.mutateAsync();
+      toast.success('Tenant activated successfully');
+    } catch (error) {
+      console.error('Failed to activate tenant:', error);
+    }
+  };
+
+  const handleDelete = async (reason: string) => {
+    try {
+      await deleteTenant.mutateAsync({ reason });
+      toast.success('Tenant deleted successfully');
+      setShowDeleteDialog(false);
+      navigate('/tenants');
+    } catch (error) {
+      console.error('Failed to delete tenant:', error);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/tenants')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold tracking-tight">{tenant.name}</h1>
+          <p className="text-muted-foreground">Manage tenant information and settings</p>
+        </div>
+      </div>
+
+      {/* Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Main Info */}
+        <div className="lg:col-span-2 space-y-6">
+          <TenantInfoCard tenant={tenant} />
+          <DangerZone
+            tenant={tenant}
+            onSuspend={() => setShowSuspendDialog(true)}
+            onActivate={handleActivate}
+            onDelete={() => setShowDeleteDialog(true)}
+          />
+        </div>
+
+        {/* Right Column - Subscription & Stats */}
+        <div className="space-y-6">
+          <CurrentPlanCard
+            tenant={tenant}
+            onChangePlan={() => {
+              // TODO: Implement change plan dialog
+              toast.info('Change plan feature coming soon');
+            }}
+          />
+          <TenantStatsCard tenant={tenant} />
+        </div>
+      </div>
+
+      {/* Dialogs */}
+      <SuspendTenantDialog
+        open={showSuspendDialog}
+        onOpenChange={setShowSuspendDialog}
+        tenant={tenant}
+        onConfirm={handleSuspend}
+        isSuspending={suspendTenant.isPending}
+      />
+
+      <DeleteTenantDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        tenant={tenant}
+        onConfirm={handleDelete}
+        isDeleting={deleteTenant.isPending}
+      />
+    </div>
+  );
+}

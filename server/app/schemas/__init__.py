@@ -15,57 +15,6 @@ class TimestampedSchema(BaseModel):
         from_attributes = True
 
 
-class UserCreateSchema(BaseModel):
-    """Schema for creating a user."""
-    
-    username: str = Field(..., min_length=3, max_length=80)
-    email: EmailStr
-    password: str = Field(..., min_length=8, max_length=255)
-    
-    @field_validator("username")
-    def username_alphanumeric(cls, v):
-        """Validate username is alphanumeric with underscores."""
-        assert v.replace("_", "").isalnum(), "Username must be alphanumeric with underscores"
-        return v
-
-
-class UserUpdateSchema(BaseModel):
-    """Schema for updating a user."""
-    
-    username: Optional[str] = Field(None, min_length=3, max_length=80)
-    email: Optional[EmailStr] = None
-    is_active: Optional[bool] = None
-
-
-class UserResponseSchema(TimestampedSchema):
-    """Schema for user response."""
-    
-    id: int
-    username: str
-    email: str
-    is_active: bool
-
-
-class UserListSchema(BaseModel):
-    """Schema for user list response."""
-    
-    items: List[UserResponseSchema]
-    total: int
-    page: int
-    per_page: int
-
-
-class AuditLogSchema(TimestampedSchema):
-    """Schema for audit log."""
-    
-    id: int
-    action: str
-    entity_type: str
-    entity_id: int
-    changes: Optional[dict] = None
-    user_id: Optional[int] = None
-
-
 class ErrorResponseSchema(BaseModel):
     """Schema for error responses."""
     
@@ -91,3 +40,46 @@ class AppInfoSchema(BaseModel):
     environment: str
     debug: bool
     timestamp: datetime
+
+
+# Import tenant management schemas
+from app.schemas.subscription_plan_schema import (
+    SubscriptionPlanCreateSchema,
+    SubscriptionPlanUpdateSchema,
+    SubscriptionPlanResponseSchema,
+    SubscriptionPlanListResponseSchema,
+    SubscriptionPlanUsageSchema,
+)
+
+from app.schemas.tenant_schema import (
+    TenantCreateSchema,
+    TenantUpdateSchema,
+    TenantChangePlanSchema,
+    TenantSuspendSchema,
+    TenantFilterSchema,
+    TenantResponseSchema,
+    TenantListResponseSchema,
+    TenantStatsSchema,
+    TenantDeleteResponseSchema,
+)
+
+from app.schemas.portal_user_schema import (
+    PortalUserCreateSchema,
+    PortalUserUpdateSchema,
+    PortalUserResetPasswordSchema,
+    PortalUserResponseSchema,
+    PortalUserListResponseSchema,
+    PortalLoginSchema,
+    PortalLoginResponseSchema,
+)
+
+from app.schemas.pm_admin_schema import (
+    PMAdminUserCreateSchema,
+    PMAdminUserUpdateSchema,
+    PMAdminUserResponseSchema,
+    PMAdminUserListResponseSchema,
+    PMAdminLoginSchema,
+    PMAdminLoginResponseSchema,
+    ResetTenantAdminPasswordSchema,
+)
+
