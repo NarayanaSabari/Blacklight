@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { PortalAuthProvider, usePortalAuth } from '@/contexts/PortalAuthContext';
+import { Toaster } from '@/components/ui/sonner';
 import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -11,6 +14,17 @@ import { UsersPage } from '@/pages/UsersPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 /**
  * Protected Route Component
@@ -36,11 +50,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter>
-      <PortalAuthProvider>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <PortalAuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
 
           {/* Protected Routes with Layout */}
           <Route
@@ -63,9 +78,12 @@ function App() {
               </ProtectedRoute>
             }
           />
-        </Routes>
-      </PortalAuthProvider>
-    </BrowserRouter>
+          </Routes>
+          <Toaster />
+        </PortalAuthProvider>
+      </BrowserRouter>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }
 
