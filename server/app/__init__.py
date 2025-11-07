@@ -109,6 +109,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import portal_user_routes
     from app.routes import pm_admin_routes
     from app.routes import role_routes
+    from app.routes import candidate_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -121,6 +122,9 @@ def register_blueprints(app: Flask) -> None:
     
     # Role and Permission Management routes
     app.register_blueprint(role_routes.bp)
+    
+    # Candidate and Resume Parsing routes
+    app.register_blueprint(candidate_routes.candidate_bp)
 
 
 def create_app(config: Type[BaseConfig] = None) -> Flask:

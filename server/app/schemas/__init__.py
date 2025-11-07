@@ -95,3 +95,17 @@ from app.schemas.role_schema import (
     RoleAssignPermissions,
     RoleListResponse,
 )
+
+from app.schemas.candidate_schema import (
+    CandidateCreateSchema,
+    CandidateUpdateSchema,
+    CandidateFilterSchema,
+    CandidateResponseSchema,
+    CandidateListItemSchema,
+    CandidateListResponseSchema,
+    UploadResumeResponseSchema,
+    ReparseResumeResponseSchema,
+    CandidateStatsSchema,
+    EducationSchema,
+    WorkExperienceSchema,
+)

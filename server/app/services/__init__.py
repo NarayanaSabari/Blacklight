@@ -83,6 +83,7 @@ from app.services.pm_admin_auth_service import PMAdminAuthService
 from app.services.portal_auth_service import PortalAuthService
 from app.services.role_service import RoleService
 from app.services.permission_service import PermissionService
+from app.services.candidate_service import CandidateService
 
 __all__ = [
     "AuditLogService",
@@ -94,4 +95,5 @@ __all__ = [
     "PortalAuthService",
     "RoleService",
     "PermissionService",
+    "CandidateService",
 ]

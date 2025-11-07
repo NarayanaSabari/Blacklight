@@ -7,6 +7,9 @@ import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CandidatesPage } from '@/pages/CandidatesPage';
+import { AddCandidatePage } from '@/pages/AddCandidatePage';
+import { EditCandidatePage } from '@/pages/EditCandidatePage';
+import { CandidateDetailPage } from '@/pages/CandidateDetailPage';
 import { JobsPage } from '@/pages/JobsPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { InterviewsPage } from '@/pages/InterviewsPage';
@@ -66,6 +69,9 @@ function App() {
                   <Routes>
                     <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/candidates" element={<CandidatesPage />} />
+                    <Route path="/candidates/new" element={<AddCandidatePage />} />
+                    <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
+                    <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                     <Route path="/jobs" element={<JobsPage />} />
                     <Route path="/applications" element={<ApplicationsPage />} />
                     <Route path="/interviews" element={<InterviewsPage />} />

@@ -121,6 +121,46 @@ def stamp_db(app: Flask, revision: str = "001") -> None:
         print(f"Database stamped with revision: {revision}")
 
 
+def setup_spacy(app: Flask) -> None:
+    """Download and setup spaCy model."""
+    import subprocess
+    
+    print("=" * 60)
+    print("SETTING UP SPACY MODEL")
+    print("=" * 60)
+    
+    try:
+        # Downgrade to spaCy 3.7.2 if needed (more stable)
+        print("\n1. Installing spaCy 3.7.2 (stable version)...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "spacy==3.7.2"], check=True)
+        
+        # Install model from wheel directly
+        print("\n2. Installing en_core_web_sm model...")
+        model_url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
+        subprocess.run([sys.executable, "-m", "pip", "install", model_url], check=True)
+        
+        # Verify installation
+        print("\n3. Verifying installation...")
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        print("✅ spaCy model loaded successfully!")
+        print(f"   Model: en_core_web_sm v{nlp.meta['version']}")
+        print(f"   spaCy: v{spacy.__version__}")
+        
+        print("\n" + "=" * 60)
+        print("✅ SPACY SETUP COMPLETE!")
+        print("=" * 60)
+        print("\n⚠️  Remember to restart Flask server for changes to take effect!")
+    except Exception as e:
+        print(f"\n❌ Error setting up spaCy: {e}")
+        print("\nTry manually:")
+        print("  pip install spacy==3.7.2")
+        print("  pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl")
+        print("\nThen verify:")
+        print("  python -c \"import spacy; nlp = spacy.load('en_core_web_sm'); print('✅ Model loaded!')\"")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     app = create_app()
     
@@ -142,6 +182,7 @@ if __name__ == "__main__":
             count=int(sys.argv[2]) if len(sys.argv) > 2 else 3
         ),
         "seed-all": lambda: seed_all(app),
+        "setup-spacy": lambda: setup_spacy(app),
     }
     
     if len(sys.argv) < 2:
@@ -161,6 +202,8 @@ if __name__ == "__main__":
         print("  seed-tenants        - Seed sample tenants")
         print("                        Usage: seed-tenants [count]")
         print("  seed-all            - Seed all (plans + PM admin + tenants)")
+        print("\nSetup Commands:")
+        print("  setup-spacy         - Download and setup spaCy model for resume parsing")
         sys.exit(1)
     
     command = sys.argv[1]
