@@ -76,8 +76,8 @@ export default function OnboardingPage() {
     );
   }
 
-  // Invalid token
-  if (!data.valid || !data.invitation) {
+  // Invalid token (after data is loaded)
+  if (!data.is_valid) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 p-6">
         <div className="mx-auto max-w-2xl pt-12">
@@ -87,7 +87,7 @@ export default function OnboardingPage() {
                 <XCircle className="h-4 w-4" />
                 <AlertTitle>Invitation Not Valid</AlertTitle>
                 <AlertDescription>
-                  {data.message || 'This invitation is no longer valid.'}
+                  {'This invitation is no longer valid or has expired.'}
                 </AlertDescription>
               </Alert>
               <div className="mt-6 text-center">
@@ -102,7 +102,7 @@ export default function OnboardingPage() {
     );
   }
 
-  const invitation = data.invitation;
+  const invitation = data;
   const isAlreadySubmitted = invitation.status === 'pending_review';
   const isApproved = invitation.status === 'approved';
   const isRejected = invitation.status === 'rejected';

@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, current_app, send_file
 from pydantic import ValidationError
 import os
 
-from app import db
+from app import db, limiter
 from app.middleware.portal_auth import require_portal_auth
 from app.services.invitation_service import InvitationService
 from app.services.document_service import DocumentService
@@ -69,6 +69,8 @@ def create_invitation():
             invited_by_id=user_id,
             first_name=data.first_name,
             last_name=data.last_name,
+            position=data.position,
+            recruiter_notes=data.recruiter_notes,
             expiry_hours=data.expiry_hours
         )
         
@@ -111,12 +113,13 @@ def list_invitations():
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 10, type=int)
         status = request.args.get("status")  # Optional filter
-        email = request.args.get("email")    # Optional filter (not yet implemented in service)
+        email = request.args.get("email")    # Optional filter
         
         # Get invitations
         invitations, total = InvitationService.list_invitations(
             tenant_id=tenant_id,
             status_filter=status,
+            email_filter=email,
             page=page,
             per_page=per_page
         )
@@ -161,32 +164,8 @@ def get_invitation_stats():
     try:
         tenant_id = request.portal_user["tenant_id"]
         
-        # Get all invitations for the tenant
-        invitations, total = InvitationService.list_invitations(
-            tenant_id=tenant_id,
-            page=1,
-            per_page=10000  # Get all for stats
-        )
-        
-        # Calculate stats
-        stats = {
-            "total": total,
-            "by_status": {
-                "invited": 0,
-                "opened": 0,
-                "in_progress": 0,
-                "submitted": 0,
-                "approved": 0,
-                "rejected": 0,
-                "expired": 0
-            }
-        }
-        
-        for inv in invitations:
-            if inv.status in stats["by_status"]:
-                stats["by_status"][inv.status] += 1
-            if inv.is_expired and inv.status not in ["approved", "rejected"]:
-                stats["by_status"]["expired"] += 1
+        # Get stats efficiently from the service layer
+        stats = InvitationService.get_invitation_stats(tenant_id=tenant_id)
         
         return jsonify(stats), 200
         
@@ -378,19 +357,19 @@ def cancel_invitation(invitation_id):
         return error_response("Internal server error", 500)
 
 
-@bp.route("/<int:invitation_id>/audit-trail", methods=["GET"])
+@bp.route("/<int:invitation_id>/audit-logs", methods=["GET"])
 @require_portal_auth
-def get_audit_trail(invitation_id):
+def get_audit_logs(invitation_id):
     """
     Get audit trail for invitation.
     
-    GET /api/invitations/{id}/audit-trail
+    GET /api/invitations/{id}/audit-logs
     Headers: Authorization: Bearer <token>
     """
     try:
         tenant_id = request.portal_user["tenant_id"]
         
-        logs = InvitationService.get_invitation_audit_trail(invitation_id, tenant_id)
+        logs = InvitationService.get_invitation_audit_trail(invitation_id)
         
         items = [
             InvitationAuditLogResponseSchema.model_validate(log.to_dict()).model_dump()
@@ -411,6 +390,7 @@ def get_audit_trail(invitation_id):
 # ============================================================================
 
 @bp.route("/public/verify", methods=["GET"])
+@limiter.limit("20/minute")
 def verify_token():
     """
     Verify invitation token and get basic info.
@@ -428,7 +408,7 @@ def verify_token():
         
         # Mark as opened
         InvitationService.mark_as_opened(
-            invitation_id=invitation.id,
+            token=token,
             ip_address=request.remote_addr,
             user_agent=request.headers.get("User-Agent")
         )
@@ -452,6 +432,7 @@ def verify_token():
 
 
 @bp.route("/public/submit", methods=["POST"])
+@limiter.limit("10/minute")
 def submit_invitation():
     """
     Submit invitation with candidate information.
@@ -501,6 +482,7 @@ def submit_invitation():
 
 
 @bp.route("/public/documents", methods=["POST"])
+@limiter.limit("10/minute")
 def upload_document_public():
     """
     Upload document for invitation (public endpoint).

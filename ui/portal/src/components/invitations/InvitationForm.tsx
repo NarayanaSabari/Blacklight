@@ -34,8 +34,9 @@ const invitationFormSchema = z.object({
   email: z.string().email('Invalid email address'),
   first_name: z.string().min(1, 'First name is required'),
   last_name: z.string().optional(),
+  position: z.string().optional(),
+  recruiter_notes: z.string().optional(),
   expires_in_days: z.number().min(1).max(90),
-  notes: z.string().optional(),
 });
 
 type InvitationFormValues = z.infer<typeof invitationFormSchema>;
@@ -63,28 +64,30 @@ export function InvitationForm({
       email: invitation?.email || '',
       first_name: invitation?.first_name || '',
       last_name: invitation?.last_name || '',
+      position: invitation?.position || '',
+      recruiter_notes: invitation?.recruiter_notes || '',
       expires_in_days: 7,
-      notes: '',
     },
   });
 
   const onSubmit = async (values: InvitationFormValues) => {
     try {
-      const { notes, expires_in_days, ...invitationData } = values;
+      const { expires_in_days, ...invitationData } = values;
       const data = {
         ...invitationData,
         expiry_hours: expires_in_days * 24, // Convert days to hours
-        invitation_data: notes ? { notes } : undefined,
       };
 
       if (isEdit) {
+        // Note: The backend doesn't support updating all these fields post-creation.
+        // This is a simplified example. A real implementation would be more specific.
         await updateMutation.mutateAsync({
           id: invitation.id,
           data: {
-            email: data.email,
             first_name: data.first_name,
             last_name: data.last_name,
-            invitation_data: data.invitation_data,
+            position: data.position,
+            recruiter_notes: data.recruiter_notes,
           },
         });
       } else {
@@ -95,7 +98,7 @@ export function InvitationForm({
       onOpenChange(false);
       onSuccess?.();
     } catch {
-      // Error handled by mutation
+      // Error is handled by the mutation's onError callback
     }
   };
 
@@ -131,9 +134,6 @@ export function InvitationForm({
                       disabled={isPending || isEdit}
                     />
                   </FormControl>
-                  <FormDescription>
-                    Invitation will be sent to this email address
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -169,6 +169,20 @@ export function InvitationForm({
               />
             </div>
 
+            <FormField
+              control={form.control}
+              name="position"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Position</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Senior Software Engineer" {...field} disabled={isPending} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {!isEdit && (
               <FormField
                 control={form.control}
@@ -186,9 +200,6 @@ export function InvitationForm({
                         disabled={isPending}
                       />
                     </FormControl>
-                    <FormDescription>
-                      Number of days before the invitation expires (1-90)
-                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -197,20 +208,20 @@ export function InvitationForm({
 
             <FormField
               control={form.control}
-              name="notes"
+              name="recruiter_notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Additional Notes</FormLabel>
+                  <FormLabel>Recruiter Notes</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Optional notes or instructions for the candidate..."
+                      placeholder="Internal notes for the hiring team..."
                       rows={3}
                       {...field}
                       disabled={isPending}
                     />
                   </FormControl>
                   <FormDescription>
-                    These notes will be visible to the candidate
+                    These notes are for internal use and not visible to the candidate.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

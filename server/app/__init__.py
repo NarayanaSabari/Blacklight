@@ -7,6 +7,8 @@ from typing import Type
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import redis
 
 from config.base import BaseConfig
@@ -14,6 +16,10 @@ from config.base import BaseConfig
 # Initialize extensions
 db = SQLAlchemy()
 cors = CORS()
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 redis_client = None
 
 
@@ -140,16 +146,22 @@ def register_blueprints(app: Flask) -> None:
 def register_inngest(app: Flask) -> None:
     """Register Inngest background job functions."""
     try:
-        from inngest.flask import serve as inngest_serve
+        from inngest.flask import serve as inngest_serve_func
         from app.inngest import inngest_client
         from app.inngest.functions import INNGEST_FUNCTIONS
         
         # Register Inngest endpoint - serve() registers routes directly on the app
-        inngest_serve(
+        inngest_serve_func(
             app,
             inngest_client,
             INNGEST_FUNCTIONS,
         )
+        
+        # Exempt Inngest endpoint from rate limiting
+        # The Inngest SDK handles its own rate limiting and retries,
+        # so the Flask app's global rate limit should not apply here.
+        # Exempt the function that registers the Inngest routes.
+        limiter.exempt(inngest_serve_func)
         
         app.logger.info(f"Inngest: Registered {len(INNGEST_FUNCTIONS)} functions")
         app.logger.info(f"Inngest: Serving at {app.config.get('INNGEST_SERVE_PATH', '/api/inngest')}")
@@ -191,6 +203,7 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     
     # Initialize extensions
     db.init_app(app)
+    limiter.init_app(app)
     cors.init_app(app, resources={
         r"/*": {
             "origins": app.config.get("CORS_ORIGINS", ["*"]),

@@ -12,6 +12,8 @@ class InvitationCreateSchema(BaseModel):
     email: EmailStr = Field(..., description="Candidate email address")
     first_name: Optional[str] = Field(None, max_length=100, description="Candidate first name")
     last_name: Optional[str] = Field(None, max_length=100, description="Candidate last name")
+    position: Optional[str] = Field(None, max_length=255, description="Position or role for the candidate")
+    recruiter_notes: Optional[str] = Field(None, description="Internal notes for the HR team")
     expiry_hours: int = Field(168, ge=1, le=720, description="Hours until invitation expires (1-720, default 7 days)")
     
     class Config:
@@ -139,6 +141,7 @@ class InvitationResponseSchema(BaseModel):
     email: str
     first_name: Optional[str]
     last_name: Optional[str]
+    position: Optional[str]
     status: str
     expires_at: datetime
     invited_by_id: int
@@ -162,9 +165,10 @@ class InvitationResponseSchema(BaseModel):
 class InvitationDetailResponseSchema(InvitationResponseSchema):
     """Extended schema with invitation data, audit trail, and sensitive fields"""
     token: str  # Include token for detailed view (resend functionality)
-    invitation_data: Optional[Dict[str, Any]]
-    review_notes: Optional[str]
-    rejection_reason: Optional[str]
+    invitation_data: Optional[Dict[str, Any]] = None
+    review_notes: Optional[str] = None
+    recruiter_notes: Optional[str] = None
+    rejection_reason: Optional[str] = None
     
     class Config:
         from_attributes = True

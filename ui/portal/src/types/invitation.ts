@@ -140,12 +140,6 @@ export interface InvitationReviewRequest {
   rejection_reason?: string;
 }
 
-export interface InvitationVerifyResponse {
-  valid: boolean;
-  invitation?: InvitationWithRelations;
-  message?: string;
-}
-
 // Candidate Onboarding Submission
 
 export interface OnboardingSubmissionRequest {

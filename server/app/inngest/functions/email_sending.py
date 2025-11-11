@@ -27,31 +27,31 @@ async def send_invitation_email_workflow(ctx: inngest.Context, step: inngest.Ste
     
     logger.info(f"[INNGEST] Sending invitation email for invitation {invitation_id}")
     
-    # Step 1: Fetch invitation data
-    invitation = await step.run(
-        "fetch-invitation",
-        fetch_invitation_step,
-        invitation_id,
-        tenant_id
-    )
-    
-    # Step 2: Generate onboarding URL
-    onboarding_url = await step.run(
-        "generate-url",
-        generate_onboarding_url_step,
-        invitation
-    )
-    
-    # Step 3: Send email with automatic retry
+    # Extract all necessary data directly from the event
+    to_email = event.data.get("to_email")
+    candidate_name = event.data.get("candidate_name")
+    onboarding_url = event.data.get("onboarding_url")
+    expiry_date_str = event.data.get("expiry_date")
+
+    if not all([to_email, candidate_name, onboarding_url, expiry_date_str]):
+        logger.error(f"[INNGEST] Missing essential email data in event for invitation {invitation_id}. Event data: {event.data}")
+        raise ValueError("Missing essential email data in Inngest event.")
+
+    # Step 1: Send email with automatic retry
     email_result = await step.run(
         "send-email",
         send_invitation_email_step,
         tenant_id,
-        invitation,
+        { # Create a dictionary that mimics the invitation object for send_invitation_email_step
+            "email": to_email,
+            "first_name": candidate_name.split(' ')[0] if candidate_name and ' ' in candidate_name else candidate_name,
+            "last_name": ' '.join(candidate_name.split(' ')[1:]) if candidate_name and ' ' in candidate_name else None,
+            "expiry_date": expiry_date_str # Pass the formatted expiry date string
+        },
         onboarding_url
     )
     
-    # Step 4: Log email delivery
+    # Step 2: Log email delivery
     await step.run(
         "log-email-sent",
         log_email_status_step,
@@ -197,8 +197,13 @@ def send_invitation_email_step(
     from app.services.email_service import EmailService
     from datetime import datetime
     
-    expires_at = datetime.fromisoformat(invitation['expires_at'])
-    expiry_date = expires_at.strftime("%B %d, %Y at %I:%M %p")
+    # Check if expiry_date is already a formatted string (from event data)
+    # or if it needs to be formatted from a datetime object (from fetched invitation)
+    if 'expiry_date' in invitation: # This would be the expiry_date_str from event.data
+        expiry_date = invitation['expiry_date']
+    else:
+        expires_at = datetime.fromisoformat(invitation['expires_at'])
+        expiry_date = expires_at.strftime("%B %d, %Y at %I:%M %p UTC") # Ensure consistent format
     
     candidate_name = None
     if invitation.get('first_name'):
@@ -305,8 +310,7 @@ def log_email_status_step(
     log = InvitationAuditLog(
         invitation_id=invitation_id,
         action=action,
-        status="success" if success else "failed",
-        details={"email_delivered": success}
+        extra_data={"email_delivered": success}
     )
     
     db.session.add(log)

@@ -5,7 +5,7 @@ Business logic for managing candidate invitations
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Tuple
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import joinedload
 
 from app import db
@@ -15,7 +15,9 @@ from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
 from app.models.tenant import Tenant
 from app.models.portal_user import PortalUser
+from app.models.role import Role
 from app.services.email_service import EmailService
+from app.services.resume_parser import ResumeParserService
 from config.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,8 @@ class InvitationService:
         invited_by_id: int,
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
+        position: Optional[str] = None,
+        recruiter_notes: Optional[str] = None,
         expiry_hours: Optional[int] = None
     ) -> CandidateInvitation:
         """
@@ -43,6 +47,8 @@ class InvitationService:
             invited_by_id: ID of the portal user sending the invitation
             first_name: Optional first name
             last_name: Optional last name
+            position: Optional position/role for the candidate
+            recruiter_notes: Optional internal notes for the HR team
             expiry_hours: Hours until invitation expires (default: from settings or 168=7 days)
             
         Returns:
@@ -78,6 +84,8 @@ class InvitationService:
             invitation = duplicate
             invitation.first_name = first_name
             invitation.last_name = last_name
+            invitation.position = position
+            invitation.recruiter_notes = recruiter_notes
             invitation.token = CandidateInvitation.generate_token()  # Generate new token
             invitation.expires_at = expires_at
             invitation.status = 'sent'
@@ -94,6 +102,8 @@ class InvitationService:
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
+                position=position,
+                recruiter_notes=recruiter_notes,
                 token=token,
                 expires_at=expires_at,
                 status='sent',
@@ -121,6 +131,11 @@ class InvitationService:
         
         logger.info(f"Created invitation {invitation.id} for {email} in tenant {tenant_id}")
         
+        # Calculate email details for Inngest event or synchronous fallback
+        candidate_name = f"{first_name} {last_name}".strip() if first_name else None
+        onboarding_url = f"{settings.frontend_base_url}/onboard/{invitation.token}"
+        expiry_date_str = expires_at.strftime("%B %d, %Y at %I:%M %p UTC")
+        
         # Send invitation email via Inngest (async/non-blocking)
         try:
             from app.inngest import inngest_client
@@ -133,7 +148,11 @@ class InvitationService:
                     name="email/invitation",
                     data={
                         "invitation_id": invitation.id,
-                        "tenant_id": tenant_id
+                        "tenant_id": tenant_id,
+                        "to_email": email,
+                        "candidate_name": candidate_name,
+                        "onboarding_url": onboarding_url,
+                        "expiry_date": expiry_date_str
                     }
                 )
             )
@@ -143,16 +162,12 @@ class InvitationService:
             # Fallback to synchronous email if Inngest not available
             logger.warning("Inngest not available, sending email synchronously")
             try:
-                candidate_name = f"{first_name} {last_name}".strip() if first_name else None
-                onboarding_url = f"{settings.frontend_base_url}/onboard/{token}"
-                expiry_date = expires_at.strftime("%B %d, %Y at %I:%M %p UTC")
-                
                 EmailService.send_invitation_email(
                     tenant_id=tenant_id,
                     to_email=email,
                     candidate_name=candidate_name,
                     onboarding_url=onboarding_url,
-                    expiry_date=expiry_date
+                    expiry_date=expiry_date_str
                 )
                 logger.info(f"Sent invitation email to {email} (sync fallback)")
             except Exception as email_error:
@@ -281,22 +296,34 @@ class InvitationService:
         
         logger.info(f"Resent invitation {invitation.id}, new token generated")
         
-        # Send invitation email with new token
+        # Send invitation email with new token via Inngest
         try:
+            from app.inngest import inngest_client
+            import inngest
+            
             candidate_name = f"{invitation.first_name} {invitation.last_name}".strip() if invitation.first_name else None
             onboarding_url = f"{settings.frontend_base_url}/onboard/{invitation.token}"
             expiry_date = invitation.expires_at.strftime("%B %d, %Y at %I:%M %p UTC")
+
+            logger.info(f"[INNGEST] Attempting to send event 'email/invitation' for invitation {invitation.id}")
             
-            EmailService.send_invitation_email(
-                tenant_id=invitation.tenant_id,
-                to_email=invitation.email,
-                candidate_name=candidate_name,
-                onboarding_url=onboarding_url,
-                expiry_date=expiry_date
+            event_result = inngest_client.send_sync(
+                inngest.Event(
+                    name="email/invitation",
+                    data={
+                        "invitation_id": invitation.id,
+                        "tenant_id": invitation.tenant_id,
+                        "to_email": invitation.email,
+                        "candidate_name": candidate_name,
+                        "onboarding_url": onboarding_url,
+                        "expiry_date": expiry_date
+                    }
+                )
             )
-            logger.info(f"Sent resend invitation email to {invitation.email}")
+            
+            logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
         except Exception as e:
-            logger.error(f"Failed to send resend invitation email: {e}")
+            logger.error(f"Failed to send Inngest event for resend invitation: {e}")
         
         return invitation
     
@@ -304,6 +331,7 @@ class InvitationService:
     def list_invitations(
         tenant_id: int,
         status_filter: Optional[str] = None,
+        email_filter: Optional[str] = None,
         page: int = 1,
         per_page: int = 20
     ) -> Tuple[List[CandidateInvitation], int]:
@@ -313,6 +341,7 @@ class InvitationService:
         Args:
             tenant_id: Tenant ID
             status_filter: Optional status to filter by
+            email_filter: Optional email to search for (case-insensitive)
             page: Page number (1-indexed)
             per_page: Results per page
             
@@ -323,6 +352,9 @@ class InvitationService:
         
         if status_filter:
             query = query.where(CandidateInvitation.status == status_filter)
+        
+        if email_filter:
+            query = query.where(CandidateInvitation.email.ilike(f"%{email_filter.strip()}%"))
         
         # Order by most recent first
         query = query.order_by(CandidateInvitation.created_at.desc())
@@ -338,6 +370,56 @@ class InvitationService:
         invitations = db.session.execute(query).scalars().all()
         
         return list(invitations), total
+    
+    @staticmethod
+    def get_invitation_stats(tenant_id: int) -> Dict[str, any]:
+        """
+        Get invitation statistics for a tenant efficiently from the database.
+
+        Args:
+            tenant_id: Tenant ID
+
+        Returns:
+            Dictionary with statistics
+        """
+        # Query for counts of each status
+        status_counts_query = (
+            select(CandidateInvitation.status, func.count(CandidateInvitation.id))
+            .where(CandidateInvitation.tenant_id == tenant_id)
+            .group_by(CandidateInvitation.status)
+        )
+        status_results = db.session.execute(status_counts_query).all()
+
+        # Initialize stats dictionary with all possible statuses
+        stats = {
+            "total": 0,
+            "by_status": {
+                "invited": 0,
+                "opened": 0,
+                "in_progress": 0,
+                "submitted": 0,
+                "approved": 0,
+                "rejected": 0,
+                "cancelled": 0,
+                "expired": 0,
+            },
+        }
+
+        # Map DB status 'sent' to API status 'invited'
+        status_map = {
+            "sent": "invited"
+        }
+
+        total_count = 0
+        for status, count in status_results:
+            key = status_map.get(status, status)
+            if key in stats["by_status"]:
+                stats["by_status"][key] = count
+            total_count += count
+        
+        stats["total"] = total_count
+
+        return stats
     
     @staticmethod
     def submit_invitation(
@@ -390,27 +472,44 @@ class InvitationService:
         
         logger.info(f"Invitation {invitation.id} submitted by candidate")
         
-        # Send confirmation email to candidate
+        # Send confirmation email to candidate via Inngest
         try:
+            from app.inngest import inngest_client
+            import inngest
+            
             candidate_name = f"{invitation.first_name} {invitation.last_name}".strip() if invitation.first_name else "Candidate"
-            EmailService.send_submission_confirmation(
-                tenant_id=invitation.tenant_id,
-                to_email=invitation.email,
-                candidate_name=candidate_name
+            
+            logger.info(f"[INNGEST] Attempting to send event 'email/submission.confirmation' for invitation {invitation.id}")
+            
+            event_result = inngest_client.send_sync(
+                inngest.Event(
+                    name="email/submission.confirmation",
+                    data={
+                        "invitation_id": invitation.id,
+                        "tenant_id": invitation.tenant_id,
+                        "to_email": invitation.email,
+                        "candidate_name": candidate_name
+                    }
+                )
             )
-            logger.info(f"Sent submission confirmation to {invitation.email}")
+            logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
         except Exception as e:
-            logger.error(f"Failed to send submission confirmation: {e}")
+            logger.error(f"Failed to send Inngest event for submission confirmation: {e}")
         
-        # Send notification to HR team
+        # Send notification to HR team via Inngest
         try:
+            from app.inngest import inngest_client
+            import inngest
+            
             # Get all recruiters and admins for this tenant
             hr_users = db.session.execute(
                 select(PortalUser)
+                .join(Role)
                 .where(
                     and_(
                         PortalUser.tenant_id == invitation.tenant_id,
-                        PortalUser.is_active == True
+                        PortalUser.is_active == True,
+                        Role.name.in_(['TENANT_ADMIN', 'RECRUITER'])
                     )
                 )
             ).scalars().all()
@@ -419,17 +518,25 @@ class InvitationService:
             
             if hr_emails:
                 review_url = f"{settings.frontend_base_url}/invitations/{invitation.id}"
-                EmailService.send_hr_notification(
-                    tenant_id=invitation.tenant_id,
-                    hr_emails=hr_emails,
-                    candidate_name=candidate_name,
-                    candidate_email=invitation.email,
-                    invitation_id=invitation.id,
-                    review_url=review_url
+                
+                logger.info(f"[INNGEST] Attempting to send event 'email/hr.notification' for invitation {invitation.id}")
+                
+                event_result = inngest_client.send_sync(
+                    inngest.Event(
+                        name="email/hr.notification",
+                        data={
+                            "invitation_id": invitation.id,
+                            "tenant_id": invitation.tenant_id,
+                            "hr_emails": hr_emails,
+                            "candidate_name": candidate_name,
+                            "candidate_email": invitation.email,
+                            "review_url": review_url
+                        }
+                    )
                 )
-                logger.info(f"Sent HR notification to {len(hr_emails)} recipients")
+                logger.info(f"[INNGEST] ✅ Event sent successfully to HR. Result: {event_result}")
         except Exception as e:
-            logger.error(f"Failed to send HR notification: {e}")
+            logger.error(f"Failed to send Inngest event for HR notification: {e}")
         
         return invitation
     
@@ -547,21 +654,36 @@ class InvitationService:
         
         logger.info(f"Approved invitation {invitation.id}, created candidate {candidate.id}")
         
-        # Send approval email to candidate
+        # Send approval email to candidate via Inngest
         try:
+            from app.inngest import inngest_client
+            import inngest
+            
             candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
-            EmailService.send_approval_email(
-                tenant_id=invitation.tenant_id,
-                to_email=invitation.email,
-                candidate_name=candidate_name
+            
+            logger.info(f"[INNGEST] Attempting to send event 'email/invitation.approved' for invitation {invitation.id}")
+            
+            event_result = inngest_client.send_sync(
+                inngest.Event(
+                    name="email/invitation.approved",
+                    data={
+                        "invitation_id": invitation.id,
+                        "tenant_id": invitation.tenant_id,
+                        "to_email": invitation.email,
+                        "candidate_name": candidate_name
+                    }
+                )
             )
-            logger.info(f"Sent approval email to {invitation.email}")
+            logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
         except Exception as e:
-            logger.error(f"Failed to send approval email: {e}")
+            logger.error(f"Failed to send Inngest event for approval email: {e}")
         
-        # TODO: Trigger async resume re-parsing here
-        # from app.services.resume_parser import ResumeParser
-        # ResumeParser.parse_candidate_resume_async(candidate.id)
+        # Trigger async resume re-parsing
+        try:
+            ResumeParserService.parse_candidate_resume_async(candidate.id)
+            logger.info(f"Triggered async resume parsing for candidate {candidate.id}")
+        except Exception as e:
+            logger.error(f"Failed to trigger async resume parsing for candidate {candidate.id}: {e}")
         
         return candidate
     
@@ -619,18 +741,30 @@ class InvitationService:
         
         logger.info(f"Rejected invitation {invitation.id}")
         
-        # Send rejection email to candidate
+        # Send rejection email to candidate via Inngest
         try:
+            from app.inngest import inngest_client
+            import inngest
+            
             candidate_name = f"{invitation.first_name} {invitation.last_name}".strip() if invitation.first_name else "Candidate"
-            EmailService.send_rejection_email(
-                tenant_id=invitation.tenant_id,
-                to_email=invitation.email,
-                candidate_name=candidate_name,
-                reason=reason
+            
+            logger.info(f"[INNGEST] Attempting to send event 'email/invitation.rejected' for invitation {invitation.id}")
+            
+            event_result = inngest_client.send_sync(
+                inngest.Event(
+                    name="email/invitation.rejected",
+                    data={
+                        "invitation_id": invitation.id,
+                        "tenant_id": invitation.tenant_id,
+                        "to_email": invitation.email,
+                        "candidate_name": candidate_name,
+                        "reason": reason
+                    }
+                )
             )
-            logger.info(f"Sent rejection email to {invitation.email}")
+            logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
         except Exception as e:
-            logger.error(f"Failed to send rejection email: {e}")
+            logger.error(f"Failed to send Inngest event for rejection email: {e}")
         
         return invitation
     

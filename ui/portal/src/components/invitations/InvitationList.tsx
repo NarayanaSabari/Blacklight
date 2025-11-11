@@ -242,7 +242,7 @@ export function InvitationList({ onViewDetails, onCreateNew }: InvitationListPro
                 </TableHeader>
                 <TableBody>
                   {invitations.map((invitation) => {
-                    const config = STATUS_CONFIG[invitation.status];
+                    const config = STATUS_CONFIG[invitation.status] || STATUS_CONFIG.sent; // Fallback to 'sent' if status is unknown
                     const Icon = config.icon;
                     const isExpired = new Date(invitation.expires_at) < new Date();
                     const canResend = ['sent', 'expired', 'cancelled'].includes(invitation.status);

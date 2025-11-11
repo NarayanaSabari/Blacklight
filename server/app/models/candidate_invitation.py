@@ -26,6 +26,10 @@ class CandidateInvitation(BaseModel):
     first_name = db.Column(String(100))
     last_name = db.Column(String(100))
     
+    # Invitation details
+    position = db.Column(String(255), nullable=True)
+    recruiter_notes = db.Column(Text, nullable=True)  # Internal notes for the HR team
+    
     # Token and security
     token = db.Column(String(100), nullable=False, unique=True, index=True)
     expires_at = db.Column(DateTime, nullable=False, index=True)
@@ -119,6 +123,7 @@ class CandidateInvitation(BaseModel):
             'email': self.email,
             'first_name': self.first_name,
             'last_name': self.last_name,
+            'position': self.position,
             'status': self.status,
             'invited_by_id': self.invited_by_id,
             'invited_at': self.invited_at.isoformat() if self.invited_at else None,
@@ -140,6 +145,7 @@ class CandidateInvitation(BaseModel):
                 'token': self.token,
                 'invitation_data': self.invitation_data,
                 'review_notes': self.review_notes,
+                'recruiter_notes': self.recruiter_notes,
                 'rejection_reason': self.rejection_reason,
             })
         

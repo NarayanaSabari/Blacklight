@@ -82,8 +82,16 @@ export function useCreateInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.stats() });
       toast.success('Invitation sent successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to send invitation: ${error.message}`);
+    onError: (error: any) => {
+      if (error?.response?.status === 409) {
+        toast.error('Duplicate Invitation', {
+          description: 'An active invitation for this email address already exists.',
+        });
+      } else {
+        toast.error('Failed to send invitation', {
+          description: error.message || 'An unexpected error occurred.',
+        });
+      }
     },
   });
 }

@@ -575,3 +575,37 @@ OUTPUT REQUIREMENTS:
             scores['full_name'] = 0.70
         
         return scores
+    
+    @staticmethod
+    def parse_candidate_resume_async(candidate_id: int):
+        """
+        Trigger an asynchronous resume parsing job for a candidate.
+        
+        This sends an event to Inngest, which should be picked up by a
+        background worker to perform the actual parsing.
+        
+        Args:
+            candidate_id: The ID of the candidate to parse.
+        """
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            
+            print(f"[INNGEST] Sending event 'resume/parse.requested' for candidate {candidate_id}")
+            
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="resume/parse.requested",
+                    data={"candidate_id": candidate_id},
+                )
+            )
+            
+            print(f"[INNGEST] ✅ Event sent successfully for candidate {candidate_id}")
+            
+        except ImportError:
+            print("[ERROR] Inngest client not found. Cannot trigger async parsing.")
+            # In a real scenario, you might want a fallback or more robust logging.
+        except Exception as e:
+            print(f"[ERROR] Failed to send Inngest event for resume parsing: {e}")
+            # Re-raise or handle as needed
+            raise
