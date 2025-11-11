@@ -40,6 +40,7 @@ import {
   Clock,
   AlertCircle,
   Loader2,
+  Eye,
 } from 'lucide-react';
 import {
   useInvitation,
@@ -61,6 +62,8 @@ const STATUS_CONFIG: Record<
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Mail }
 > = {
   sent: { label: 'Sent', variant: 'default', icon: Mail },
+  opened: { label: 'Opened', variant: 'outline', icon: Eye },
+  in_progress: { label: 'In Progress', variant: 'secondary', icon: Loader2 },
   pending_review: { label: 'Pending Review', variant: 'secondary', icon: Clock },
   approved: { label: 'Approved', variant: 'outline', icon: CheckCircle2 },
   rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },

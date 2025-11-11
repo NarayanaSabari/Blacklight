@@ -161,6 +161,7 @@ export interface UploadResumeResponse {
     file_path: string;
     file_url: string;
     filename: string;
+    original_filename?: string; // Added
     size: number;
     extension: string;
   };
