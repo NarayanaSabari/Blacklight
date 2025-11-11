@@ -109,3 +109,23 @@ from app.schemas.candidate_schema import (
     EducationSchema,
     WorkExperienceSchema,
 )
+
+from app.schemas.invitation_schema import (
+    InvitationCreateSchema,
+    InvitationResendSchema,
+    InvitationSubmitSchema,
+    InvitationReviewSchema,
+    InvitationResponseSchema,
+    InvitationDetailResponseSchema,
+    InvitationListResponseSchema,
+    InvitationAuditLogResponseSchema,
+)
+
+from app.schemas.document_schema import (
+    DocumentUploadSchema,
+    DocumentVerifySchema,
+    DocumentResponseSchema,
+    DocumentListResponseSchema,
+    DocumentTypeConfigSchema,
+    DocumentTypesConfigResponseSchema,
+)

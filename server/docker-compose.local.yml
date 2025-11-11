@@ -68,6 +68,27 @@ services:
     profiles:
       - tools
 
+  # Inngest Dev Server (Local Development)
+  inngest:
+    image: inngest/inngest:latest
+    container_name: blacklight-inngest-local
+    command: 'inngest dev -u http://host.docker.internal:5000/api/inngest'
+    environment:
+      INNGEST_DEV: "1"
+      INNGEST_LOG_LEVEL: debug
+    ports:
+      - "8288:8288"  # Inngest Dev Server UI
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - blacklight-local-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8288/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
 volumes:
   postgres_local_data:
   redis_local_data:

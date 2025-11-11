@@ -84,6 +84,9 @@ from app.services.portal_auth_service import PortalAuthService
 from app.services.role_service import RoleService
 from app.services.permission_service import PermissionService
 from app.services.candidate_service import CandidateService
+from app.services.invitation_service import InvitationService
+from app.services.document_service import DocumentService
+from app.services.email_service import EmailService
 
 __all__ = [
     "AuditLogService",
@@ -96,4 +99,7 @@ __all__ = [
     "RoleService",
     "PermissionService",
     "CandidateService",
+    "InvitationService",
+    "DocumentService",
+    "EmailService",
 ]

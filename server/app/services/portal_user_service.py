@@ -439,3 +439,27 @@ class PortalUserService:
         logger.info(f"Portal user password reset: {user_id} by {changed_by}")
 
         return PortalUserResponseSchema.model_validate(user)
+    
+    @staticmethod
+    def get_hr_users(tenant_id: int) -> list:
+        """
+        Get all HR users for a tenant (for email notifications).
+        
+        Args:
+            tenant_id: Tenant ID
+            
+        Returns:
+            List of PortalUser objects with HR roles
+        """
+        # Get users with role names containing 'hr', 'admin', or 'recruiter'
+        query = select(PortalUser).join(Role).where(
+            PortalUser.tenant_id == tenant_id,
+            PortalUser.is_active == True,
+            or_(
+                Role.name.ilike('%hr%'),
+                Role.name.ilike('%admin%'),
+                Role.name.ilike('%recruiter%')
+            )
+        )
+        
+        return db.session.execute(query).scalars().all()

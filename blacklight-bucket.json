@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "blacklight-477315",
+  "private_key_id": "6d030e74243953e0339bfccf6298bf2bfec67651",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDUYqIfcvSfJpU2\nfcHQn4ki6AktY4m12pOSNAh8h8ZOoxHER6JKr7qkVq6GpdtlPZEAH3ih+xoTLlgO\n6Ik4sptIzAYH465YW0VR15Y2oYIVrp0p8tI57YReV/dFsrGyCM+d6GM+K9mWKs7J\nDUbBXN+79DbmkT/Bo8Aw1xnYEuADhtm1xFLaCKAh1k4K4EtmHL1FkURvYoycusg4\n70TjVx24hfDl2aJfYzfwbDv9HT74rlaNDbbihUBThY+FEC4jyQROGhtj8W2RVHfp\nC2ZA9e9nBtLpaErsm3QqRIc481fBud7A5q8tsWd/rjCyocSA+Lx3idQHPJAdVFIM\nHS+NXv0pAgMBAAECggEATOPqmuUk38t5oNE1jmB7pwoHbInJTO+1lmxFGESVjFmo\nMH3YqR5mvWFubOv1+nioGrnKFCaS4ZfZJIiWSVMMOfY3Rrrsnytn9MHOrbeaH1xo\npMu2xWcSkY9aQ772aySaeaos59C7RQz5cTtfvthvXZ4EFERIp0Ov7F6rihkHRe7u\neAFqW+63A6xXrZIrHreylEHniOE5IZ5ptbehZo0eCTA8kK65BAzl3P5jnACig+A1\nJ/1C0MSOI0y/8XH4pEsPkoCwk38l7pX71CaDVzXlpAi8B0rsYDHzhjfsyaXpPPW8\nP84VwOnw5cyVrvyLvUTXp3S25YfcBb5njIKvy9mVGwKBgQD6OcezKFz3N1Cn7ZaT\nfCeDgaSjwsHHzq5DTne4jHV4EzoCxbtsnPuW9SH26267FS0ud/b88eUI0eEA5+BM\n8rdHf7v89cJ2GQbQ8lHanPjdiLNAmLARS1uabuaF0YuLmVo8yZteSHa3Anik0/c0\n8s9nl4nIeD1EYGSdxM6KURyjcwKBgQDZSU8ntEqoAs+hKbP9HqlrgYfSinh9sTJs\nzLdg2vDapXuD2/09e1hjsTuZpmzAkybbnTuu0ihHx1sTvr0AaJnuVc/2+IJotFqY\nZBRO0SrjuNQWCOTErKqtHA225Tia2x1gchDTJzYKhqJT2WuGfRdlBhrrFaYj/60l\nL/5iLtEN8wKBgQDDGqJXUzWJnRvKlDpALSIyK7fP6F9oCANgf6Jhx0MgqP0mhD6r\nZYvWHLSq7s+cF9ruzKNMft/yjJNAPYxq8yVtHm/ZwVYq90CVUxv3tUVmltwNlgBS\nu8tlEuuzk7uW0a/GjfwS+7V05PxkqNGr+1c0krfgE8DRu8c4LOhOeQg3eQKBgFFc\nngMkA4B97PlQAFGblZzn19ACgbOvEk6jKVdfJCj7JhDt4xmOgj5yMvsJ0lcZwsch\nTSPdFbAq+fOezG7GvDz+bOzxiQNj5TiC4QfSUtkKcH//vInYjeBcTNZbZqK1wX5H\nt/0ZBadTWp1DIHwvgv8VFidI5/k6177BBeQF28n5AoGAJFuXLG+Kn1onnmJ0poNZ\n/DC1rDmmEsUqxM+F2EVHowUhXhYGTDzAfa8AW3pSWGr0iuMs8imLWSk4hkrSwlJw\niNxkqVSBdoSP5dosfpgJx0T3AIzKUgMpicwAQTaXzJ81mgvRG/XE5RxIhk51249r\nrOl5irupt0YnTMCALYYvV4U=\n-----END PRIVATE KEY-----\n",
+  "client_email": "blacklight-bucket@blacklight-477315.iam.gserviceaccount.com",
+  "client_id": "105790242178425463717",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/blacklight-bucket%40blacklight-477315.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

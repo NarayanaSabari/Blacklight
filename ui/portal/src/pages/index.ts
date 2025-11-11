@@ -12,3 +12,11 @@ export { ApplicationsPage } from './ApplicationsPage';
 export { InterviewsPage } from './InterviewsPage';
 export { UsersPage } from './UsersPage';
 export { SettingsPage } from './SettingsPage';
+export { default as DocumentsPage } from './DocumentsPage';
+
+// Invitation Management
+export { default as InvitationsPage } from './invitations/InvitationsPage';
+export { default as InvitationDetailsPage } from './invitations/InvitationDetailsPage';
+
+// Public Pages
+export { default as OnboardingPage } from './public/OnboardingPage';

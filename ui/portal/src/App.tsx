@@ -15,6 +15,8 @@ import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { InterviewsPage } from '@/pages/InterviewsPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { InvitationsPage, InvitationDetailsPage, OnboardingPage } from '@/pages';
+import DocumentsPage from '@/pages/DocumentsPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
 
@@ -59,6 +61,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/onboard/:token" element={<OnboardingPage />} />
 
           {/* Protected Routes with Layout */}
           <Route
@@ -75,6 +78,9 @@ function App() {
                     <Route path="/jobs" element={<JobsPage />} />
                     <Route path="/applications" element={<ApplicationsPage />} />
                     <Route path="/interviews" element={<InterviewsPage />} />
+                    <Route path="/invitations" element={<InvitationsPage />} />
+                    <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
+                    <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/users" element={<UsersPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />

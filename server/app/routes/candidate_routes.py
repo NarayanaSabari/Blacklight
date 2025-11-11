@@ -5,7 +5,9 @@ from flask import Blueprint, request, jsonify, current_app, g
 from werkzeug.datastructures import FileStorage
 from pydantic import ValidationError
 import logging
+from datetime import datetime
 
+from app import db
 from app.services import CandidateService
 from app.schemas.candidate_schema import (
     CandidateCreateSchema,
@@ -256,12 +258,12 @@ def list_candidates():
 @with_tenant_context
 def upload_and_create():
     """
-    Upload resume and auto-create candidate
+    Upload resume and parse synchronously (returns parsed data)
     
     Form Data:
         - file: Resume file (PDF/DOCX)
     
-    Returns: UploadResumeResponseSchema
+    Returns: UploadResumeResponseSchema with parsed data
     """
     try:
         tenant_id = g.tenant_id
@@ -279,49 +281,34 @@ def upload_and_create():
         
         logger.info(f"[UPLOAD] File received: {file.filename}")
         
-        # Upload and parse
-        logger.info(f"[UPLOAD] Calling upload_and_parse_resume...")
+        # Upload and parse synchronously
         result = candidate_service.upload_and_parse_resume(
             file=file,
             tenant_id=tenant_id,
-            auto_create=True
+            candidate_id=None,
+            auto_create=True  # Create candidate with parsed data
         )
         
-        logger.info(f"[UPLOAD] Upload result: {result.get('status')}")
-        
         if result['status'] == 'error':
+            logger.error(f"[UPLOAD] Upload/parse failed: {result.get('error')}")
             return error_response(
                 result.get('error', 'Failed to upload and parse resume'),
                 500
             )
         
-        logger.info(f"[UPLOAD] Creating response schema...")
+        logger.info(f"[UPLOAD] Successfully uploaded and parsed resume for candidate {result['candidate_id']}")
         
-        # Return response
-        try:
-            response = UploadResumeResponseSchema(
-                candidate_id=result['candidate_id'],
-                status='success',
-                message='Resume uploaded and parsed successfully',
-                file_info=result['file_info'],
-                parsed_data=result['parsed_data'],
-                extracted_metadata=result['extracted_metadata']
-            )
-            
-            logger.info(f"[UPLOAD] Schema created, returning response...")
-            response_dict = response.model_dump()
-            logger.info(f"[UPLOAD] Response dict created, size: {len(str(response_dict))} chars")
-            
-            return jsonify(response_dict), 201
-        except Exception as schema_error:
-            logger.error(f"[UPLOAD] Schema error: {schema_error}", exc_info=True)
-            # Return simplified response if schema fails
-            return jsonify({
-                'candidate_id': result['candidate_id'],
-                'status': 'success',
-                'message': 'Resume uploaded (with warnings)',
-                'error': f'Response serialization warning: {str(schema_error)}'
-            }), 201
+        # Return response with parsed data
+        response = UploadResumeResponseSchema(
+            candidate_id=result['candidate_id'],
+            status='success',
+            message='Resume uploaded and parsed successfully',
+            file_info=result['file_info'],
+            parsed_data=result['parsed_data'],
+            extracted_metadata=result['extracted_metadata']
+        )
+        
+        return jsonify(response.model_dump()), 200
     
     except Exception as e:
         logger.error(f"Error uploading resume: {e}", exc_info=True)

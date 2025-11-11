@@ -19,6 +19,8 @@ import {
   FileText,
   Calendar,
   UserCog,
+  Mail,
+  FolderOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,6 +61,20 @@ const navigation: NavItem[] = [
     icon: Users,
     href: '/candidates',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'HIRING_MANAGER'],
+  },
+  {
+    id: 'invitations',
+    label: 'Invitations',
+    icon: Mail,
+    href: '/invitations',
+    roles: ['TENANT_ADMIN', 'RECRUITER'],
+  },
+  {
+    id: 'documents',
+    label: 'Documents',
+    icon: FolderOpen,
+    href: '/documents',
+    roles: ['TENANT_ADMIN', 'RECRUITER'],
   },
   {
     id: 'jobs',

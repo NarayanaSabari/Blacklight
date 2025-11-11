@@ -41,8 +41,8 @@ echo -e "${BLUE}📚 Installing dependencies...${NC}"
 pip install -q --upgrade pip
 pip install -q -r requirements-dev.txt
 
-# Start Docker services (PostgreSQL and Redis only)
-echo -e "\n${BLUE}🐳 Starting PostgreSQL and Redis...${NC}"
+# Start Docker services (PostgreSQL, Redis, and Inngest)
+echo -e "\n${BLUE}🐳 Starting PostgreSQL, Redis, and Inngest Dev Server...${NC}"
 docker-compose -f docker-compose.local.yml up -d
 
 # Wait for services to be healthy
@@ -55,7 +55,7 @@ until docker-compose -f docker-compose.local.yml ps | grep -q "healthy"; do
     sleep 2
 done
 
-echo -e "${GREEN}✅ PostgreSQL and Redis are ready!${NC}\n"
+echo -e "${GREEN}✅ PostgreSQL, Redis, and Inngest are ready!${NC}\n"
 
 # Check if .env exists, if not copy from example
 if [ ! -f ".env" ]; then
@@ -87,12 +87,14 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${BLUE}📊 Service URLs:${NC}"
 echo -e "   • Flask API:          ${GREEN}http://localhost:5000${NC}"
 echo -e "   • API Health:         ${GREEN}http://localhost:5000/api/health${NC}"
+echo -e "   • Inngest Dashboard:  ${GREEN}http://localhost:8288${NC}"
 echo -e "   • pgAdmin (optional): ${GREEN}http://localhost:5050${NC}"
 echo -e "   • Redis Commander:    ${GREEN}http://localhost:8081${NC}\n"
 
 echo -e "${YELLOW}💡 Tips:${NC}"
-echo -e "   • Press Ctrl+C to stop the server"
-echo -e "   • Run './stop-local.sh' to stop Docker services"
+echo -e "   • Press Ctrl+C to stop the Flask server"
+echo -e "   • Run './stop-local.sh' to stop all Docker services"
+echo -e "   • View Inngest workflows at http://localhost:8288"
 echo -e "   • Run 'docker-compose -f docker-compose.local.yml --profile tools up -d' for pgAdmin/Redis Commander\n"
 
 # Run Flask development server

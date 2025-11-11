@@ -110,6 +110,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import pm_admin_routes
     from app.routes import role_routes
     from app.routes import candidate_routes
+    from app.routes import invitation_routes
+    from app.routes import document_routes
+    from app.routes import public_document_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -125,6 +128,35 @@ def register_blueprints(app: Flask) -> None:
     
     # Candidate and Resume Parsing routes
     app.register_blueprint(candidate_routes.candidate_bp)
+    
+    # Candidate Onboarding routes
+    app.register_blueprint(invitation_routes.bp)
+    
+    # Document Management routes
+    app.register_blueprint(document_routes.document_bp)
+    app.register_blueprint(public_document_routes.public_document_bp)
+
+
+def register_inngest(app: Flask) -> None:
+    """Register Inngest background job functions."""
+    try:
+        from inngest.flask import serve as inngest_serve
+        from app.inngest import inngest_client
+        from app.inngest.functions import INNGEST_FUNCTIONS
+        
+        # Register Inngest endpoint - serve() registers routes directly on the app
+        inngest_serve(
+            app,
+            inngest_client,
+            INNGEST_FUNCTIONS,
+        )
+        
+        app.logger.info(f"Inngest: Registered {len(INNGEST_FUNCTIONS)} functions")
+        app.logger.info(f"Inngest: Serving at {app.config.get('INNGEST_SERVE_PATH', '/api/inngest')}")
+    except ImportError as e:
+        app.logger.warning(f"Inngest not available: {e}")
+    except Exception as e:
+        app.logger.error(f"Failed to register Inngest: {e}", exc_info=True)
 
 
 def create_app(config: Type[BaseConfig] = None) -> Flask:
@@ -179,9 +211,13 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     # Register blueprints
     register_blueprints(app)
     
-    # Create database tables
-    with app.app_context():
-        db.create_all()
+    # Register Inngest background jobs
+    register_inngest(app)
+    
+    # Note: Database tables are managed via Alembic migrations (python manage.py migrate)
+    # Do not use db.create_all() as it bypasses migration tracking
+    # with app.app_context():
+    #     db.create_all()
     
     # Log application info
     app.logger.info(

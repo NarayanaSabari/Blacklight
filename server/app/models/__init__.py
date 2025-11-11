@@ -61,3 +61,8 @@ from app.models.role import Role
 from app.models.permission import Permission
 from app.models.role_permission import RolePermission
 from app.models.candidate import Candidate
+
+# Import candidate onboarding models
+from app.models.candidate_invitation import CandidateInvitation
+from app.models.invitation_audit_log import InvitationAuditLog
+from app.models.candidate_document import CandidateDocument

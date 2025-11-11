@@ -47,10 +47,47 @@ class Settings(BaseSettings):
     allowed_hosts: str = Field(default="localhost,127.0.0.1", env="ALLOWED_HOSTS")
     secure_headers: bool = Field(default=True, env="SECURE_HEADERS")
     
+    # Email Configuration
+    smtp_enabled: bool = Field(default=False, env="SMTP_ENABLED")
+    smtp_host: str = Field(default="smtp.gmail.com", env="SMTP_HOST")
+    smtp_port: int = Field(default=587, env="SMTP_PORT")
+    smtp_username: str = Field(default="", env="SMTP_USERNAME")
+    smtp_password: str = Field(default="", env="SMTP_PASSWORD")
+    smtp_use_tls: bool = Field(default=True, env="SMTP_USE_TLS")
+    smtp_from_email: str = Field(default="noreply@blacklight.io", env="SMTP_FROM_EMAIL")
+    smtp_from_name: str = Field(default="Blacklight HR", env="SMTP_FROM_NAME")
+    
+    # Invitation Settings
+    invitation_expiry_hours: int = Field(default=168, env="INVITATION_EXPIRY_HOURS")  # 7 days
+    frontend_base_url: str = Field(default="http://localhost:5173", env="FRONTEND_BASE_URL")
+    
+    # File Storage Configuration
+    storage_backend: str = Field(default="local", env="STORAGE_BACKEND")  # 'local' or 'gcs'
+    storage_local_path: str = Field(default="./storage/uploads", env="STORAGE_LOCAL_PATH")
+    
+    # Google Cloud Storage (GCS) Configuration
+    gcs_bucket_name: str = Field(default="", env="GCS_BUCKET_NAME")
+    gcs_project_id: str = Field(default="", env="GCS_PROJECT_ID")
+    gcs_credentials_path: str = Field(default="", env="GCS_CREDENTIALS_PATH")  # Path to service account JSON
+    gcs_credentials_json: str = Field(default="", env="GCS_CREDENTIALS_JSON")  # Or inline JSON string
+    
+    # File Upload Limits
+    max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
+    allowed_document_types: str = Field(default="pdf,doc,docx,jpg,jpeg,png", env="ALLOWED_DOCUMENT_TYPES")
+    signed_url_expiry_seconds: int = Field(default=3600, env="SIGNED_URL_EXPIRY_SECONDS")  # 1 hour
+    
     # Database Pool
     pool_size: int = Field(default=10, env="SQLALCHEMY_ENGINE_OPTIONS_POOL_SIZE")
     pool_recycle: int = Field(default=3600, env="SQLALCHEMY_ENGINE_OPTIONS_POOL_RECYCLE")
     pool_pre_ping: bool = Field(default=True, env="SQLALCHEMY_ENGINE_OPTIONS_POOL_PRE_PING")
+    
+    # Inngest Configuration
+    inngest_dev: bool = Field(default=True, env="INNGEST_DEV")
+    inngest_base_url: str = Field(default="http://localhost:8288", env="INNGEST_BASE_URL")
+    inngest_event_key: str = Field(default="", env="INNGEST_EVENT_KEY")
+    inngest_signing_key: str = Field(default="", env="INNGEST_SIGNING_KEY")
+    inngest_serve_host: str = Field(default="http://localhost:5000", env="INNGEST_SERVE_HOST")
+    inngest_serve_path: str = Field(default="/api/inngest", env="INNGEST_SERVE_PATH")
     
     class Config:
         """Pydantic configuration."""

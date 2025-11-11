@@ -9,7 +9,7 @@ from werkzeug.datastructures import FileStorage
 
 from app import db
 from app.models.candidate import Candidate
-from app.services.file_storage import FileStorageService
+from app.services.file_storage import LegacyResumeStorageService
 from app.services.resume_parser import ResumeParserService
 from app.utils.text_extractor import TextExtractor
 from app.utils.skills_matcher import SkillsMatcher
@@ -21,7 +21,7 @@ class CandidateService:
     """
     
     def __init__(self):
-        self.file_storage = FileStorageService()
+        self.file_storage = LegacyResumeStorageService()
         self.parser = None  # Lazy initialization
         self.skills_matcher = SkillsMatcher()
     

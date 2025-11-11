@@ -38,6 +38,7 @@ import {
 import { toast } from 'sonner';
 
 import { candidateApi } from '@/lib/candidateApi';
+import { documentApi } from '@/lib/documentApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +54,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DocumentList,
+  DocumentViewer,
+  DocumentVerificationModal,
+} from '@/components/documents';
+import type { Document, DocumentListItem } from '@/types';
 
 const STATUS_COLORS: Record<string, string> = {
   new: 'bg-blue-500',
@@ -70,11 +77,21 @@ export function CandidateDetailPage() {
   const queryClient = useQueryClient();
   
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   // Fetch candidate data
   const { data: candidate, isLoading, error } = useQuery({
     queryKey: ['candidate', id],
     queryFn: () => candidateApi.getCandidate(Number(id)),
+    enabled: !!id,
+  });
+
+  // Fetch candidate documents
+  const { data: documentsResponse, isLoading: documentsLoading } = useQuery({
+    queryKey: ['documents', 'candidate', id],
+    queryFn: () => documentApi.listDocuments({ candidate_id: Number(id) }),
     enabled: !!id,
   });
 
@@ -118,6 +135,57 @@ export function CandidateDetailPage() {
 
   const handleReparse = () => {
     reparseMutation.mutate();
+  };
+
+  // Document handlers
+  const handleViewDocument = (document: DocumentListItem) => {
+    // Fetch full document details
+    documentApi.getDocument(document.id).then((fullDoc) => {
+      setSelectedDocument(fullDoc);
+      setShowDocumentViewer(true);
+    });
+  };
+
+  const handleDownloadDocument = async (document: DocumentListItem) => {
+    try {
+      const blob = await documentApi.downloadDocument(document.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = url;
+      link.download = document.file_name;
+      window.document.body.appendChild(link);
+      link.click();
+      window.document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Document downloaded successfully');
+    } catch {
+      toast.error('Failed to download document');
+    }
+  };
+
+  const handleVerifyDocument = (document: DocumentListItem) => {
+    documentApi.getDocument(document.id).then((fullDoc) => {
+      setSelectedDocument(fullDoc);
+      setShowVerificationModal(true);
+    });
+  };
+
+  const handleDeleteDocument = async (document: DocumentListItem) => {
+    if (confirm(`Are you sure you want to delete ${document.file_name}?`)) {
+      try {
+        await documentApi.deleteDocument(document.id);
+        queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
+        toast.success('Document deleted successfully');
+      } catch {
+        toast.error('Failed to delete document');
+      }
+    }
+  };
+
+  const handleDocumentVerified = () => {
+    queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
+    setShowVerificationModal(false);
+    setSelectedDocument(null);
   };
 
   // Loading state
@@ -393,6 +461,34 @@ export function CandidateDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Documents Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {documentsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <DocumentList
+                    documents={documentsResponse?.documents || []}
+                    loading={documentsLoading}
+                    onView={handleViewDocument}
+                    onDownload={handleDownloadDocument}
+                    onVerify={handleVerifyDocument}
+                    onDelete={handleDeleteDocument}
+                    showFilters={false}
+                    emptyMessage="No documents uploaded yet"
+                  />
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Column - Additional Info */}
@@ -603,6 +699,28 @@ export function CandidateDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Document Viewer Modal */}
+      <DocumentViewer
+        document={selectedDocument}
+        open={showDocumentViewer}
+        onClose={() => {
+          setShowDocumentViewer(false);
+          setSelectedDocument(null);
+        }}
+        onDownload={handleDownloadDocument}
+      />
+
+      {/* Document Verification Modal */}
+      <DocumentVerificationModal
+        document={selectedDocument}
+        open={showVerificationModal}
+        onClose={() => {
+          setShowVerificationModal(false);
+          setSelectedDocument(null);
+        }}
+        onVerified={handleDocumentVerified}
+      />
     </div>
   );
 }
