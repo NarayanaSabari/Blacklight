@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, PenSquare } from 'lucide-react';
 import { ResumeUpload } from './ResumeUpload';
 import { CandidateForm } from './CandidateForm';
-import type { Candidate, CandidateCreateInput, CandidateUpdateInput, UploadResumeResponse } from '@/types/candidate';
+import type { Candidate, CandidateCreateInput, UploadResumeResponse } from '@/types/candidate';
 
 interface AddCandidateDialogProps {
   open: boolean;
@@ -39,7 +39,7 @@ export function AddCandidateDialog({
     setShowForm(true);
   };
 
-  const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {
+  const handleFormSubmit = async (data: CandidateCreateInput) => {
     // If we have parsed data with candidate_id, the candidate was already created
     if (parsedData?.candidate_id) {
       // Just close and refresh
@@ -50,7 +50,7 @@ export function AddCandidateDialog({
       // Create candidate manually
       try {
         const { candidateApi } = await import('@/lib/candidateApi');
-        await candidateApi.createCandidate(data as CandidateCreateInput);
+        await candidateApi.createCandidate(data);
         onSuccess();
         onOpenChange(false);
         resetState();
@@ -85,10 +85,10 @@ export function AddCandidateDialog({
           
           <CandidateForm
             candidate={candidate}
-            onSubmit={async (data: CandidateCreateInput | CandidateUpdateInput) => {
+            onSubmit={async (data) => {
               try {
                 const { candidateApi } = await import('@/lib/candidateApi');
-                await candidateApi.updateCandidate(candidate.id, data as CandidateUpdateInput);
+                await candidateApi.updateCandidate(candidate.id, data);
                 onSuccess();
                 onOpenChange(false);
               } catch (error) {

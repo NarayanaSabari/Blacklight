@@ -27,25 +27,25 @@ export default function InvitationsPage() {
         <div className="grid gap-4 md:grid-cols-4">
           <StatsCard
             title="Total Sent"
-            value={stats.by_status.invited}
+            value={stats.sent}
             icon={Mail}
             iconColor="text-blue-600"
           />
           <StatsCard
             title="Pending Review"
-            value={stats.by_status.submitted}
+            value={stats.pending_review}
             icon={Clock}
             iconColor="text-yellow-600"
           />
           <StatsCard
             title="Approved"
-            value={stats.by_status.approved}
+            value={stats.approved}
             icon={CheckCircle2}
             iconColor="text-green-600"
           />
           <StatsCard
             title="Rejected"
-            value={stats.by_status.rejected}
+            value={stats.rejected}
             icon={XCircle}
             iconColor="text-red-600"
           />

@@ -5,8 +5,6 @@
 
 export type InvitationStatus = 
   | 'sent'
-  | 'opened' // Added
-  | 'in_progress' // Added
   | 'pending_review'
   | 'approved'
   | 'rejected'
@@ -24,8 +22,6 @@ export interface CandidateInvitation {
   email: string;
   first_name?: string;
   last_name?: string;
-  position?: string; // Added
-  recruiter_notes?: string; // Added
   token: string;
   expires_at: string;
   status: InvitationStatus;
@@ -43,8 +39,6 @@ export interface CandidateInvitation {
 }
 
 export interface InvitationWithRelations extends CandidateInvitation {
-  is_valid?: boolean; // Added
-  is_expired?: boolean; // Added
   invited_by?: {
     id: number;
     email: string;
@@ -103,8 +97,6 @@ export interface InvitationCreateRequest {
   email: string;
   first_name?: string;
   last_name?: string;
-  position?: string; // Added
-  recruiter_notes?: string; // Added
   expiry_hours?: number; // Hours until expiry (backend expects this)
   invitation_data?: Record<string, unknown>;
 }
@@ -113,8 +105,6 @@ export interface InvitationUpdateRequest {
   email?: string;
   first_name?: string;
   last_name?: string;
-  position?: string; // Added
-  recruiter_notes?: string; // Added
   invitation_data?: Record<string, unknown>;
 }
 
@@ -137,16 +127,12 @@ export interface InvitationListResponse {
 
 export interface InvitationStatsResponse {
   total: number;
-  by_status: { // Changed to by_status object
-    invited: number; // Mapped from 'sent' in backend
-    opened: number; // Added
-    in_progress: number; // Added
-    submitted: number; // Mapped from 'pending_review' in frontend
-    approved: number;
-    rejected: number;
-    cancelled: number;
-    expired: number;
-  };
+  sent: number;
+  pending_review: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  expired: number;
 }
 
 export interface InvitationReviewRequest {
@@ -200,18 +186,6 @@ export interface BulkInvitationResponse {
     email: string;
     error: string;
   }>;
-}
-
-export interface InvitationVerifyResponse { // Added
-  id: number;
-  email: string;
-  first_name?: string;
-  last_name?: string;
-  position?: string;
-  status: InvitationStatus;
-  expires_at: string;
-  is_expired: boolean;
-  is_valid: boolean;
 }
 
 // Filter/Sort helpers

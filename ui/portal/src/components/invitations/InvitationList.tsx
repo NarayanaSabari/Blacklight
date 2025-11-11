@@ -3,7 +3,7 @@
  * DataTable with filters, search, and pagination for viewing invitations
  */
 
-import { useState } from 'react'; // Ensure useState is imported
+import { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -44,26 +44,23 @@ import {
   Trash2,
   Search,
 } from 'lucide-react';
-import { format } from 'date-fns'; // Ensure format is imported
-import { useInvitations, useResendInvitation, useCancelInvitation } from '@/hooks/useInvitations'; // Ensure hooks are imported
-import { Skeleton } from '@/components/ui/skeleton'; // Ensure Skeleton is imported
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty'; // Ensure Empty components are imported
-import type { InvitationStatus, InvitationListParams } from '@/types'; // Ensure types are imported
+import { format } from 'date-fns';
+import { useInvitations } from '@/hooks/useInvitations';
+import { useResendInvitation, useCancelInvitation } from '@/hooks/useInvitations';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
+import type { InvitationStatus, InvitationListParams } from '@/types';
 
-interface InvitationListProps { // Explicitly define interface here
+interface InvitationListProps {
   onViewDetails: (id: number) => void;
   onCreateNew?: () => void;
 }
-
-// ...
 
 const STATUS_CONFIG: Record<
   InvitationStatus,
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Mail }
 > = {
   sent: { label: 'Sent', variant: 'default', icon: Mail },
-  opened: { label: 'Opened', variant: 'outline', icon: Eye }, // Added
-  in_progress: { label: 'In Progress', variant: 'secondary', icon: Clock }, // Added
   pending_review: { label: 'Pending Review', variant: 'secondary', icon: Clock },
   approved: { label: 'Approved', variant: 'outline', icon: CheckCircle2 },
   rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },
@@ -84,11 +81,11 @@ export function InvitationList({ onViewDetails, onCreateNew }: InvitationListPro
   const cancelMutation = useCancelInvitation();
 
   const handleSearch = (search: string) => {
-    setParams((prev: InvitationListParams) => ({ ...prev, search: search || undefined, page: 1 }));
+    setParams((prev) => ({ ...prev, search: search || undefined, page: 1 }));
   };
 
   const handleStatusFilter = (status: string) => {
-    setParams((prev: InvitationListParams) => ({
+    setParams((prev) => ({
       ...prev,
       status: status === 'all' ? undefined : (status as InvitationStatus),
       page: 1,
@@ -96,7 +93,7 @@ export function InvitationList({ onViewDetails, onCreateNew }: InvitationListPro
   };
 
   const handlePageChange = (page: number) => {
-    setParams((prev: InvitationListParams) => ({ ...prev, page }));
+    setParams((prev) => ({ ...prev, page }));
   };
 
   const handleResend = (id: number, e: React.MouseEvent) => {
