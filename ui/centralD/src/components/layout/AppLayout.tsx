@@ -3,7 +3,7 @@
  */
 
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Building2, Users, CreditCard, Menu } from 'lucide-react';
+import { Building2, Users, CreditCard, Menu, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserProfileMenu } from '@/components/layout/UserProfileMenu';
 import { useState } from 'react';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 
 const navigation = [
   { name: 'Tenants', href: '/tenants', icon: Building2 },
+  { name: 'Invitations', href: '/invitations', icon: Mail },
   { name: 'Subscription Plans', href: '/plans', icon: CreditCard },
   { name: 'Admin Users', href: '/admins', icon: Users },
 ];

@@ -244,24 +244,11 @@ def resend_invitation(invitation_id):
         body = request.get_json(silent=True) or {}
         data = InvitationResendSchema.model_validate(body)
         
-        # Resend invitation
+        # Resend invitation (service handles sending the email)
         invitation = InvitationService.resend_invitation(
             invitation_id=invitation_id,
             resent_by_id=user_id,
             expiry_hours=data.expiry_hours
-        )
-        
-        # Generate new onboarding URL
-        frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:3000")
-        onboarding_url = f"{frontend_url}/onboarding?token={invitation.token}"
-        
-        # Send email
-        EmailService.send_invitation_email(
-            tenant_id=tenant_id,
-            to_email=invitation.email,
-            candidate_name=f"{invitation.first_name} {invitation.last_name}" if invitation.first_name else None,
-            onboarding_url=onboarding_url,
-            expiry_date=invitation.expires_at.strftime("%B %d, %Y at %I:%M %p")
         )
         
         # Build response

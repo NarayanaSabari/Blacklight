@@ -16,6 +16,7 @@ import { TenantDetailPage } from '@/pages/TenantDetailPage';
 import { PlansPage } from '@/pages/PlansPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminsPage } from '@/pages/AdminsPage';
+import { InvitationsPage } from '@/app/invitations/page'; // Corrected import path
 import { env } from '@/lib/env';
 
 // Create React Query client
@@ -45,6 +46,7 @@ function App() {
                 <Route path="/tenants" element={<TenantsPage />} />
                 <Route path="/tenants/new" element={<CreateTenantPage />} />
                 <Route path="/tenants/:slug" element={<TenantDetailPage />} />
+                <Route path="/invitations" element={<InvitationsPage />} />
                 <Route path="/plans" element={<PlansPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admins" element={<AdminsPage />} />
