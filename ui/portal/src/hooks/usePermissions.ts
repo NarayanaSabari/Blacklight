@@ -15,7 +15,7 @@ export function usePermissions() {
   /**
    * Check if user has a specific permission
    */
-  const hasPermission = (_permissionName: string): boolean => {
+  const hasPermission = (): boolean => {
     if (!user || !user.role) return false;
     // Tenant admins have all permissions
     if (isTenantAdmin) return true;

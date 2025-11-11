@@ -9,7 +9,10 @@ export type InvitationStatus =
   | 'approved'
   | 'rejected'
   | 'cancelled'
-  | 'expired';
+  | 'expired'
+  | 'submitted' // Added
+  | 'opened' // Added
+  | 'in_progress'; // Added
 
 export type OnboardingType = 
   | 'email_invitation'
@@ -34,11 +37,14 @@ export interface CandidateInvitation {
   review_notes?: string;
   rejection_reason?: string;
   candidate_id?: number;
+  position?: string; // Added
+  recruiter_notes?: string; // Added
   created_at: string;
   updated_at: string;
 }
 
 export interface InvitationWithRelations extends CandidateInvitation {
+  is_valid?: boolean; // Added
   invited_by?: {
     id: number;
     email: string;
@@ -106,6 +112,8 @@ export interface InvitationUpdateRequest {
   first_name?: string;
   last_name?: string;
   invitation_data?: Record<string, unknown>;
+  position?: string; // Added
+  recruiter_notes?: string; // Added
 }
 
 export interface InvitationListParams {
@@ -127,12 +135,16 @@ export interface InvitationListResponse {
 
 export interface InvitationStatsResponse {
   total: number;
-  sent: number;
-  pending_review: number;
-  approved: number;
-  rejected: number;
-  cancelled: number;
-  expired: number;
+  by_status: {
+    approved: number;
+    cancelled: number;
+    expired: number;
+    in_progress: number;
+    invited: number;
+    opened: number;
+    rejected: number;
+    submitted: number;
+  };
 }
 
 export interface InvitationReviewRequest {

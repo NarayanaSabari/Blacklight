@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, PenSquare } from 'lucide-react';
 import { ResumeUpload } from './ResumeUpload';
 import { CandidateForm } from './CandidateForm';
-import type { Candidate, CandidateCreateInput, UploadResumeResponse } from '@/types/candidate';
+import type { Candidate, CandidateCreateInput, CandidateUpdateInput, UploadResumeResponse } from '@/types/candidate';
 
 interface AddCandidateDialogProps {
   open: boolean;
@@ -39,18 +39,35 @@ export function AddCandidateDialog({
     setShowForm(true);
   };
 
-  const handleFormSubmit = async (data: CandidateCreateInput) => {
+  const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {
     // If we have parsed data with candidate_id, the candidate was already created
     if (parsedData?.candidate_id) {
-      // Just close and refresh
-      onSuccess();
-      onOpenChange(false);
-      resetState();
+      // This path is for when a resume was uploaded and parsed, and a candidate was auto-created.
+      // The form is then shown to review/edit. In this case, we are effectively updating
+      // the existing candidate.
+      if (candidate) { // Should not happen if parsedData?.candidate_id is true, but for type safety
+        try {
+          const { candidateApi } = await import('@/lib/candidateApi');
+          await candidateApi.updateCandidate(candidate.id, data as CandidateUpdateInput);
+          onSuccess();
+          onOpenChange(false);
+          resetState();
+        } catch (error) {
+          console.error('Failed to update candidate after parse:', error);
+        }
+      } else {
+        // This case implies a candidate was created by resume upload, but we don't have the 'candidate' prop.
+        // This might be an edge case or a logic flaw. For now, just close.
+        onSuccess();
+        onOpenChange(false);
+        resetState();
+      }
     } else {
-      // Create candidate manually
+      // This path is for manual creation or when parsed data doesn't lead to auto-creation.
+      // We are creating a new candidate.
       try {
         const { candidateApi } = await import('@/lib/candidateApi');
-        await candidateApi.createCandidate(data);
+        await candidateApi.createCandidate(data as CandidateCreateInput);
         onSuccess();
         onOpenChange(false);
         resetState();
@@ -85,7 +102,7 @@ export function AddCandidateDialog({
           
           <CandidateForm
             candidate={candidate}
-            onSubmit={async (data) => {
+            onSubmit={async (data: CandidateUpdateInput) => {
               try {
                 const { candidateApi } = await import('@/lib/candidateApi');
                 await candidateApi.updateCandidate(candidate.id, data);
@@ -134,7 +151,7 @@ export function AddCandidateDialog({
 
             <TabsContent value="manual" className="mt-6">
               <CandidateForm
-                onSubmit={handleFormSubmit}
+                onSubmit={handleFormSubmit as (data: CandidateCreateInput | CandidateUpdateInput) => void | Promise<void>}
                 onCancel={handleCancel}
               />
             </TabsContent>
@@ -142,7 +159,7 @@ export function AddCandidateDialog({
         ) : (
           <CandidateForm
             parsedData={parsedData?.parsed_data}
-            onSubmit={handleFormSubmit}
+            onSubmit={handleFormSubmit as (data: CandidateCreateInput | CandidateUpdateInput) => void | Promise<void>}
             onCancel={handleCancel}
           />
         )}

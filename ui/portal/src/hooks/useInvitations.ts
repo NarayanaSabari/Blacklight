@@ -13,6 +13,7 @@ import type {
   InvitationReviewRequest,
   BulkInvitationRequest,
 } from '@/types';
+import { AxiosError } from 'axios';
 
 // Query keys for cache management
 export const invitationKeys = {
@@ -44,6 +45,13 @@ export function useInvitationStats() {
     queryKey: invitationKeys.stats(),
     queryFn: () => invitationApi.stats(),
     staleTime: 60000, // 1 minute
+    select: (data) => ({
+      total: data.total,
+      sent: data.total, // Assuming 'total' from backend represents 'total sent'
+      pending_review: data.by_status.in_progress || 0,
+      approved: data.by_status.approved || 0,
+      rejected: data.by_status.rejected || 0,
+    }),
   });
 }
 
@@ -82,7 +90,7 @@ export function useCreateInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.stats() });
       toast.success('Invitation sent successfully');
     },
-    onError: (error: any) => {
+    onError: (error: AxiosError) => {
       if (error?.response?.status === 409) {
         toast.error('Duplicate Invitation', {
           description: 'An active invitation for this email address already exists.',

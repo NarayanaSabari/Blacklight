@@ -54,7 +54,6 @@ export type {
   InvitationListResponse,
   InvitationStatsResponse,
   InvitationReviewRequest,
-  InvitationVerifyResponse,
   OnboardingSubmissionRequest,
   OnboardingSubmissionResponse,
   DocumentUploadResponse,
