@@ -14,9 +14,11 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🚀 Blacklight Local Development Setup${NC}\n"
 
-# Check if Python is available
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}❌ Python 3 is not installed${NC}"
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo -e "${RED}❌ uv is not installed${NC}"
+    echo -e "${YELLOW}💡 Install uv with: curl -LsSf https://astral.sh/uv/install.sh | sh${NC}"
+    echo -e "${YELLOW}   Or via Homebrew: brew install uv${NC}"
     exit 1
 fi
 
@@ -26,20 +28,20 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}📦 Creating virtual environment...${NC}"
-    python3 -m venv venv
+# Check if virtual environment exists, if not create it with uv
+if [ ! -d ".venv" ]; then
+    echo -e "${YELLOW}📦 Creating virtual environment with uv (Python 3.11)...${NC}"
+    uv venv .venv --python 3.11
 fi
 
 # Activate virtual environment
 echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
-source venv/bin/activate
+source .venv/bin/activate
 
-# Install/update dependencies
-echo -e "${BLUE}📚 Installing dependencies...${NC}"
-pip install -q --upgrade pip
-pip install -q -r requirements-dev.txt
+# Install/update dependencies with uv (much faster than pip)
+echo -e "${BLUE}📚 Installing dependencies with uv (resolving all transitive dependencies)...${NC}"
+# Use --resolution highest to ensure all transitive dependencies are resolved
+uv pip install --resolution highest -r requirements-dev.txt
 
 # Start Docker services (PostgreSQL, Redis, and Inngest)
 echo -e "\n${BLUE}🐳 Starting PostgreSQL, Redis, and Inngest Dev Server...${NC}"

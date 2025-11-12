@@ -43,7 +43,12 @@ class Role(db.Model):
     
     # Relationships
     tenant = relationship('Tenant', back_populates='custom_roles')
-    users = relationship('PortalUser', back_populates='role', lazy='dynamic')
+    portal_users = relationship(
+        'PortalUser',
+        secondary='user_roles',
+        back_populates='roles',
+        lazy='select'
+    )
     permissions = relationship(
         'Permission',
         secondary='role_permissions',

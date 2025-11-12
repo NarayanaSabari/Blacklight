@@ -20,7 +20,7 @@ from app.schemas.candidate_schema import (
     ReparseResumeResponseSchema,
     CandidateStatsSchema,
 )
-from app.middleware.portal_auth import require_portal_auth
+from app.middleware.portal_auth import require_portal_auth, require_permission
 from app.middleware.tenant_context import with_tenant_context
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def error_response(message: str, status: int = 400, details: dict = None):
 @candidate_bp.route('', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.create')
 def create_candidate():
     """
     Create a new candidate manually (without resume)
@@ -106,6 +107,7 @@ def create_candidate():
 @candidate_bp.route('/<int:candidate_id>', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def get_candidate(candidate_id: int):
     """
     Get a candidate by ID
@@ -139,6 +141,7 @@ def get_candidate(candidate_id: int):
 @candidate_bp.route('/<int:candidate_id>', methods=['PUT'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.edit')
 def update_candidate(candidate_id: int):
     """
     Update a candidate
@@ -177,6 +180,7 @@ def update_candidate(candidate_id: int):
 @candidate_bp.route('/<int:candidate_id>', methods=['DELETE'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.delete')
 def delete_candidate(candidate_id: int):
     """
     Delete a candidate
@@ -204,6 +208,7 @@ def delete_candidate(candidate_id: int):
 @candidate_bp.route('', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def list_candidates():
     """
     List candidates with filters and pagination
@@ -256,6 +261,8 @@ def list_candidates():
 @candidate_bp.route('/upload', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.create')
+@require_permission('candidates.upload_resume')
 def upload_and_create():
     """
     Upload resume and parse synchronously (returns parsed data)
@@ -318,6 +325,8 @@ def upload_and_create():
 @candidate_bp.route('/<int:candidate_id>/resume', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.edit')
+@require_permission('candidates.upload_resume')
 def upload_resume_for_candidate(candidate_id: int):
     """
     Upload resume for existing candidate
@@ -373,6 +382,7 @@ def upload_resume_for_candidate(candidate_id: int):
 @candidate_bp.route('/<int:candidate_id>/reparse', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.edit')
 def reparse_resume(candidate_id: int):
     """
     Re-parse existing resume file
@@ -409,6 +419,7 @@ def reparse_resume(candidate_id: int):
 @candidate_bp.route('/stats', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('reports.view')
 def get_stats():
     """
     Get candidate statistics for tenant

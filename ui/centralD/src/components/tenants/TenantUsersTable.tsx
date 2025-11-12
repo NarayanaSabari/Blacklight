@@ -51,8 +51,8 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
     setShowResetPasswordDialog(true);
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
+  const getRoleBadgeVariant = (roleName: string) => {
+    switch (roleName) {
       case 'TENANT_ADMIN':
         return 'default';
       case 'RECRUITER':
@@ -64,8 +64,8 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
+  const getRoleLabel = (roleName: string) => {
+    switch (roleName) {
       case 'TENANT_ADMIN':
         return 'Admin';
       case 'RECRUITER':
@@ -73,7 +73,7 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
       case 'HIRING_MANAGER':
         return 'Hiring Manager';
       default:
-        return role;
+        return roleName;
     }
   };
 
@@ -138,9 +138,13 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
                     </TableCell>
                     <TableCell className="text-muted-foreground">{user.email}</TableCell>
                     <TableCell>
-                      <Badge variant={getRoleBadgeVariant(user.role)}>
-                        {getRoleLabel(user.role)}
-                      </Badge>
+                      {user.roles && user.roles.length > 0 ? (
+                        <Badge variant={getRoleBadgeVariant(user.roles[0].name)}>
+                          {getRoleLabel(user.roles[0].display_name)}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">N/A</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {user.is_active ? (
@@ -168,7 +172,7 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {user.role === 'TENANT_ADMIN' && (
+                          {user.roles && user.roles.some(role => role.name === 'TENANT_ADMIN') && (
                             <DropdownMenuItem onClick={() => handleResetPassword(user)}>
                               <KeyRound className="mr-2 h-4 w-4" />
                               Reset Password

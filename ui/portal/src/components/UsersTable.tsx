@@ -1,8 +1,3 @@
-/**
- * Users Table Component
- * Display portal users with actions
- */
-
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -33,11 +28,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MoreHorizontal, Trash2, KeyRound, UserX, UserCheck } from 'lucide-react';
+import { MoreHorizontal, Trash2, KeyRound, UserX, UserCheck, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
 import { deleteUser, toggleUserActive } from '@/lib/api/users';
 import type { PortalUserFull } from '@/types';
 import { usePermissions } from '@/hooks/usePermissions';
+import { UserRoleAssignmentDialog } from './UserRoleAssignmentDialog'; // Import the new dialog
 
 interface UsersTableProps {
   users: PortalUserFull[];
@@ -49,6 +45,7 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
   const { user: currentUser, isTenantAdmin } = usePermissions();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<PortalUserFull | null>(null);
+  const [assignRolesUser, setAssignRolesUser] = useState<PortalUserFull | null>(null);
 
   const deleteUserMutation = useMutation({
     mutationFn: (id: number) => deleteUser(id),
@@ -110,7 +107,7 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
+              <TableHead>Roles</TableHead> {/* Changed from Role to Roles */}
               <TableHead>Phone</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Last Login</TableHead>
@@ -137,7 +134,15 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{user.role.display_name}</Badge>
+                    {user.roles && user.roles.length > 0 ? (
+                      user.roles.map((role) => (
+                        <Badge key={role.id} variant="secondary" className="mr-1 mb-1">
+                          {role.display_name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="outline">No Roles</Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {user.phone || '—'}
@@ -173,6 +178,10 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
                           <DropdownMenuItem onClick={() => onResetPassword(user)}>
                             <KeyRound className="mr-2 h-4 w-4" />
                             Reset Password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setAssignRolesUser(user)}>
+                            <UserCog className="mr-2 h-4 w-4" />
+                            Manage Roles
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleActive(user)}>
                             {user.is_active ? (
@@ -227,6 +236,13 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* User Role Assignment Dialog */}
+      <UserRoleAssignmentDialog
+        user={assignRolesUser}
+        open={assignRolesUser !== null}
+        onOpenChange={(open) => !open && setAssignRolesUser(null)}
+      />
     </>
   );
 }

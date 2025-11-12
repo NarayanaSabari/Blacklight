@@ -93,9 +93,9 @@ export function ChangePlanDialog({
 
     const newViolations: string[] = [];
 
-    if (stats.users_count > newPlan.max_users) {
+    if (stats.user_count > newPlan.max_users) {
       newViolations.push(
-        `You have ${stats.users_count} users but the new plan allows only ${newPlan.max_users}`
+        `You have ${stats.user_count} users but the new plan allows only ${newPlan.max_users}`
       );
     }
 

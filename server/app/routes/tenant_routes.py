@@ -61,7 +61,10 @@ def create_tenant():
 
         tenant = TenantService.create_tenant(data, changed_by)
 
-        return jsonify(tenant.model_dump()), 201
+        return jsonify({
+            "tenant": tenant.model_dump(),
+            "message": "Tenant created successfully"
+        }), 201
 
     except ValueError as e:
         return error_response(str(e), 400)
@@ -260,7 +263,10 @@ def change_subscription_plan(identifier: str):
 
         tenant = TenantService.change_subscription_plan(tenant_id, data, changed_by)
 
-        return jsonify(tenant.model_dump()), 200
+        return jsonify({
+            "tenant": tenant.model_dump(),
+            "message": "Subscription plan changed successfully"
+        }), 200
 
     except ValueError as e:
         status = 404 if "not found" in str(e).lower() else 400
@@ -301,7 +307,10 @@ def suspend_tenant(identifier: str):
 
         tenant = TenantService.suspend_tenant(tenant_id, data, changed_by)
 
-        return jsonify(tenant.model_dump()), 200
+        return jsonify({
+            "tenant": tenant.model_dump(),
+            "message": "Tenant suspended successfully"
+        }), 200
 
     except ValueError as e:
         status = 404 if "not found" in str(e).lower() else 400
@@ -339,7 +348,10 @@ def reactivate_tenant(identifier: str):
 
         tenant = TenantService.reactivate_tenant(tenant_id, changed_by)
 
-        return jsonify(tenant.model_dump()), 200
+        return jsonify({
+            "tenant": tenant.model_dump(),
+            "message": "Tenant activated successfully"
+        }), 200
 
     except ValueError as e:
         status = 404 if "not found" in str(e).lower() else 400
@@ -377,7 +389,7 @@ def get_tenant(identifier: str):
             # Not an integer, treat as slug
             tenant = TenantService.get_tenant(identifier)
         
-        return jsonify(tenant.model_dump()), 200
+        return jsonify({"tenant": tenant.model_dump()}), 200
 
     except ValueError as e:
         return error_response(str(e), 404)
@@ -385,26 +397,26 @@ def get_tenant(identifier: str):
         return error_response(str(e), 500)
 
 
-@bp.route("/<string:identifier>", methods=["PATCH"])
+@bp.route("/<string:identifier>", methods=["DELETE"])
 @require_pm_admin
-def update_tenant(identifier: str):
+def delete_tenant(identifier: str):
     """
-    Update tenant basic information.
-    
+    Delete a tenant.
+
     Requires: PM Admin authentication
-    
+
     Path params:
         - identifier: Tenant ID (integer) or slug (string)
-    
-    Request body: TenantUpdateSchema
-    
+
+    Request body: TenantDeleteSchema
+
     Returns:
-        200: Updated tenant
+        200: Deletion confirmation
         400: Validation error
         404: Tenant not found
     """
     try:
-        data = TenantUpdateSchema.model_validate(request.get_json())
+        data = TenantDeleteSchema.model_validate(request.get_json())
         changed_by = get_changed_by()
 
         # Convert identifier to int if possible
@@ -415,9 +427,9 @@ def update_tenant(identifier: str):
             tenant = TenantService.get_tenant(identifier)
             tenant_id = tenant.id
 
-        tenant = TenantService.update_tenant(tenant_id, data, changed_by)
+        result = TenantService.delete_tenant(tenant_id, data, changed_by)
 
-        return jsonify(tenant.model_dump()), 200
+        return jsonify(result), 200
 
     except ValueError as e:
         status = 404 if "not found" in str(e).lower() else 400

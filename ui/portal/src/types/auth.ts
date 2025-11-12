@@ -2,6 +2,8 @@
  * Portal Authentication Types
  */
 
+import { Role } from './entities'; // Import Role type
+
 export interface PortalUser {
   id: number;
   tenant_id: number;
@@ -10,15 +12,7 @@ export interface PortalUser {
   last_name: string;
   full_name: string;
   phone: string | null;
-  role: {
-    id: number;
-    name: string;
-    display_name: string;
-    description: string | null;
-    is_system_role: boolean;
-    tenant_id: number | null;
-  };
-  role_id: number;
+  roles: Role[]; // Changed from single role to array of roles
   is_active: boolean;
   last_login: string | null;
   is_locked: boolean;

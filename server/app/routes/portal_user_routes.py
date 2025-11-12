@@ -2,12 +2,13 @@
 
 from flask import Blueprint, jsonify, request
 from app.services import PortalUserService, PortalAuthService
-from app.middleware import require_portal_auth, require_tenant_admin
+from app.middleware.portal_auth import require_portal_auth, require_tenant_admin, require_permission
 from app.schemas.portal_user_schema import (
     PortalUserCreateSchema,
     PortalUserUpdateSchema,
     PortalUserResetPasswordSchema,
     PortalLoginSchema,
+    UserRoleAssignmentSchema,
 )
 
 bp = Blueprint("portal_users", __name__, url_prefix="/api/portal")
@@ -132,6 +133,7 @@ def refresh_token():
 
 @bp.route("/users", methods=["POST"])
 @require_tenant_admin
+@require_permission('users.create')
 def create_user():
     """
     Create a new portal user within tenant.
@@ -167,6 +169,7 @@ def create_user():
 
 @bp.route("/users", methods=["GET"])
 @require_portal_auth
+@require_permission('users.view')
 def list_users():
     """
     List portal users within current tenant.
@@ -223,6 +226,7 @@ def list_users():
 
 @bp.route("/users/<int:user_id>", methods=["GET"])
 @require_portal_auth
+@require_permission('users.view')
 def get_user(user_id: int):
     """
     Get portal user by ID.
@@ -255,6 +259,7 @@ def get_user(user_id: int):
 
 @bp.route("/users/<int:user_id>", methods=["PATCH"])
 @require_tenant_admin
+@require_permission('users.edit')
 def update_user(user_id: int):
     """
     Update portal user.
@@ -295,6 +300,7 @@ def update_user(user_id: int):
 
 @bp.route("/users/<int:user_id>", methods=["DELETE"])
 @require_tenant_admin
+@require_permission('users.delete')
 def delete_user(user_id: int):
     """
     Delete portal user.
@@ -330,6 +336,7 @@ def delete_user(user_id: int):
 
 @bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @require_tenant_admin
+@require_permission('users.reset_password')
 def reset_password(user_id: int):
     """
     Reset portal user password.
@@ -353,7 +360,7 @@ def reset_password(user_id: int):
 
         # Verify current user is TENANT_ADMIN
         current_user_obj = PortalUserService.get_user(current_user_id)
-        if current_user_obj.role["name"] != "TENANT_ADMIN":
+        if not current_user_obj.is_tenant_admin:
             return error_response("Only TENANT_ADMIN can reset passwords", 403)
 
         data = PortalUserResetPasswordSchema.model_validate(request.get_json())
@@ -364,6 +371,52 @@ def reset_password(user_id: int):
 
     except ValueError as e:
         if "not found" in str(e).lower():
+            return error_response(str(e), 404)
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/users/<int:user_id>/roles", methods=["PUT"])
+@require_tenant_admin
+@require_permission('users.manage_roles')
+def assign_user_roles(user_id: int):
+    """
+    Assign roles to a portal user.
+    
+    Requires: Portal authentication (TENANT_ADMIN only)
+    
+    Path params:
+        - user_id: User ID
+        
+    Request body: UserRoleAssignmentSchema
+    
+    Returns:
+        200: Updated user with assigned roles
+        400: Validation error
+        403: Not authorized (not TENANT_ADMIN or trying to assign roles from other tenants)
+        404: User or role not found
+    """
+    try:
+        current_user = get_current_user()
+        changed_by = get_changed_by()
+        requester_tenant_id = current_user.get("tenant_id")
+
+        data = UserRoleAssignmentSchema.model_validate(request.get_json())
+
+        user = PortalUserService.assign_roles_to_user(
+            user_id=user_id,
+            role_ids=data.role_ids,
+            changed_by=changed_by,
+            requester_tenant_id=requester_tenant_id
+        )
+
+        return jsonify(user.model_dump()), 200
+
+    except ValueError as e:
+        if "Access denied" in str(e) or "TENANT_ADMIN" in str(e):
+            return error_response(str(e), 403)
+        elif "not found" in str(e).lower():
             return error_response(str(e), 404)
         return error_response(str(e), 400)
     except Exception as e:

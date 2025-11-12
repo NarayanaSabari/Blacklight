@@ -1,10 +1,9 @@
-"""Seed sample tenants for testing."""
-
 from datetime import datetime
 import bcrypt
 from app import db
 from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory, Role
 from app.models.tenant import TenantStatus, BillingCycle
+from app.services import PortalUserService # Import PortalUserService
 
 
 def generate_slug(name):
@@ -55,8 +54,8 @@ def seed_sample_tenants(count=3):
             "subscription_plan": free_plan,
             "billing_cycle": BillingCycle.MONTHLY,
             "admin": {
-                "email": "admin@techstart.io",
-                "password": "TechStart@12345",
+                "email": "demo@demo.com",
+                "password": "demodemo",
                 "first_name": "Jane",
                 "last_name": "Smith"
             }
@@ -130,10 +129,17 @@ def seed_sample_tenants(count=3):
             ).decode("utf-8"),
             first_name=tenant_data["admin"]["first_name"],
             last_name=tenant_data["admin"]["last_name"],
-            role_id=tenant_admin_role.id,
             is_active=True,
         )
         db.session.add(admin_user)
+        db.session.flush() # Get admin_user ID
+        
+        # Assign TENANT_ADMIN role to the user
+        PortalUserService.assign_roles_to_user(
+            user_id=admin_user.id,
+            role_ids=[tenant_admin_role.id],
+            changed_by="seed:sample_tenants"
+        )
         
         # Create subscription history entry
         history = TenantSubscriptionHistory(

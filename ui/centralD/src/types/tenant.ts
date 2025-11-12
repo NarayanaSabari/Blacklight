@@ -102,7 +102,7 @@ export interface TenantListResponse {
 
 export interface TenantStats {
   tenant_id: number;
-  users_count: number;
+  user_count: number;
   candidates_count: number;
   jobs_count: number;
   max_users: number;

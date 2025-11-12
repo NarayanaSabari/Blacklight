@@ -1,7 +1,3 @@
-"""Alembic environment configuration."""
-
-import os
-import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -9,34 +5,27 @@ from sqlalchemy import pool
 
 from alembic import context
 
-# Add the app directory to the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-# Import the config settings
-from config.settings import settings
+# Import your Flask app and db instance
 from app import create_app, db
-from app.models import (
-    AuditLog,
-    SubscriptionPlan,
-    Tenant,
-    PMAdminUser,
-    PortalUser,
-    TenantSubscriptionHistory
-)
 
-# This is the Alembic Config object, which provides the values of the [alembic] section
-# of the alembic.ini file as the `config` object to your migration scripts
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the SQLAlchemy database URL
-config.set_main_option("sqlalchemy.url", settings.database_url)
-
-# Set up the target metadata
+# add your model's MetaData object here
+# for 'autogenerate' support
+# from myapp import mymodel
 target_metadata = db.metadata
+
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
 
 
 def run_migrations_offline() -> None:
@@ -70,23 +59,23 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = settings.database_url
-    
-    connectable = engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Create the Flask app and push its context
+    app = create_app()
+    with app.app_context():
+        # Use the engine from the Flask-SQLAlchemy db instance
+        connectable = db.engine
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                # Pass the Flask-SQLAlchemy metadata
+                # This is important for autogenerate to work correctly
+                # and for the migration to see the models
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
 
 
 if context.is_offline_mode():

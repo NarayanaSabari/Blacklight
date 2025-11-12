@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import type { Tenant, TenantListResponse, TenantFilterParams } from '@/types';
+import type { TenantListResponse, TenantFilterParams } from '@/types';
 
 export function useTenants(filters?: TenantFilterParams) {
   return useQuery({
@@ -15,16 +15,5 @@ export function useTenants(filters?: TenantFilterParams) {
       });
       return response.data;
     },
-  });
-}
-
-export function useTenant(tenantId: number) {
-  return useQuery({
-    queryKey: ['tenant', tenantId],
-    queryFn: async () => {
-      const response = await apiClient.get<Tenant>(`/api/tenants/${tenantId}`);
-      return response.data;
-    },
-    enabled: !!tenantId,
   });
 }

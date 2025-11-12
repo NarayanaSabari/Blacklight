@@ -35,12 +35,12 @@ class PortalUser(BaseModel):
     last_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), nullable=True)
     
-    # Role & Permissions (Foreign Key to roles table)
-    role_id = db.Column(
-        db.Integer,
-        db.ForeignKey('roles.id', ondelete='RESTRICT'),
-        nullable=False,
-        index=True
+    # Role & Permissions (Many-to-many with roles)
+    roles = db.relationship(
+        'Role',
+        secondary='user_roles',
+        back_populates='portal_users',
+        lazy='select'
     )
     
     # Status & Access
@@ -55,10 +55,6 @@ class PortalUser(BaseModel):
     tenant = db.relationship(
         'Tenant',
         back_populates='portal_users'
-    )
-    role = db.relationship(
-        'Role',
-        back_populates='users'
     )
     
     # Indexes
@@ -82,21 +78,24 @@ class PortalUser(BaseModel):
     @property
     def is_tenant_admin(self):
         """Check if user is a tenant admin."""
-        return self.role and self.role.name == 'TENANT_ADMIN'
+        return any(role.name == 'TENANT_ADMIN' for role in self.roles)
     
     def has_permission(self, permission_name):
         """Check if user has a specific permission."""
-        if not self.role:
-            return False
-        return any(p.name == permission_name for p in self.role.permissions)
+        for role in self.roles:
+            if any(p.name == permission_name for p in role.permissions):
+                return True
+        return False
     
     def get_permissions(self):
-        """Get all permission names for this user."""
-        if not self.role:
-            return []
-        return [p.name for p in self.role.permissions]
+        """Get all unique permission names for this user."""
+        permissions = set()
+        for role in self.roles:
+            for p in role.permissions:
+                permissions.add(p.name)
+        return list(permissions)
     
-    def to_dict(self, include_tenant=False, include_permissions=False):
+    def to_dict(self, include_tenant=False, include_permissions=False, include_roles=False):
         """Convert model to dictionary."""
         data = super().to_dict()
         data.update({
@@ -106,14 +105,16 @@ class PortalUser(BaseModel):
             "last_name": self.last_name,
             "full_name": self.full_name,
             "phone": self.phone,
-            "role": self.role.to_dict() if self.role else None,
             "is_active": self.is_active,
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "is_locked": self.is_locked,
             "locked_until": self.locked_until.isoformat() if self.locked_until else None,
         })
         
-        if include_permissions and self.role:
+        if include_roles:
+            data["roles"] = [role.to_dict(include_permissions=False) for role in self.roles]
+        
+        if include_permissions:
             data["permissions"] = self.get_permissions()
         
         if include_tenant and self.tenant:
@@ -128,5 +129,5 @@ class PortalUser(BaseModel):
     
     def __repr__(self):
         """String representation."""
-        role_name = self.role.name if self.role else 'UNKNOWN'
-        return f"<PortalUser {self.email} - {role_name} (Tenant: {self.tenant_id})>"
+        role_names = ", ".join([role.name for role in self.roles]) if self.roles else 'NO_ROLES'
+        return f"<PortalUser {self.email} - Roles: {role_names} (Tenant: {self.tenant_id})>"

@@ -2,6 +2,18 @@
  * TypeScript types for Portal Users
  */
 
+export interface Role {
+  id: number;
+  name: string;
+  display_name: string;
+  description?: string;
+  is_system_role: boolean;
+  is_active: boolean;
+  tenant_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type PortalUserRole = 'TENANT_ADMIN' | 'RECRUITER' | 'HIRING_MANAGER';
 
 export interface PortalUser {
@@ -10,7 +22,7 @@ export interface PortalUser {
   email: string;
   first_name: string;
   last_name: string;
-  role: PortalUserRole;
+  roles: Role[]; // Changed from 'role: PortalUserRole;'
   is_active: boolean;
   last_login?: string;
   created_at: string;

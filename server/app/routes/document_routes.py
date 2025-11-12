@@ -17,7 +17,7 @@ from app.schemas.document_schema import (
     DocumentStatsResponse,
     ErrorResponse
 )
-from app.middleware.portal_auth import require_portal_auth
+from app.middleware.portal_auth import require_portal_auth, require_permission
 from app.middleware.tenant_context import with_tenant_context
 
 # Create Blueprint
@@ -27,6 +27,7 @@ document_bp = Blueprint('documents', __name__, url_prefix='/api/documents')
 @document_bp.route('/upload', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.edit')
 def upload_document():
     """
     Upload a document
@@ -123,6 +124,7 @@ def upload_document():
 @document_bp.route('', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def list_documents():
     """
     List documents with filtering and pagination
@@ -188,6 +190,7 @@ def list_documents():
 @document_bp.route('/<int:document_id>', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def get_document(document_id):
     """
     Get document metadata by ID
@@ -224,6 +227,7 @@ def get_document(document_id):
 @document_bp.route('/<int:document_id>/download', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def download_document(document_id):
     """
     Download document file
@@ -271,6 +275,7 @@ def download_document(document_id):
 @document_bp.route('/<int:document_id>/url', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.view')
 def get_document_url(document_id):
     """
     Get signed URL for document download (for GCS backend)
@@ -325,6 +330,7 @@ def get_document_url(document_id):
 @document_bp.route('/<int:document_id>', methods=['DELETE'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.delete')
 def delete_document(document_id):
     """
     Delete a document
@@ -366,6 +372,7 @@ def delete_document(document_id):
 @document_bp.route('/<int:document_id>/verify', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('candidates.edit')
 def verify_document(document_id):
     """
     Verify a document (HR only)
@@ -423,6 +430,7 @@ def verify_document(document_id):
 @document_bp.route('/stats', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
+@require_permission('reports.view')
 def get_document_stats():
     """
     Get document statistics for tenant

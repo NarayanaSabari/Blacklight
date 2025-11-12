@@ -11,8 +11,8 @@ from app import create_app, db
 def init_db(app: Flask) -> None:
     """Initialize the database."""
     with app.app_context():
-        db.create_all()
-        app.logger.info("Database initialized successfully")
+        # db.create_all() # Removed as migrations handle table creation
+        app.logger.info("Database initialized successfully (schema managed by migrations)")
 
 
 def drop_db(app: Flask, confirm: bool = False) -> None:
@@ -50,6 +50,14 @@ def seed_pm_admin_user(app: Flask, email: str = None, password: str = None) -> N
         seed_pm_admin(email=email, password=password)
 
 
+def seed_roles_and_permissions_command(app: Flask) -> None:
+    """Seed system roles and permissions."""
+    from app.seeds.roles_and_permissions import seed_roles_and_permissions
+    
+    with app.app_context():
+        seed_roles_and_permissions()
+
+
 def seed_tenants(app: Flask, count: int = 3) -> None:
     """Seed sample tenants."""
     from app.seeds.sample_tenants import seed_sample_tenants
@@ -59,7 +67,7 @@ def seed_tenants(app: Flask, count: int = 3) -> None:
 
 
 def seed_all(app: Flask) -> None:
-    """Seed all data: plans, PM admin, and sample tenants."""
+    """Seed all data: plans, PM admin, roles, permissions, and sample tenants."""
     print("=" * 60)
     print("SEEDING ALL DATA")
     print("=" * 60)
@@ -74,9 +82,14 @@ def seed_all(app: Flask) -> None:
         print("\n2. Seeding PM admin user...")
         from app.seeds.pm_admin import seed_pm_admin
         seed_pm_admin()
+
+        # 3. Seed roles and permissions
+        print("\n3. Seeding roles and permissions...")
+        from app.seeds.roles_and_permissions import seed_roles_and_permissions
+        seed_roles_and_permissions()
         
-        # 3. Seed sample tenants
-        print("\n3. Seeding sample tenants...")
+        # 4. Seed sample tenants
+        print("\n4. Seeding sample tenants...")
         from app.seeds.sample_tenants import seed_sample_tenants
         seed_sample_tenants(count=3)
         
@@ -177,6 +190,7 @@ if __name__ == "__main__":
             email=sys.argv[2] if len(sys.argv) > 2 else None,
             password=sys.argv[3] if len(sys.argv) > 3 else None
         ),
+        "seed-roles-and-permissions": lambda: seed_roles_and_permissions_command(app),
         "seed-tenants": lambda: seed_tenants(
             app, 
             count=int(sys.argv[2]) if len(sys.argv) > 2 else 3

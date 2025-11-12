@@ -7,7 +7,7 @@ from pydantic import ValidationError
 import os
 
 from app import db, limiter
-from app.middleware.portal_auth import require_portal_auth
+from app.middleware.portal_auth import require_portal_auth, require_permission
 from app.services.invitation_service import InvitationService
 from app.services.document_service import DocumentService
 from app.services.email_service import EmailService
@@ -46,6 +46,7 @@ def error_response(message: str, status: int = 400, details: dict = None):
 
 @bp.route("", methods=["POST"])
 @require_portal_auth
+@require_permission('candidates.create')
 def create_invitation():
     """
     Create a new candidate invitation.
@@ -99,6 +100,7 @@ def create_invitation():
 
 @bp.route("", methods=["GET"])
 @require_portal_auth
+@require_permission('candidates.view')
 def list_invitations():
     """
     List invitations with pagination and filtering.
@@ -154,6 +156,7 @@ def list_invitations():
 
 @bp.route("/stats", methods=["GET"])
 @require_portal_auth
+@require_permission('reports.view')
 def get_invitation_stats():
     """
     Get invitation statistics for the tenant.
@@ -176,6 +179,7 @@ def get_invitation_stats():
 
 @bp.route("/<int:invitation_id>", methods=["GET"])
 @require_portal_auth
+@require_permission('candidates.view')
 def get_invitation(invitation_id):
     """
     Get invitation details.
@@ -207,6 +211,7 @@ def get_invitation(invitation_id):
 
 @bp.route("/<int:invitation_id>/resend", methods=["POST"])
 @require_portal_auth
+@require_permission('candidates.edit')
 def resend_invitation(invitation_id):
     """
     Resend invitation with new token.
@@ -252,6 +257,7 @@ def resend_invitation(invitation_id):
 
 @bp.route("/<int:invitation_id>/review", methods=["POST"])
 @require_portal_auth
+@require_permission('candidates.edit')
 def review_invitation(invitation_id):
     """
     Approve or reject invitation submission.
@@ -327,6 +333,7 @@ def review_invitation(invitation_id):
 
 @bp.route("/<int:invitation_id>/cancel", methods=["POST"])
 @require_portal_auth
+@require_permission('candidates.edit')
 def cancel_invitation(invitation_id):
     """
     Cancel a pending invitation.
@@ -359,6 +366,7 @@ def cancel_invitation(invitation_id):
 
 @bp.route("/<int:invitation_id>/audit-logs", methods=["GET"])
 @require_portal_auth
+@require_permission('candidates.view')
 def get_audit_logs(invitation_id):
     """
     Get audit trail for invitation.
@@ -558,6 +566,7 @@ def upload_document_public():
 
 @bp.route("/<int:invitation_id>/documents", methods=["GET"])
 @require_portal_auth
+@require_permission('candidates.view')
 def list_invitation_documents(invitation_id):
     """
     List documents for invitation.
@@ -592,6 +601,7 @@ def list_invitation_documents(invitation_id):
 
 @bp.route("/documents/<int:document_id>/verify", methods=["POST"])
 @require_portal_auth
+@require_permission('candidates.edit')
 def verify_document(document_id):
     """
     Verify a document.
@@ -637,6 +647,7 @@ def verify_document(document_id):
 
 @bp.route("/documents/config", methods=["GET"])
 @require_portal_auth
+@require_permission('candidates.view')
 def get_document_config():
     """
     Get document types configuration for tenant.

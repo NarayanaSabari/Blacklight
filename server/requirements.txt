@@ -1,16 +1,26 @@
 # Core Framework
 alembic
 bcrypt
+blinker
+click
+Deprecated
+email-validator
 Flask[async]==3.0.0
 Flask-Cors
 Flask-Limiter
 Flask-Migrate
 Flask-SQLAlchemy
+greenlet
 gunicorn
 inngest
+itsdangerous
+Jinja2
 langchain-core
 langchain-google-genai
+limits
 Mako
+MarkupSafe
+packaging
 pdfplumber
 psycopg2-binary
 pydantic
@@ -23,4 +33,6 @@ python-json-logger
 redis
 spacy
 SQLAlchemy
+typing-extensions
 werkzeug
+wrapt

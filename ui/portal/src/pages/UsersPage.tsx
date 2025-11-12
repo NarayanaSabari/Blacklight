@@ -3,6 +3,7 @@
  * Manage team members and users
  */
 
+import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -177,46 +178,22 @@ export function UsersPage() {
         </CardContent>
       </Card>
 
-      {/* Role Management Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Roles & Permissions</CardTitle>
-          <CardDescription>System roles for your organization</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
-              <div>
-                <div className="font-medium">Tenant Admin</div>
-                <div className="text-sm text-slate-600">Full access to all features and settings</div>
-              </div>
-              <Badge>System Role</Badge>
+      {/* Link to Roles Management Page */}
+      {canManageUsers && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Roles & Permissions</CardTitle>
+              <CardDescription>Manage custom roles and assign permissions.</CardDescription>
             </div>
-            <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
-              <div>
-                <div className="font-medium">Recruiter</div>
-                <div className="text-sm text-slate-600">Manage candidates, jobs, and applications</div>
-              </div>
-              <Badge>System Role</Badge>
-            </div>
-            <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
-              <div>
-                <div className="font-medium">Hiring Manager</div>
-                <div className="text-sm text-slate-600">Review candidates and conduct interviews</div>
-              </div>
-              <Badge>System Role</Badge>
-            </div>
-          </div>
-          {canManageUsers && (
-            <div className="mt-4">
-              <Button variant="outline" className="w-full gap-2" disabled>
-                <Plus className="h-4 w-4" />
-                Create Custom Role (Coming Soon)
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <Button asChild>
+              <Link to="/users/roles">
+                <UserCog className="mr-2 h-4 w-4" /> Manage Roles
+              </Link>
+            </Button>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* Dialogs */}
       <InviteUserDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />

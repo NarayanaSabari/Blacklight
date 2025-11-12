@@ -9,7 +9,7 @@ import bcrypt
 from app import db, redis_client
 from app.models import PortalUser, Tenant
 from app.models.tenant import TenantStatus
-from app.schemas.portal_user_schema import PortalLoginResponseSchema
+from app.schemas.portal_user_schema import PortalLoginResponseSchema, PortalUserResponseSchema
 from config.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -26,27 +26,28 @@ class PortalAuthService:
     REDIS_BLACKLIST_KEY_PREFIX = "portal_blacklist:"
 
     @staticmethod
-    def _generate_access_token(user: PortalUser) -> str:
+    def _generate_access_token(user_data: dict) -> str:
         """
         Generate JWT access token for portal user.
 
         Args:
-            user: PortalUser instance
+            user_data: Dictionary with user data (from PortalUserResponseSchema)
 
         Returns:
             JWT access token string
         """
         payload = {
-            "user_id": user.id,
-            "email": user.email,
-            "tenant_id": user.tenant_id,
-            "role_id": user.role_id,
-            "role_name": user.role.name,
+            "user_id": user_data['id'],
+            "email": user_data['email'],
+            "tenant_id": user_data['tenant_id'],
+            "role_id": user_data['roles'][0]['id'] if user_data['roles'] and len(user_data['roles']) > 0 else None,
+            "role_name": user_data['roles'][0]['name'] if user_data['roles'] and len(user_data['roles']) > 0 else None,
             "type": "portal",
             "exp": datetime.utcnow() + PortalAuthService.ACCESS_TOKEN_EXPIRY,
             "iat": datetime.utcnow(),
         }
 
+        logger.debug(f"User data for token generation: {user_data}")
         return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
     @staticmethod
@@ -115,12 +116,15 @@ class PortalAuthService:
         from sqlalchemy import select
         from sqlalchemy.orm import joinedload
 
+        logger.debug(f"Attempting login for email: {email}")
+
         # Get user by email (globally unique) with relationships eagerly loaded
         user = db.session.scalar(
             select(PortalUser)
             .where(PortalUser.email == email)
-            .options(joinedload(PortalUser.role), joinedload(PortalUser.tenant))
+            .options(joinedload(PortalUser.roles), joinedload(PortalUser.tenant))
         )
+        logger.debug(f"User query result: {user}")
 
         if not user:
             raise ValueError("Invalid email or password")
@@ -128,11 +132,13 @@ class PortalAuthService:
         # Check if user is active
         if not user.is_active:
             raise ValueError("Account is inactive. Contact your administrator.")
+        logger.debug(f"User is active: {user.is_active}")
 
         # Check if tenant is active
         tenant = db.session.get(Tenant, user.tenant_id)
         if not tenant:
             raise ValueError("Tenant not found. Contact support.")
+        logger.debug(f"Tenant status: {tenant.status}")
 
         if tenant.status == TenantStatus.SUSPENDED:
             raise ValueError(
@@ -147,13 +153,20 @@ class PortalAuthService:
         # Verify password
         if not PortalAuthService._verify_password(user, password):
             raise ValueError("Invalid email or password")
+        logger.debug("Password verified successfully.")
 
         # Update last login
         user.last_login = datetime.utcnow()
         db.session.commit()
+        logger.debug(f"Last login updated for user: {user.id}")
 
         # Generate tokens
-        access_token = PortalAuthService._generate_access_token(user)
+        # Explicitly convert user object to dict using its to_dict method
+        user_data_dict = user.to_dict(include_roles=True, include_permissions=True)
+        logger.debug(f"User data dict from to_dict(): {user_data_dict}")
+        user_data = PortalUserResponseSchema.model_validate(user_data_dict).model_dump()
+        logger.debug(f"User data after model_validate: {user_data}")
+        access_token = PortalAuthService._generate_access_token(user_data)
         refresh_token = PortalAuthService._generate_refresh_token(user)
 
         logger.info(
@@ -161,14 +174,12 @@ class PortalAuthService:
             f"tenant_id={user.tenant_id}"
         )
 
-        from app.schemas.portal_user_schema import PortalUserResponseSchema
-
         return PortalLoginResponseSchema(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="Bearer",
             expires_in=int(PortalAuthService.ACCESS_TOKEN_EXPIRY.total_seconds()),
-            user=PortalUserResponseSchema.model_validate(user),
+            user=user_data,
         )
 
     @staticmethod
@@ -246,8 +257,6 @@ class PortalAuthService:
             access_token = PortalAuthService._generate_access_token(user)
 
             logger.info(f"Portal user token refreshed: {user_id}")
-
-            from app.schemas.portal_user_schema import PortalUserResponseSchema
 
             return PortalLoginResponseSchema(
                 access_token=access_token,

@@ -17,6 +17,7 @@ import { UsersPage } from '@/pages/UsersPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { InvitationsPage, InvitationDetailsPage, OnboardingPage } from '@/pages';
 import DocumentsPage from '@/pages/DocumentsPage';
+import { RolesPage } from '@/pages/RolesPage'; // Import RolesPage
 import { Loader2 } from 'lucide-react';
 import './App.css';
 
@@ -82,6 +83,7 @@ function App() {
                     <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                     <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/users" element={<UsersPage />} />
+                    <Route path="/users/roles" element={<RolesPage />} /> {/* New Roles Page Route */}
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

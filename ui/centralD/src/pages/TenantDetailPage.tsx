@@ -20,7 +20,7 @@ import { TenantUsersTable } from '@/components/tenants/TenantUsersTable';
 import { DeleteTenantDialog } from '@/components/dialogs/DeleteTenantDialog';
 import { SuspendTenantDialog } from '@/components/dialogs/SuspendTenantDialog';
 import { ChangePlanDialog } from '@/components/dialogs/ChangePlanDialog';
-import { useTenant } from '@/hooks/api/useTenants';
+import { useTenant } from '@/hooks/api/useTenant';
 import { useTenantStats } from '@/hooks/api/useTenantStats';
 import { usePlans } from '@/hooks/api/usePlans';
 import { usePortalUsers } from '@/hooks/api/usePortalUsers';

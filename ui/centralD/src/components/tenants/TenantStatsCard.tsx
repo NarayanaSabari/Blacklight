@@ -11,7 +11,7 @@ import type { Tenant } from '@/types';
 interface TenantStatsCardProps {
   tenant: Tenant;
   stats?: {
-    users_count: number;
+    user_count: number;
     candidates_count: number;
     jobs_count: number;
     storage_used_gb: number;
@@ -27,7 +27,7 @@ export function TenantStatsCard({ tenant, stats }: TenantStatsCardProps) {
 
   // Use provided stats or default to 0
   const currentStats = stats || {
-    users_count: 0,
+    user_count: 0,
     candidates_count: 0,
     jobs_count: 0,
     storage_used_gb: 0,
@@ -42,9 +42,9 @@ export function TenantStatsCard({ tenant, stats }: TenantStatsCardProps) {
     {
       label: 'Users',
       icon: Users,
-      current: currentStats.users_count,
+      current: currentStats.user_count,
       max: plan.max_users,
-      percentage: getUsagePercentage(currentStats.users_count, plan.max_users),
+      percentage: getUsagePercentage(currentStats.user_count, plan.max_users),
     },
     {
       label: 'Candidates',

@@ -102,7 +102,7 @@ export function DashboardPage() {
                 <div className="flex items-center gap-2 mt-1">
                   <Shield className="h-4 w-4 text-slate-500" />
                   <Badge variant="secondary" className="text-sm">
-                    {user.role.display_name}
+                    {user.roles && user.roles[0]?.display_name}
                   </Badge>
                 </div>
               </div>

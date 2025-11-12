@@ -122,9 +122,9 @@ export function Layout({ children }: LayoutProps) {
     return null;
   }
 
-  // Filter navigation based on user role
+  // Filter navigation based on user's roles
   const filteredNavigation = navigation.filter(item =>
-    item.roles.includes(user.role.name)
+    user.roles.some(role => item.roles.includes(role.name))
   );
 
   const getInitials = (name: string) => {
@@ -253,7 +253,7 @@ export function Layout({ children }: LayoutProps) {
                           {user.full_name}
                         </div>
                         <div className="text-xs text-slate-500">
-                          {user.role.display_name}
+                          {user.roles[0]?.display_name}
                         </div>
                       </div>
                       <ChevronDown className="h-4 w-4 hidden sm:block" />

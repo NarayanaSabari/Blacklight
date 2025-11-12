@@ -14,8 +14,9 @@ from app.schemas import (
     PermissionResponse,
     PermissionListResponse,
 )
-# TODO: Import auth decorators when authentication is implemented
-# from app.middleware.auth import require_pm_admin, require_tenant_admin, require_permission
+from app.middleware.pm_admin import require_pm_admin
+from app.middleware.portal_auth import require_portal_auth, require_tenant_admin, require_permission
+
 
 bp = Blueprint('roles', __name__, url_prefix='/api')
 
@@ -25,7 +26,8 @@ bp = Blueprint('roles', __name__, url_prefix='/api')
 # ============================================================================
 
 @bp.route('/permissions', methods=['GET'])
-# @require_pm_admin  # TODO: Enable when auth is ready
+@require_portal_auth
+@require_permission('roles.view')
 def get_permissions():
     """
     Get all permissions.
@@ -54,7 +56,8 @@ def get_permissions():
 
 
 @bp.route('/permissions/<int:permission_id>', methods=['GET'])
-# @require_pm_admin
+@require_portal_auth
+@require_permission('roles.view')
 def get_permission(permission_id):
     """
     Get permission by ID.
@@ -79,7 +82,8 @@ def get_permission(permission_id):
 
 
 @bp.route('/permissions/by-category', methods=['GET'])
-# @require_pm_admin
+@require_portal_auth
+@require_permission('roles.view')
 def get_permissions_by_category():
     """
     Get permissions grouped by category.
@@ -108,7 +112,7 @@ def get_permissions_by_category():
 # ============================================================================
 
 @bp.route('/roles/system', methods=['GET'])
-# @require_pm_admin
+@require_pm_admin
 def get_system_roles():
     """
     Get all system roles.
@@ -148,7 +152,7 @@ def get_system_roles():
 
 
 @bp.route('/roles/system/<int:role_id>/permissions', methods=['GET'])
-# @require_pm_admin
+@require_pm_admin
 def get_system_role_permissions(role_id):
     """
     Get permissions for a system role.
@@ -178,7 +182,7 @@ def get_system_role_permissions(role_id):
 
 
 @bp.route('/roles/system/<int:role_id>/permissions', methods=['PUT'])
-# @require_pm_admin
+@require_pm_admin
 def update_system_role_permissions(role_id):
     """
     Update permissions for a system role (PM Admin only).
@@ -201,12 +205,13 @@ def update_system_role_permissions(role_id):
         role = RoleService.assign_permissions(role_id, data.permission_ids)
         
         # Audit log
-        # TODO: Get current admin ID from auth context
+        pm_admin = getattr(request, 'pm_admin', {})
+        changed_by = f"pm_admin:{pm_admin.get('user_id', 'system')}"
         AuditLogService.log_action(
             action='UPDATE_PERMISSIONS',
             entity_type='Role',
             entity_id=role.id,
-            changed_by='pm_admin:system',  # TODO: Use actual admin ID
+            changed_by=changed_by,
             changes={'permission_ids': data.permission_ids}
         )
         
@@ -223,7 +228,8 @@ def update_system_role_permissions(role_id):
 # ============================================================================
 
 @bp.route('/tenants/<int:tenant_id>/roles', methods=['GET'])
-# @require_tenant_admin(tenant_id)  # TODO: Add auth decorator
+@require_tenant_admin
+@require_permission('roles.view')
 def get_tenant_roles(tenant_id):
     """
     Get all roles available to a tenant (system roles + tenant's custom roles).
@@ -266,7 +272,8 @@ def get_tenant_roles(tenant_id):
 
 
 @bp.route('/tenants/<int:tenant_id>/roles', methods=['POST'])
-# @require_tenant_admin(tenant_id)
+@require_tenant_admin
+@require_permission('roles.create')
 def create_tenant_role(tenant_id):
     """
     Create a custom role for a tenant (Tenant Admin only).
@@ -299,11 +306,13 @@ def create_tenant_role(tenant_id):
         )
         
         # Audit log
+        portal_user = getattr(request, 'portal_user', {})
+        changed_by = f"portal_user:{portal_user.get('user_id', 'unknown')}"
         AuditLogService.log_action(
             action='CREATE',
             entity_type='Role',
             entity_id=role.id,
-            changed_by=f'tenant_admin:{tenant_id}',  # TODO: Use actual admin ID
+            changed_by=changed_by,
             changes={'name': role.name, 'tenant_id': tenant_id}
         )
         
@@ -316,7 +325,8 @@ def create_tenant_role(tenant_id):
 
 
 @bp.route('/tenants/<int:tenant_id>/roles/<int:role_id>', methods=['GET'])
-# @require_tenant_admin(tenant_id)
+@require_tenant_admin
+@require_permission('roles.view')
 def get_tenant_role(tenant_id, role_id):
     """
     Get a specific role.
@@ -346,7 +356,8 @@ def get_tenant_role(tenant_id, role_id):
 
 
 @bp.route('/tenants/<int:tenant_id>/roles/<int:role_id>', methods=['PUT'])
-# @require_tenant_admin(tenant_id)
+@require_tenant_admin
+@require_permission('roles.edit')
 def update_tenant_role(tenant_id, role_id):
     """
     Update a custom role (Tenant Admin only).
@@ -388,11 +399,13 @@ def update_tenant_role(tenant_id, role_id):
         )
         
         # Audit log
+        portal_user = getattr(request, 'portal_user', {})
+        changed_by = f"portal_user:{portal_user.get('user_id', 'unknown')}"
         AuditLogService.log_action(
             action='UPDATE',
             entity_type='Role',
             entity_id=role_id,
-            changed_by=f'tenant_admin:{tenant_id}',
+            changed_by=changed_by,
             changes=data.model_dump(exclude_unset=True)
         )
         
@@ -405,7 +418,8 @@ def update_tenant_role(tenant_id, role_id):
 
 
 @bp.route('/tenants/<int:tenant_id>/roles/<int:role_id>', methods=['DELETE'])
-# @require_tenant_admin(tenant_id)
+@require_tenant_admin
+@require_permission('roles.delete')
 def delete_tenant_role(tenant_id, role_id):
     """
     Delete a custom role (Tenant Admin only).
@@ -437,11 +451,13 @@ def delete_tenant_role(tenant_id, role_id):
         RoleService.delete_role(role_id)
         
         # Audit log
+        portal_user = getattr(request, 'portal_user', {})
+        changed_by = f"portal_user:{portal_user.get('user_id', 'unknown')}"
         AuditLogService.log_action(
             action='DELETE',
             entity_type='Role',
             entity_id=role_id,
-            changed_by=f'tenant_admin:{tenant_id}',
+            changed_by=changed_by,
             changes={'name': role.name}
         )
         
@@ -455,7 +471,8 @@ def delete_tenant_role(tenant_id, role_id):
 
 
 @bp.route('/tenants/<int:tenant_id>/roles/<int:role_id>/permissions', methods=['PUT'])
-# @require_tenant_admin(tenant_id)
+@require_tenant_admin
+@require_permission('roles.edit')
 def update_tenant_role_permissions(tenant_id, role_id):
     """
     Update permissions for a custom role (Tenant Admin only).
@@ -487,11 +504,13 @@ def update_tenant_role_permissions(tenant_id, role_id):
         updated_role = RoleService.assign_permissions(role_id, data.permission_ids)
         
         # Audit log
+        portal_user = getattr(request, 'portal_user', {})
+        changed_by = f"portal_user:{portal_user.get('user_id', 'unknown')}"
         AuditLogService.log_action(
             action='UPDATE_PERMISSIONS',
             entity_type='Role',
             entity_id=role_id,
-            changed_by=f'tenant_admin:{tenant_id}',
+            changed_by=changed_by,
             changes={'permission_ids': data.permission_ids}
         )
         
@@ -508,7 +527,7 @@ def update_tenant_role_permissions(tenant_id, role_id):
 # ============================================================================
 
 @bp.route('/roles/stats', methods=['GET'])
-# @require_pm_admin
+@require_pm_admin
 def get_role_stats():
     """
     Get role statistics (PM Admin only).
@@ -525,7 +544,7 @@ def get_role_stats():
 
 
 @bp.route('/permissions/stats', methods=['GET'])
-# @require_pm_admin
+@require_pm_admin
 def get_permission_stats():
     """
     Get permission statistics (PM Admin only).
