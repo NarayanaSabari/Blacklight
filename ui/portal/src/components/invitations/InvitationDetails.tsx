@@ -104,8 +104,8 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
   const StatusIcon = config.icon;
   const isExpired = new Date(invitation.expires_at) < new Date();
   const canResend = ['sent', 'expired', 'cancelled'].includes(invitation.status);
-  const canCancel = ['sent', 'pending_review'].includes(invitation.status);
-  const canReview = invitation.status === 'pending_review';
+  const canCancel = ['sent', 'pending_review', 'submitted'].includes(invitation.status);
+  const canReview = invitation.status === 'pending_review' || invitation.status === 'submitted';
 
   const handleApprove = async () => {
     await approveMutation.mutateAsync({
@@ -172,8 +172,59 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
                     }
                   />
                   <InfoItem label="Email" value={invitation.email} />
+                  {invitation.invitation_data?.phone && (
+                    <InfoItem label="Phone" value={invitation.invitation_data.phone} />
+                  )}
+                  {invitation.invitation_data?.location && (
+                    <InfoItem label="Location" value={invitation.invitation_data.location} />
+                  )}
                 </div>
               </div>
+
+              {/* Submitted Data */}
+              {invitation.invitation_data && invitation.status === 'submitted' && (
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <FileText className="h-4 w-4" />
+                    Submitted Information
+                  </div>
+                  <Separator className="my-2" />
+                  <div className="space-y-3">
+                    {invitation.invitation_data.summary && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Professional Summary</Label>
+                        <p className="text-sm whitespace-pre-wrap">{invitation.invitation_data.summary}</p>
+                      </div>
+                    )}
+                    {invitation.invitation_data.skills && invitation.invitation_data.skills.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Skills</Label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {invitation.invitation_data.skills.slice(0, 10).map((skill: string, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {skill}
+                            </Badge>
+                          ))}
+                          {invitation.invitation_data.skills.length > 10 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{invitation.invitation_data.skills.length - 10} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {invitation.invitation_data.experience_years !== null && invitation.invitation_data.experience_years !== undefined && (
+                      <InfoItem 
+                        label="Years of Experience" 
+                        value={String(invitation.invitation_data.experience_years)} 
+                      />
+                    )}
+                    {invitation.invitation_data.position && (
+                      <InfoItem label="Position Applied" value={invitation.invitation_data.position} />
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Timeline */}
               <div>
@@ -207,6 +258,34 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
                 </div>
               </div>
             </div>
+
+            {/* Work Experience & Education */}
+            {invitation.invitation_data && invitation.status === 'submitted' && (
+              <div className="space-y-4">
+                {invitation.invitation_data.work_experience && (
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      Work Experience
+                    </div>
+                    <Separator className="my-2" />
+                    <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
+                      {invitation.invitation_data.work_experience}
+                    </p>
+                  </div>
+                )}
+                {invitation.invitation_data.education && (
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <FileText className="h-4 w-4" />
+                      Education
+                    </div>
+                    <Separator className="my-2" />
+                    <p className="text-sm whitespace-pre-wrap">{invitation.invitation_data.education}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actors & Notes */}
             <div className="space-y-4">
@@ -293,7 +372,10 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
             )}
             {canResend && (
               <Button
-                onClick={() => resendMutation.mutate(invitationId)}
+                onClick={() => {
+                  if (resendMutation.isPending) return; // Prevent double-click
+                  resendMutation.mutate(invitationId);
+                }}
                 disabled={resendMutation.isPending}
                 variant="outline"
               >

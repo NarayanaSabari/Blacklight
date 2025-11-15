@@ -16,15 +16,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Mail, User, Phone, Lock, Shield, CheckCircle2 } from 'lucide-react';
 import { createUser } from '@/lib/api/users';
 import { fetchRoles } from '@/lib/api/roles';
 
@@ -49,10 +45,10 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Fetch roles
+  // Fetch roles with permissions
   const { data: rolesData, isLoading: rolesLoading } = useQuery({
-    queryKey: ['roles'],
-    queryFn: fetchRoles,
+    queryKey: ['roles', 'with-permissions'],
+    queryFn: () => fetchRoles(true),
     enabled: open,
   });
 
@@ -144,20 +140,23 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invite Team Member</DialogTitle>
+          <DialogTitle className="text-2xl">Invite Team Member</DialogTitle>
           <DialogDescription>
-            Create a new user account for your organization
+            Create a new user account and assign role-based permissions
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {/* Email */}
           <div className="space-y-2">
-            <Label htmlFor="email">
-              Email <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="email">
+                Email <span className="text-destructive">*</span>
+              </Label>
+            </div>
             <Input
               id="email"
               type="email"
@@ -169,49 +168,52 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email}</p>
             )}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               User will log in with this email
             </p>
           </div>
 
           {/* First Name & Last Name */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="first_name">
-                First Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="first_name"
-                placeholder="John"
-                value={formData.first_name}
-                onChange={(e) => handleChange('first_name', e.target.value)}
-                className={errors.first_name ? 'border-destructive' : ''}
-              />
-              {errors.first_name && (
-                <p className="text-sm text-destructive">{errors.first_name}</p>
-              )}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <Label>Full Name <span className="text-destructive">*</span></Label>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Input
+                  id="first_name"
+                  placeholder="First name"
+                  value={formData.first_name}
+                  onChange={(e) => handleChange('first_name', e.target.value)}
+                  className={errors.first_name ? 'border-destructive' : ''}
+                />
+                {errors.first_name && (
+                  <p className="text-xs text-destructive">{errors.first_name}</p>
+                )}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="last_name">
-                Last Name <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="last_name"
-                placeholder="Doe"
-                value={formData.last_name}
-                onChange={(e) => handleChange('last_name', e.target.value)}
-                className={errors.last_name ? 'border-destructive' : ''}
-              />
-              {errors.last_name && (
-                <p className="text-sm text-destructive">{errors.last_name}</p>
-              )}
+              <div className="space-y-2">
+                <Input
+                  id="last_name"
+                  placeholder="Last name"
+                  value={formData.last_name}
+                  onChange={(e) => handleChange('last_name', e.target.value)}
+                  className={errors.last_name ? 'border-destructive' : ''}
+                />
+                {errors.last_name && (
+                  <p className="text-xs text-destructive">{errors.last_name}</p>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Phone */}
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone (Optional)</Label>
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="phone">Phone <span className="text-xs text-muted-foreground">(Optional)</span></Label>
+            </div>
             <Input
               id="phone"
               placeholder="+1 (555) 123-4567"
@@ -220,49 +222,87 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             />
           </div>
 
-          {/* Role */}
-          <div className="space-y-2">
-            <Label htmlFor="role_id">
-              Role <span className="text-destructive">*</span>
-            </Label>
-            <Select
+          {/* Role Selection */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <Label>
+                Select Role <span className="text-destructive">*</span>
+              </Label>
+            </div>
+            
+            <RadioGroup
               value={formData.role_id ? formData.role_id.toString() : ''}
               onValueChange={(value) => handleChange('role_id', parseInt(value))}
-              disabled={rolesLoading}
+              className="space-y-3"
             >
-              <SelectTrigger
-                className={errors.role_id ? 'border-destructive' : ''}
-              >
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableRoles.map((role) => (
-                  <SelectItem key={role.id} value={role.id.toString()}>
-                    <div>
-                      <div className="font-medium">{role.display_name}</div>
+              {rolesLoading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-20 w-full rounded-lg border bg-muted/20 animate-pulse" />
+                  ))}
+                </div>
+              ) : availableRoles.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No roles available
+                </div>
+              ) : (
+                availableRoles.map((role) => (
+                  <label
+                    key={role.id}
+                    htmlFor={`role-${role.id}`}
+                    className={`flex items-start gap-4 p-4 rounded-lg border-2 cursor-pointer transition-all hover:border-primary/50 hover:bg-accent/50 ${
+                      formData.role_id === role.id
+                        ? 'border-primary bg-accent shadow-sm'
+                        : 'border-border bg-background'
+                    }`}
+                  >
+                    <RadioGroupItem
+                      value={role.id.toString()}
+                      id={`role-${role.id}`}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold text-sm">{role.display_name}</h4>
+                        <Badge variant="outline" className="text-xs">
+                          {role.permissions?.length || 0} permissions
+                        </Badge>
+                      </div>
                       {role.description && (
-                        <div className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
                           {role.description}
+                        </p>
+                      )}
+                      {formData.role_id === role.id && (
+                        <div className="flex items-center gap-1.5 text-xs text-primary font-medium">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Selected
                         </div>
                       )}
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </label>
+                ))
+              )}
+            </RadioGroup>
+            
             {errors.role_id && (
-              <p className="text-sm text-destructive">{errors.role_id}</p>
+              <p className="text-sm text-destructive flex items-center gap-1.5">
+                {errors.role_id}
+              </p>
             )}
-            <p className="text-sm text-muted-foreground">
-              Assigns permissions for this user
-            </p>
           </div>
+
+          <Separator />
 
           {/* Password */}
           <div className="space-y-2">
-            <Label htmlFor="password">
-              Temporary Password <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <Label htmlFor="password">
+                Temporary Password <span className="text-destructive">*</span>
+              </Label>
+            </div>
             <Input
               id="password"
               type="password"
@@ -274,12 +314,12 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             {errors.password && (
               <p className="text-sm text-destructive">{errors.password}</p>
             )}
-            <p className="text-sm text-muted-foreground">
-              User will be asked to change on first login
+            <p className="text-xs text-muted-foreground">
+              User will be asked to change password on first login
             </p>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
@@ -291,9 +331,9 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Invite User
+            <Button type="submit" disabled={isSubmitting} className="gap-2">
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Inviting...' : 'Send Invitation'}
             </Button>
           </DialogFooter>
         </form>

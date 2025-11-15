@@ -14,6 +14,17 @@ export { UsersPage } from './UsersPage';
 export { SettingsPage } from './SettingsPage';
 export { default as DocumentsPage } from './DocumentsPage';
 
+// Team Management
+export { ManageTeamPage } from './ManageTeamPage';
+
+// Candidate Assignment & Onboarding
+export { YourCandidatesPage } from './YourCandidatesPage';
+export { YourCandidatesPageNew } from './YourCandidatesPageNew';
+export { OnboardCandidatesPage } from './OnboardCandidatesPage';
+
+// Unified Candidate Management
+export { CandidateManagementPage } from './CandidateManagementPage';
+
 // Invitation Management
 export { default as InvitationsPage } from './invitations/InvitationsPage';
 export { default as InvitationDetailsPage } from './invitations/InvitationDetailsPage';

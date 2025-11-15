@@ -45,30 +45,38 @@ class InvitationSubmitSchema(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    phone: str = Field(..., min_length=10, max_length=20)
+    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    location: Optional[str] = Field(None, max_length=200)
     
-    # Address
-    address_line1: str = Field(..., min_length=1, max_length=200)
+    # Address (optional for initial submission)
+    address_line1: Optional[str] = Field(None, max_length=200)
     address_line2: Optional[str] = Field(None, max_length=200)
-    city: str = Field(..., min_length=1, max_length=100)
-    state: str = Field(..., min_length=1, max_length=100)
-    zip_code: str = Field(..., min_length=5, max_length=10)
-    country: str = Field("United States", max_length=100)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=100)
+    zip_code: Optional[str] = Field(None, max_length=10)
+    country: Optional[str] = Field("United States", max_length=100)
     
     # Professional Information
+    position: Optional[str] = Field(None, max_length=200)
     current_job_title: Optional[str] = Field(None, max_length=200)
     current_employer: Optional[str] = Field(None, max_length=200)
+    experience_years: Optional[int] = Field(None, ge=0, le=70)
     years_of_experience: Optional[int] = Field(None, ge=0, le=70)
     skills: Optional[List[str]] = Field(None, description="List of skills")
+    education: Optional[str] = Field(None, description="Education details")
+    work_experience: Optional[str] = Field(None, description="Work experience details")
+    summary: Optional[str] = Field(None, description="Professional summary")
     
-    # Work Authorization
-    work_authorization_status: str = Field(..., description="US Citizen, Green Card, H1B, etc.")
-    requires_sponsorship: bool = Field(False)
+    # Work Authorization (optional for initial submission)
+    work_authorization_status: Optional[str] = Field(None, description="US Citizen, Green Card, H1B, etc.")
+    requires_sponsorship: Optional[bool] = Field(False)
     
     # Additional
     linkedin_url: Optional[str] = Field(None, max_length=500)
+    github_url: Optional[str] = Field(None, max_length=500)
     portfolio_url: Optional[str] = Field(None, max_length=500)
     additional_info: Optional[str] = Field(None, description="Any additional information")
+    parsed_resume_data: Optional[dict] = Field(None, description="AI-parsed resume data for reference")
     
     @field_validator('phone')
     @classmethod
@@ -113,10 +121,13 @@ class InvitationSubmitSchema(BaseModel):
 
 
 class InvitationReviewSchema(BaseModel):
-    """Schema for HR approving/rejecting invitation"""
+    """Schema for HR approving/rejecting invitation with optional data edits"""
     action: str = Field(..., pattern="^(approve|reject)$", description="approve or reject")
     notes: Optional[str] = Field(None, description="Internal review notes")
     rejection_reason: Optional[str] = Field(None, description="Reason for rejection (required if rejecting)")
+    
+    # Allow HR to edit candidate data during approval
+    edited_data: Optional[Dict[str, Any]] = Field(None, description="Edited candidate data (will merge with submitted data)")
     
     @field_validator('rejection_reason')
     @classmethod
@@ -129,7 +140,11 @@ class InvitationReviewSchema(BaseModel):
         json_schema_extra = {
             "example": {
                 "action": "approve",
-                "notes": "Strong candidate, approved for next steps"
+                "notes": "Strong candidate, approved for next steps",
+                "edited_data": {
+                    "phone": "+1-234-567-8900",
+                    "location": "San Francisco, CA"
+                }
             }
         }
 

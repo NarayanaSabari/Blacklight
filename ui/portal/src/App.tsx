@@ -15,9 +15,11 @@ import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { InterviewsPage } from '@/pages/InterviewsPage';
 import { UsersPage } from '@/pages/UsersPage';
 import { SettingsPage } from '@/pages/SettingsPage';
-import { InvitationsPage, InvitationDetailsPage, OnboardingPage } from '@/pages';
+import { InvitationDetailsPage, OnboardingPage } from '@/pages';
+import InvitationReviewPage from '@/pages/invitations/InvitationReviewPage';
 import DocumentsPage from '@/pages/DocumentsPage';
-import { RolesPage } from '@/pages/RolesPage'; // Import RolesPage
+import { RolesPage } from '@/pages/RolesPage';
+import { ManageTeamPage, YourCandidatesPageNew, CandidateManagementPage } from '@/pages';
 import { Loader2 } from 'lucide-react';
 import './App.css';
 
@@ -72,18 +74,26 @@ function App() {
                 <Layout>
                   <Routes>
                     <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/candidates" element={<CandidatesPage />} />
+                    {/* Unified Candidate Management (combines candidates, onboarding, invitations) */}
+                    <Route path="/candidate-management" element={<CandidateManagementPage />} />
+                    {/* Legacy routes - redirect to unified page with tab param */}
+                    <Route path="/candidates" element={<Navigate to="/candidate-management?tab=candidates" replace />} />
+                    <Route path="/onboard-candidates" element={<Navigate to="/candidate-management?tab=onboarding" replace />} />
+                    <Route path="/invitations" element={<Navigate to="/candidate-management?tab=invitations" replace />} />
+                    {/* Candidate detail routes */}
                     <Route path="/candidates/new" element={<AddCandidatePage />} />
                     <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
                     <Route path="/candidates/:id" element={<CandidateDetailPage />} />
+                    <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
+                    <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
                     <Route path="/jobs" element={<JobsPage />} />
                     <Route path="/applications" element={<ApplicationsPage />} />
                     <Route path="/interviews" element={<InterviewsPage />} />
-                    <Route path="/invitations" element={<InvitationsPage />} />
-                    <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                     <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/users" element={<UsersPage />} />
-                    <Route path="/users/roles" element={<RolesPage />} /> {/* New Roles Page Route */}
+                    <Route path="/users/roles" element={<RolesPage />} />
+                    <Route path="/manage-team" element={<ManageTeamPage />} />
+                    <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />

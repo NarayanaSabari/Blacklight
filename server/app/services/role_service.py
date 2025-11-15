@@ -29,7 +29,9 @@ class RoleService:
         Returns:
             List of roles
         """
-        query = db.session.query(Role)
+        from sqlalchemy.orm import joinedload
+        
+        query = db.session.query(Role).options(joinedload(Role.permissions))
         
         if system_only:
             query = query.filter(Role.is_system_role == True)

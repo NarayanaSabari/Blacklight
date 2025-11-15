@@ -1,7 +1,7 @@
 from datetime import datetime
 import bcrypt
 from app import db
-from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory, Role
+from app.models import Tenant, SubscriptionPlan, PortalUser, TenantSubscriptionHistory, Role, UserRole
 from app.models.tenant import TenantStatus, BillingCycle
 from app.services import PortalUserService # Import PortalUserService
 
@@ -135,11 +135,11 @@ def seed_sample_tenants(count=3):
         db.session.flush() # Get admin_user ID
         
         # Assign TENANT_ADMIN role to the user
-        PortalUserService.assign_roles_to_user(
+        user_role = UserRole(
             user_id=admin_user.id,
-            role_ids=[tenant_admin_role.id],
-            changed_by="seed:sample_tenants"
+            role_id=tenant_admin_role.id
         )
+        db.session.add(user_role)
         
         # Create subscription history entry
         history = TenantSubscriptionHistory(

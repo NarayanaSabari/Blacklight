@@ -148,8 +148,38 @@ class CandidateService:
         full_name = parsed_data.get('full_name') or 'Unknown'
         first_name = self._extract_first_name(full_name) or 'Unknown'
         last_name = self._extract_last_name(full_name) or 'Unknown'
+        email = parsed_data.get('email')
         
-        print(f"[DEBUG] Creating candidate: full_name={full_name}, first={first_name}, last={last_name}")
+        print(f"[DEBUG] Creating candidate: full_name={full_name}, first={first_name}, last={last_name}, email={email}")
+        
+        # Check for duplicate by email OR name combination
+        from sqlalchemy import select, and_
+        
+        if email:
+            # Primary check: email
+            stmt = select(Candidate).where(
+                Candidate.tenant_id == tenant_id,
+                Candidate.email == email
+            )
+            existing = db.session.scalar(stmt)
+            if existing:
+                print(f"[WARNING] Candidate with email {email} already exists (ID: {existing.id}). Updating instead of creating.")
+                return self._update_candidate(existing.id, parsed_data, file_info)
+        
+        # Secondary check: first_name + last_name combination (case-insensitive)
+        from sqlalchemy import func
+        stmt = select(Candidate).where(
+            and_(
+                Candidate.tenant_id == tenant_id,
+                func.lower(Candidate.first_name) == func.lower(first_name),
+                func.lower(Candidate.last_name) == func.lower(last_name)
+            )
+        )
+        existing = db.session.scalar(stmt)
+        if existing:
+            print(f"[WARNING] Candidate with name {first_name} {last_name} already exists (ID: {existing.id}). Updating instead of creating.")
+            return self._update_candidate(existing.id, parsed_data, file_info)
+        
         print(f"[DEBUG] Work experience count from parsed_data: {len(parsed_data.get('work_experience', []))}")
         print(f"[DEBUG] Education count from parsed_data: {len(parsed_data.get('education', []))}")
         print(f"[DEBUG] Skills count from parsed_data: {len(parsed_data.get('skills', []))}")
@@ -202,6 +232,7 @@ class CandidateService:
             # Default values
             status='new',
             source='resume_upload',
+            onboarding_status='PENDING_ASSIGNMENT',  # Ready for HR to assign
         )
         
         print(f"[DEBUG] Candidate object created with work_experience: {len(candidate.work_experience or [])} items")
@@ -422,20 +453,64 @@ class CandidateService:
         Returns:
             True if deleted, False if not found
         """
-        candidate = self.get_candidate(candidate_id, tenant_id)
+        # Use a direct query to avoid session cache issues
+        from sqlalchemy import select
+        from app.models.candidate_document import CandidateDocument
+        from app.models.candidate_assignment import CandidateAssignment
+        from app.models.assignment_notification import AssignmentNotification
+        
+        stmt = select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.tenant_id == tenant_id
+        )
+        candidate = db.session.scalar(stmt)
         
         if not candidate:
             return False
         
-        # Delete resume file
-        if candidate.resume_file_path:
-            try:
-                self.file_storage.delete_resume(candidate.resume_file_path)
-            except Exception as e:
-                print(f"Failed to delete resume file: {e}")
+        # Store resume file path before deletion
+        resume_file_path = candidate.resume_file_path
         
-        db.session.delete(candidate)
-        db.session.commit()
+        # Get all document file paths before deletion
+        doc_stmt = select(CandidateDocument).where(CandidateDocument.candidate_id == candidate_id)
+        documents = db.session.scalars(doc_stmt).all()
+        document_paths = [doc.file_path for doc in documents if doc.file_path]
+        
+        # Manually delete assignment notifications first to avoid FK constraint issues
+        assignment_stmt = select(CandidateAssignment).where(CandidateAssignment.candidate_id == candidate_id)
+        assignments = db.session.scalars(assignment_stmt).all()
+        for assignment in assignments:
+            # Delete notifications for this assignment
+            notification_stmt = select(AssignmentNotification).where(AssignmentNotification.assignment_id == assignment.id)
+            notifications = db.session.scalars(notification_stmt).all()
+            for notification in notifications:
+                db.session.delete(notification)
+        
+        # Delete candidate from database (this will cascade to related records)
+        try:
+            db.session.delete(candidate)
+            db.session.commit()
+            # Expire all cached objects to ensure fresh data on next query
+            db.session.expire_all()
+        except Exception as e:
+            db.session.rollback()
+            raise Exception(f"Failed to delete candidate from database: {str(e)}")
+        
+        # Delete resume file after successful database deletion
+        if resume_file_path:
+            try:
+                self.file_storage.delete_resume(resume_file_path)
+            except Exception as e:
+                # Log but don't fail - database deletion already succeeded
+                print(f"Warning: Failed to delete resume file {resume_file_path}: {e}")
+        
+        # Delete document files after successful database deletion
+        for doc_path in document_paths:
+            try:
+                self.file_storage.delete_document(doc_path)
+            except Exception as e:
+                # Log but don't fail - database deletion already succeeded
+                print(f"Warning: Failed to delete document file {doc_path}: {e}")
         
         return True
     
@@ -482,3 +557,269 @@ class CandidateService:
             'extracted_metadata': extracted,
             'status': 'success',
         }
+    
+    # Onboarding Workflow Methods
+    
+    def onboard_candidate(
+        self,
+        candidate_id: int,
+        onboarded_by_user_id: int,
+        tenant_id: int
+    ) -> Candidate:
+        """
+        Mark a candidate as onboarded.
+        
+        Args:
+            candidate_id: Candidate ID
+            onboarded_by_user_id: ID of user performing onboarding
+            tenant_id: Tenant ID (for access control)
+        
+        Returns:
+            Updated candidate
+        
+        Raises:
+            ValueError: If candidate not found or validation fails
+        """
+        candidate = self.get_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+        
+        # Check if candidate is assigned
+        if candidate.onboarding_status not in ['ASSIGNED', 'PENDING_ONBOARDING']:
+            raise ValueError(
+                f"Cannot onboard candidate with status '{candidate.onboarding_status}'. "
+                "Candidate must be in 'ASSIGNED' or 'PENDING_ONBOARDING' status."
+            )
+        
+        # Update onboarding fields
+        candidate.onboarding_status = 'ONBOARDED'
+        candidate.onboarded_by_user_id = onboarded_by_user_id
+        candidate.onboarded_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return candidate
+    
+    def approve_candidate(
+        self,
+        candidate_id: int,
+        approved_by_user_id: int,
+        tenant_id: int
+    ) -> Candidate:
+        """
+        Approve a candidate (HR approval after onboarding).
+        
+        Args:
+            candidate_id: Candidate ID
+            approved_by_user_id: ID of user approving (must be HIRING_MANAGER)
+            tenant_id: Tenant ID (for access control)
+        
+        Returns:
+            Updated candidate
+        
+        Raises:
+            ValueError: If candidate not found or validation fails
+        """
+        candidate = self.get_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+        
+        # Check if candidate is onboarded
+        if candidate.onboarding_status != 'ONBOARDED':
+            raise ValueError(
+                f"Cannot approve candidate with status '{candidate.onboarding_status}'. "
+                "Candidate must be in 'ONBOARDED' status."
+            )
+        
+        # Check if already approved or rejected
+        if candidate.approved_at:
+            raise ValueError("Candidate has already been approved")
+        
+        if candidate.rejected_at:
+            raise ValueError("Candidate has already been rejected. Cannot approve after rejection.")
+        
+        # Update approval fields
+        candidate.onboarding_status = 'APPROVED'
+        candidate.approved_by_user_id = approved_by_user_id
+        candidate.approved_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return candidate
+    
+    def reject_candidate(
+        self,
+        candidate_id: int,
+        rejected_by_user_id: int,
+        rejection_reason: str,
+        tenant_id: int
+    ) -> Candidate:
+        """
+        Reject a candidate (HR rejection after onboarding).
+        
+        Args:
+            candidate_id: Candidate ID
+            rejected_by_user_id: ID of user rejecting (must be HIRING_MANAGER)
+            rejection_reason: Reason for rejection
+            tenant_id: Tenant ID (for access control)
+        
+        Returns:
+            Updated candidate
+        
+        Raises:
+            ValueError: If candidate not found or validation fails
+        """
+        candidate = self.get_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+        
+        # Check if candidate is onboarded
+        if candidate.onboarding_status != 'ONBOARDED':
+            raise ValueError(
+                f"Cannot reject candidate with status '{candidate.onboarding_status}'. "
+                "Candidate must be in 'ONBOARDED' status."
+            )
+        
+        # Check if already approved or rejected
+        if candidate.approved_at:
+            raise ValueError("Candidate has already been approved. Cannot reject after approval.")
+        
+        if candidate.rejected_at:
+            raise ValueError("Candidate has already been rejected")
+        
+        # Validate rejection reason
+        if not rejection_reason or not rejection_reason.strip():
+            raise ValueError("Rejection reason is required")
+        
+        # Update rejection fields
+        candidate.onboarding_status = 'REJECTED'
+        candidate.rejected_by_user_id = rejected_by_user_id
+        candidate.rejected_at = datetime.utcnow()
+        candidate.rejection_reason = rejection_reason.strip()
+        
+        db.session.commit()
+        
+        return candidate
+    
+    def get_candidates_for_onboarding(
+        self,
+        tenant_id: int,
+        status_filter: Optional[str] = None,
+        assigned_to_user_id: Optional[int] = None,
+        page: int = 1,
+        per_page: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Get candidates ready for onboarding with filtering.
+        
+        Args:
+            tenant_id: Tenant ID
+            status_filter: Optional filter by onboarding_status 
+                          (PENDING_ASSIGNMENT, ASSIGNED, PENDING_ONBOARDING, ONBOARDED, APPROVED, REJECTED)
+            assigned_to_user_id: Optional filter by assigned user (manager or recruiter)
+            page: Page number (1-indexed)
+            per_page: Items per page
+        
+        Returns:
+            {
+                'candidates': [...],
+                'total': int,
+                'page': int,
+                'per_page': int,
+                'pages': int
+            }
+        """
+        query = db.session.query(Candidate).filter(Candidate.tenant_id == tenant_id)
+        
+        # Filter by onboarding status (supports comma-separated values)
+        if status_filter:
+            # Support multiple statuses separated by comma
+            if ',' in status_filter:
+                statuses = [s.strip() for s in status_filter.split(',')]
+                query = query.filter(Candidate.onboarding_status.in_(statuses))
+            else:
+                query = query.filter(Candidate.onboarding_status == status_filter)
+        else:
+            # By default, show candidates in the onboarding workflow
+            query = query.filter(
+                Candidate.onboarding_status.in_([
+                    'PENDING_ASSIGNMENT',
+                    'ASSIGNED',
+                    'PENDING_ONBOARDING',
+                    'ONBOARDED',
+                    'APPROVED',
+                    'REJECTED'
+                ])
+            )
+        
+        # Filter by assigned user
+        if assigned_to_user_id:
+            query = query.filter(
+                (Candidate.manager_id == assigned_to_user_id) |
+                (Candidate.recruiter_id == assigned_to_user_id)
+            )
+        
+        # Order by created date (newest first)
+        query = query.order_by(Candidate.created_at.desc())
+        
+        # Paginate
+        offset = (page - 1) * per_page
+        total = query.count()
+        candidates = query.limit(per_page).offset(offset).all()
+        
+        return {
+            'candidates': [c.to_dict(include_assignments=False, include_onboarding_users=True) for c in candidates],
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page
+        }
+    
+    def update_onboarding_status(
+        self,
+        candidate_id: int,
+        new_status: str,
+        tenant_id: int
+    ) -> Candidate:
+        """
+        Update candidate onboarding status directly.
+        
+        Args:
+            candidate_id: Candidate ID
+            new_status: New onboarding status
+            tenant_id: Tenant ID (for access control)
+        
+        Returns:
+            Updated candidate
+        
+        Raises:
+            ValueError: If candidate not found or invalid status
+        """
+        candidate = self.get_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+        
+        # Validate status
+        valid_statuses = [
+            'PENDING_ASSIGNMENT',
+            'ASSIGNED',
+            'PENDING_ONBOARDING',
+            'ONBOARDED',
+            'APPROVED',
+            'REJECTED'
+        ]
+        
+        if new_status not in valid_statuses:
+            raise ValueError(
+                f"Invalid onboarding status '{new_status}'. "
+                f"Must be one of: {', '.join(valid_statuses)}"
+            )
+        
+        candidate.onboarding_status = new_status
+        db.session.commit()
+        
+        return candidate

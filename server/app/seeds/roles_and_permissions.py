@@ -31,8 +31,8 @@ def seed_roles_and_permissions():
         },
         {
             "name": "HIRING_MANAGER",
-            "display_name": "Hiring Manager",
-            "description": "View candidates and jobs, participate in interviews. Limited editing capabilities, cannot delete records.",
+            "display_name": "Hiring Manager / HR",
+            "description": "Manages candidate onboarding, approvals, and team structure. Can assign candidates to managers, assign recruiters to managers, and participate in hiring decisions.",
             "is_system_role": True,
             "is_active": True,
             "tenant_id": None
@@ -56,6 +56,13 @@ def seed_roles_and_permissions():
         {"name": "candidates.delete", "display_name": "Delete Candidates", "category": "candidates", "description": "Remove candidates from the system"},
         {"name": "candidates.upload_resume", "display_name": "Upload Resume", "category": "candidates", "description": "Upload and manage candidate resumes"},
         {"name": "candidates.export", "display_name": "Export Candidates", "category": "candidates", "description": "Export candidate data"},
+        {"name": "candidates.assign", "display_name": "Assign Candidates", "category": "candidates", "description": "Assign candidates to managers or recruiters"},
+        {"name": "candidates.view_all", "display_name": "View All Candidates", "category": "candidates", "description": "View all candidates in the tenant"},
+        {"name": "candidates.view_assigned", "display_name": "View Assigned Candidates", "category": "candidates", "description": "View candidates assigned to you"},
+        {"name": "candidates.unassign", "display_name": "Unassign Candidates", "category": "candidates", "description": "Remove candidate assignments"},
+        {"name": "candidates.view_history", "display_name": "View Assignment History", "category": "candidates", "description": "View candidate assignment history"},
+        {"name": "candidates.reassign", "display_name": "Reassign Candidates", "category": "candidates", "description": "Reassign candidates to different users"},
+        {"name": "candidates.approve", "display_name": "Approve Candidates", "category": "candidates", "description": "Approve manually onboarded candidates"},
         
         # Jobs
         {"name": "jobs.view", "display_name": "View Jobs", "category": "jobs", "description": "View job postings and applications"},
@@ -86,6 +93,8 @@ def seed_roles_and_permissions():
         {"name": "users.delete", "display_name": "Delete Users", "category": "users", "description": "Remove users from the system"},
         {"name": "users.manage_roles", "display_name": "Manage User Roles", "category": "users", "description": "Assign and change user roles"},
         {"name": "users.reset_password", "display_name": "Reset User Password", "category": "users", "description": "Reset user passwords"},
+        {"name": "users.view_team", "display_name": "View Team Members", "category": "users", "description": "View team members (recruiters under manager)"},
+        {"name": "users.assign_manager", "display_name": "Assign Manager", "category": "users", "description": "Assign manager to users during creation"},
         
         # Roles (Custom Role Management)
         {"name": "roles.view", "display_name": "View Roles", "category": "roles", "description": "View available roles"},
@@ -146,25 +155,40 @@ def seed_roles_and_permissions():
             else:
                 print(f"    ⏭️  TENANT_ADMIN already has {perm_name}")
 
-    # RECRUITER (all except user/role/settings management)
+    # RECRUITER (work with assigned candidates only)
     recruiter_role = created_roles.get("RECRUITER")
     if recruiter_role:
-        recruiter_perms = [
-            p for p_name, p in created_permissions.items()
-            if p.category in ('candidates', 'jobs', 'interviews', 'clients', 'reports')
+        recruiter_perms_names = [
+            # Assigned candidate permissions only
+            'candidates.view_assigned', 'candidates.edit', 'candidates.upload_resume',
+            # Full job and interview access
+            'jobs.view', 'jobs.create', 'jobs.edit', 'jobs.delete', 'jobs.publish', 'jobs.manage_applications',
+            'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.delete', 'interviews.feedback',
+            # Client communication
+            'clients.view', 'clients.create', 'clients.edit', 'clients.delete', 'clients.communicate',
+            # Reporting
+            'reports.view', 'reports.export'
         ]
-        for perm_obj in recruiter_perms:
-            if perm_obj not in recruiter_role.permissions:
+        for perm_name in recruiter_perms_names:
+            perm_obj = created_permissions.get(perm_name)
+            if perm_obj and perm_obj not in recruiter_role.permissions:
                 recruiter_role.permissions.append(perm_obj)
-                print(f"    ✅ Assigned {perm_obj.name} to RECRUITER")
+                print(f"    ✅ Assigned {perm_name} to RECRUITER")
             else:
-                print(f"    ⏭️  RECRUITER already has {perm_obj.name}")
+                print(f"    ⏭️  RECRUITER already has {perm_name}")
 
-    # HIRING_MANAGER (view only + interview feedback)
+    # HIRING_MANAGER (HR role - candidate onboarding and team management)
     hiring_manager_role = created_roles.get("HIRING_MANAGER")
     if hiring_manager_role:
         hiring_manager_perms_names = [
-            'candidates.view', 'jobs.view', 'interviews.view', 'interviews.feedback',
+            # Candidate management
+            'candidates.view', 'candidates.create', 'candidates.edit', 'candidates.delete',
+            'candidates.view_all', 'candidates.view_assigned', 'candidates.assign', 'candidates.reassign', 'candidates.approve',
+            'candidates.view_history', 'candidates.upload_resume',
+            # User/team management
+            'users.view', 'users.create', 'users.assign_manager', 'users.view_team',
+            # Other permissions
+            'jobs.view', 'interviews.view', 'interviews.feedback',
             'clients.view', 'reports.view'
         ]
         for perm_name in hiring_manager_perms_names:
@@ -175,13 +199,19 @@ def seed_roles_and_permissions():
             else:
                 print(f"    ⏭️  HIRING_MANAGER already has {perm_name}")
 
-    # MANAGER
+    # MANAGER (team manager - assigns candidates to recruiters)
     manager_role = created_roles.get("MANAGER")
     if manager_role:
         manager_perms_names = [
-            'candidates.view', 'jobs.view', 'jobs.edit', 'jobs.manage_applications',
+            # Candidate assignment permissions
+            'candidates.view', 'candidates.view_all', 'candidates.view_assigned',
+            'candidates.assign', 'candidates.reassign', 'candidates.view_history',
+            # Job and interview management
+            'jobs.view', 'jobs.edit', 'jobs.manage_applications',
             'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.feedback',
-            'clients.view', 'users.view', 'users.edit', 'users.reset_password',
+            # User and team management
+            'clients.view', 'users.view', 'users.edit', 'users.reset_password', 'users.view_team',
+            # Reporting
             'reports.view', 'reports.export'
         ]
         for perm_name in manager_perms_names:

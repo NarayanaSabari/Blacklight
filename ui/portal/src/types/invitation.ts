@@ -103,6 +103,8 @@ export interface InvitationCreateRequest {
   email: string;
   first_name?: string;
   last_name?: string;
+  position?: string;
+  recruiter_notes?: string;
   expiry_hours?: number; // Hours until expiry (backend expects this)
   invitation_data?: Record<string, unknown>;
 }
@@ -148,8 +150,10 @@ export interface InvitationStatsResponse {
 }
 
 export interface InvitationReviewRequest {
+  action: 'approve' | 'reject';
   notes?: string;
   rejection_reason?: string;
+  edited_data?: Record<string, any>;  // HR can edit candidate data during approval
 }
 
 // Candidate Onboarding Submission
@@ -164,10 +168,12 @@ export interface OnboardingSubmissionRequest {
   experience_years?: number;
   skills?: string[];
   education?: string;
+  work_experience?: string;
   summary?: string;
   linkedin_url?: string;
   github_url?: string;
   portfolio_url?: string;
+  parsed_resume_data?: Record<string, unknown>;
   additional_data?: Record<string, unknown>;
 }
 

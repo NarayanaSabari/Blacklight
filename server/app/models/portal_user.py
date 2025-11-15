@@ -35,6 +35,14 @@ class PortalUser(BaseModel):
     last_name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20), nullable=True)
     
+    # Team Hierarchy (Self-referencing relationship)
+    manager_id = db.Column(
+        db.Integer,
+        db.ForeignKey('portal_users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )
+    
     # Role & Permissions (Many-to-many with roles)
     roles = db.relationship(
         'Role',
@@ -55,6 +63,14 @@ class PortalUser(BaseModel):
     tenant = db.relationship(
         'Tenant',
         back_populates='portal_users'
+    )
+    
+    # Team hierarchy relationships (self-referencing)
+    manager = db.relationship(
+        'PortalUser',
+        remote_side='PortalUser.id',
+        foreign_keys=[manager_id],
+        backref='team_members'
     )
     
     # Indexes
@@ -95,7 +111,7 @@ class PortalUser(BaseModel):
                 permissions.add(p.name)
         return list(permissions)
     
-    def to_dict(self, include_tenant=False, include_permissions=False, include_roles=False):
+    def to_dict(self, include_tenant=False, include_permissions=False, include_roles=False, include_manager=False, include_team=False):
         """Convert model to dictionary."""
         data = super().to_dict()
         data.update({
@@ -109,12 +125,15 @@ class PortalUser(BaseModel):
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "is_locked": self.is_locked,
             "locked_until": self.locked_until.isoformat() if self.locked_until else None,
+            "manager_id": self.manager_id,
         })
         
         if include_roles:
-            data["roles"] = [role.to_dict(include_permissions=False) for role in self.roles]
+            # Pass include_permissions flag to roles, so each role includes its permissions
+            data["roles"] = [role.to_dict(include_permissions=include_permissions) for role in self.roles]
         
-        if include_permissions:
+        if include_permissions and not include_roles:
+            # If only permissions requested (without roles), return flattened list
             data["permissions"] = self.get_permissions()
         
         if include_tenant and self.tenant:
@@ -124,6 +143,27 @@ class PortalUser(BaseModel):
                 "slug": self.tenant.slug,
                 "status": self.tenant.status.value if self.tenant.status else None,
             }
+        
+        if include_manager and self.manager:
+            data["manager"] = {
+                "id": self.manager.id,
+                "email": self.manager.email,
+                "first_name": self.manager.first_name,
+                "last_name": self.manager.last_name,
+                "full_name": self.manager.full_name,
+            }
+        
+        if include_team:
+            data["team_members"] = [
+                {
+                    "id": member.id,
+                    "email": member.email,
+                    "first_name": member.first_name,
+                    "last_name": member.last_name,
+                    "full_name": member.full_name,
+                }
+                for member in self.team_members
+            ]
         
         return data
     

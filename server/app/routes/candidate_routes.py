@@ -272,10 +272,13 @@ def upload_and_create():
     
     Returns: UploadResumeResponseSchema with parsed data
     """
+    import uuid
+    request_id = str(uuid.uuid4())[:8]
+    
     try:
         tenant_id = g.tenant_id
         
-        logger.info(f"[UPLOAD] Starting resume upload for tenant {tenant_id}")
+        logger.info(f"[UPLOAD-{request_id}] Starting resume upload for tenant {tenant_id}")
         
         # Validate file
         if 'file' not in request.files:
@@ -286,7 +289,7 @@ def upload_and_create():
         if file.filename == '':
             return error_response("No file selected", 400)
         
-        logger.info(f"[UPLOAD] File received: {file.filename}")
+        logger.info(f"[UPLOAD-{request_id}] File received: {file.filename}")
         
         # Upload and parse synchronously
         result = candidate_service.upload_and_parse_resume(
@@ -297,13 +300,13 @@ def upload_and_create():
         )
         
         if result['status'] == 'error':
-            logger.error(f"[UPLOAD] Upload/parse failed: {result.get('error')}")
+            logger.error(f"[UPLOAD-{request_id}] Upload/parse failed: {result.get('error')}")
             return error_response(
                 result.get('error', 'Failed to upload and parse resume'),
                 500
             )
         
-        logger.info(f"[UPLOAD] Successfully uploaded and parsed resume for candidate {result['candidate_id']}")
+        logger.info(f"[UPLOAD-{request_id}] Successfully uploaded and parsed resume for candidate {result['candidate_id']}")
         
         # Return response with parsed data
         response = UploadResumeResponseSchema(
@@ -318,7 +321,7 @@ def upload_and_create():
         return jsonify(response.model_dump()), 200
     
     except Exception as e:
-        logger.error(f"Error uploading resume: {e}", exc_info=True)
+        logger.error(f"[UPLOAD-{request_id}] Error uploading resume: {e}", exc_info=True)
         return error_response(f"Failed to upload resume: {str(e)}", 500)
 
 

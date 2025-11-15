@@ -34,12 +34,16 @@ import {
   Loader2,
   AlertCircle,
   Pencil,
+  UserPlus,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { candidateApi } from '@/lib/candidateApi';
 import { documentApi } from '@/lib/documentApi';
+import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +84,7 @@ export function CandidateDetailPage() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
 
   // Fetch candidate data
   const { data: candidate, isLoading, error } = useQuery({
@@ -94,6 +99,17 @@ export function CandidateDetailPage() {
     queryFn: () => documentApi.listDocuments({ candidate_id: Number(id) }),
     enabled: !!id,
   });
+
+  // Fetch candidate assignments
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['candidate-assignments', id],
+    queryFn: () => candidateAssignmentApi.getCandidateAssignments(Number(id), false),
+    enabled: !!id,
+    staleTime: 0,
+  });
+
+  // Get current assignment (PENDING status since there's no acceptance workflow)
+  const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'PENDING');
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -253,6 +269,14 @@ export function CandidateDetailPage() {
           >
             <Pencil className="h-4 w-4 mr-2" />
             Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAssignmentDialog(true)}
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            {currentAssignment ? 'Reassign' : 'Assign'}
           </Button>
           {candidate.resume_file_url && (
             <>
@@ -645,6 +669,49 @@ export function CandidateDetailPage() {
               </Card>
             )}
 
+            {/* Current Assignment */}
+            {currentAssignment && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Current Assignment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Assigned To</span>
+                    <span className="font-medium">{currentAssignment.assigned_to?.full_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Role</span>
+                    <span>{currentAssignment.assigned_to?.roles?.[0]?.name || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Email</span>
+                    <span className="text-xs">{currentAssignment.assigned_to?.email}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Assigned By</span>
+                    <span>{currentAssignment.assigned_by?.full_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Date</span>
+                    <span>{new Date(currentAssignment.assigned_at).toLocaleDateString()}</span>
+                  </div>
+                  {currentAssignment.reason && (
+                    <div className="mt-3 pt-3 border-t">
+                      <span className="text-muted-foreground block mb-1">Reason:</span>
+                      <p className="text-sm">{currentAssignment.reason}</p>
+                    </div>
+                  )}
+                  <Badge variant={currentAssignment.status === 'PENDING' ? 'default' : 'secondary'} className="mt-2">
+                    {currentAssignment.status}
+                  </Badge>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Metadata */}
             <Card>
               <CardHeader>
@@ -720,6 +787,19 @@ export function CandidateDetailPage() {
           setSelectedDocument(null);
         }}
         onVerified={handleDocumentVerified}
+      />
+
+      {/* Candidate Assignment Dialog */}
+      <CandidateAssignmentDialog
+        candidateId={Number(id)}
+        candidateName={candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
+        open={showAssignmentDialog}
+        onOpenChange={setShowAssignmentDialog}
+        isReassignment={!!currentAssignment}
+        onSuccess={() => {
+          toast.success(currentAssignment ? 'Candidate reassigned successfully!' : 'Candidate assigned successfully!');
+          queryClient.invalidateQueries({ queryKey: ['candidate-assignments', id] });
+        }}
       />
     </div>
   );

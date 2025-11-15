@@ -41,6 +41,24 @@ class Candidate(BaseModel):
     )  # NEW, SCREENING, INTERVIEWING, OFFERED, HIRED, REJECTED, WITHDRAWN
     source = db.Column(String(100))  # LinkedIn, Referral, Job Board, etc.
     
+    # Onboarding Workflow Fields
+    onboarding_status = db.Column(
+        String(50),
+        nullable=True,
+        default=None
+    )  # PENDING_ASSIGNMENT, ASSIGNED, PENDING_ONBOARDING, ONBOARDED, APPROVED, REJECTED
+    onboarded_by_user_id = db.Column(Integer, db.ForeignKey('portal_users.id'), nullable=True)
+    onboarded_at = db.Column(DateTime, nullable=True)
+    approved_by_user_id = db.Column(Integer, db.ForeignKey('portal_users.id'), nullable=True)
+    approved_at = db.Column(DateTime, nullable=True)
+    rejected_by_user_id = db.Column(Integer, db.ForeignKey('portal_users.id'), nullable=True)
+    rejected_at = db.Column(DateTime, nullable=True)
+    rejection_reason = db.Column(Text, nullable=True)
+    
+    # Denormalized fields for quick access (updated via assignment service)
+    manager_id = db.Column(Integer, db.ForeignKey('portal_users.id'), nullable=True)
+    recruiter_id = db.Column(Integer, db.ForeignKey('portal_users.id'), nullable=True)
+    
     # Resume File Storage
     resume_file_path = db.Column(String(500))
     resume_file_url = db.Column(String(500))
@@ -98,12 +116,26 @@ class Candidate(BaseModel):
     # Relationships
     tenant = db.relationship('Tenant', backref='candidates')
     
+    # Onboarding relationships
+    assignments = db.relationship('CandidateAssignment', backref='candidate', lazy='dynamic', cascade='all, delete-orphan')
+    onboarded_by = db.relationship('PortalUser', foreign_keys=[onboarded_by_user_id], backref='candidates_onboarded')
+    approved_by = db.relationship('PortalUser', foreign_keys=[approved_by_user_id], backref='candidates_approved')
+    rejected_by = db.relationship('PortalUser', foreign_keys=[rejected_by_user_id], backref='candidates_rejected')
+    manager = db.relationship('PortalUser', foreign_keys=[manager_id], backref='managed_candidates')
+    recruiter = db.relationship('PortalUser', foreign_keys=[recruiter_id], backref='recruited_candidates')
+    
     def __repr__(self):
         return f'<Candidate {self.first_name} {self.last_name}>'
     
-    def to_dict(self):
-        """Convert candidate to dictionary"""
-        return {
+    def to_dict(self, include_assignments=False, include_onboarding_users=False):
+        """
+        Convert candidate to dictionary
+        
+        Args:
+            include_assignments: Include assignment history
+            include_onboarding_users: Include onboarded_by, approved_by, rejected_by user details
+        """
+        result = {
             'id': self.id,
             'tenant_id': self.tenant_id,
             'first_name': self.first_name,
@@ -133,5 +165,70 @@ class Candidate(BaseModel):
             'work_experience': self.work_experience,
             'parsed_resume_data': self.parsed_resume_data,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # Onboarding fields
+            'onboarding_status': self.onboarding_status,
+            'onboarded_by_user_id': self.onboarded_by_user_id,
+            'onboarded_at': self.onboarded_at.isoformat() if self.onboarded_at else None,
+            'approved_by_user_id': self.approved_by_user_id,
+            'approved_at': self.approved_at.isoformat() if self.approved_at else None,
+            'rejected_by_user_id': self.rejected_by_user_id,
+            'rejected_at': self.rejected_at.isoformat() if self.rejected_at else None,
+            'rejection_reason': self.rejection_reason,
+            'manager_id': self.manager_id,
+            'recruiter_id': self.recruiter_id,
         }
+        
+        # Include assignment history if requested
+        if include_assignments:
+            result['assignments'] = [
+                {
+                    'id': assignment.id,
+                    'assigned_to_user_id': assignment.assigned_to_user_id,
+                    'assigned_by_user_id': assignment.assigned_by_user_id,
+                    'assignment_type': assignment.assignment_type,
+                    'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
+                    'status': assignment.status,
+                }
+                for assignment in self.assignments
+            ]
+        
+        # Include onboarding user details if requested
+        if include_onboarding_users:
+            if self.onboarded_by:
+                result['onboarded_by'] = {
+                    'id': self.onboarded_by.id,
+                    'email': self.onboarded_by.email,
+                    'first_name': self.onboarded_by.first_name,
+                    'last_name': self.onboarded_by.last_name,
+                }
+            if self.approved_by:
+                result['approved_by'] = {
+                    'id': self.approved_by.id,
+                    'email': self.approved_by.email,
+                    'first_name': self.approved_by.first_name,
+                    'last_name': self.approved_by.last_name,
+                }
+            if self.rejected_by:
+                result['rejected_by'] = {
+                    'id': self.rejected_by.id,
+                    'email': self.rejected_by.email,
+                    'first_name': self.rejected_by.first_name,
+                    'last_name': self.rejected_by.last_name,
+                }
+            if self.manager:
+                result['manager'] = {
+                    'id': self.manager.id,
+                    'email': self.manager.email,
+                    'first_name': self.manager.first_name,
+                    'last_name': self.manager.last_name,
+                }
+            if self.recruiter:
+                result['recruiter'] = {
+                    'id': self.recruiter.id,
+                    'email': self.recruiter.email,
+                    'first_name': self.recruiter.first_name,
+                    'last_name': self.recruiter.last_name,
+                }
+        
+        return result

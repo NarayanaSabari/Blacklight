@@ -3,7 +3,7 @@ Pydantic schemas for Role model validation and serialization.
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 
 
@@ -81,7 +81,7 @@ class RoleAssignPermissions(BaseModel):
 
 class RoleListResponse(BaseModel):
     """Schema for role list response."""
-    roles: List[RoleResponse]
+    roles: List[Union[RoleResponse, RoleWithPermissions]]
     total: int
     page: int = 1
     per_page: int = 50

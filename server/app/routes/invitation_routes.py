@@ -5,6 +5,7 @@ Authenticated routes for HR and public routes for candidates
 from flask import Blueprint, request, jsonify, current_app, send_file
 from pydantic import ValidationError
 import os
+import logging
 
 from app import db, limiter
 from app.middleware.portal_auth import require_portal_auth, require_permission
@@ -28,6 +29,7 @@ from app.schemas import (
 )
 
 bp = Blueprint("invitations", __name__, url_prefix="/api/invitations")
+logger = logging.getLogger(__name__)
 
 
 def error_response(message: str, status: int = 400, details: dict = None):
@@ -274,22 +276,14 @@ def review_invitation(invitation_id):
         data = InvitationReviewSchema.model_validate(request.get_json())
         
         if data.action == "approve":
-            # Approve and create candidate
+            # Approve and create candidate (with optional HR edits)
+            # Note: approve_invitation sends email via Inngest automatically
             candidate = InvitationService.approve_invitation(
                 invitation_id=invitation_id,
                 tenant_id=tenant_id,
                 reviewed_by_id=user_id,
-                notes=data.notes
-            )
-            
-            # Get updated invitation
-            invitation = InvitationService.get_by_id(invitation_id, tenant_id)
-            
-            # Send approval email
-            EmailService.send_approval_email(
-                tenant_id=tenant_id,
-                to_email=invitation.email,
-                candidate_name=f"{candidate.first_name} {candidate.last_name}"
+                notes=data.notes,
+                edited_data=data.edited_data
             )
             
             return jsonify({
@@ -300,20 +294,13 @@ def review_invitation(invitation_id):
             
         else:  # reject
             # Reject invitation
+            # Note: reject_invitation sends email via Inngest automatically
             invitation = InvitationService.reject_invitation(
                 invitation_id=invitation_id,
                 tenant_id=tenant_id,
                 reviewed_by_id=user_id,
                 reason=data.rejection_reason,
                 notes=data.notes
-            )
-            
-            # Send rejection email
-            EmailService.send_rejection_email(
-                tenant_id=tenant_id,
-                to_email=invitation.email,
-                candidate_name=f"{invitation.first_name} {invitation.last_name}" if invitation.first_name else "there",
-                reason=data.rejection_reason
             )
             
             return jsonify({
@@ -450,19 +437,28 @@ def submit_invitation():
     """
     try:
         token = request.args.get("token")
+        logger.info(f"[SUBMIT] Received submission request with token: {token}")
+        
         if not token:
+            logger.error("[SUBMIT] No token provided")
             return error_response("Token is required", 400)
         
+        # Get request data
+        request_data = request.get_json()
+        logger.info(f"[SUBMIT] Request data keys: {list(request_data.keys()) if request_data else 'None'}")
+        
         # Validate request
-        data = InvitationSubmitSchema.model_validate(request.get_json())
+        data = InvitationSubmitSchema.model_validate(request_data)
+        logger.info(f"[SUBMIT] Validation passed, submitting invitation")
         
         # Submit invitation
         invitation = InvitationService.submit_invitation(
             token=token,
-            data=data.model_dump(),
+            invitation_data=data.model_dump(),
             ip_address=request.remote_addr,
             user_agent=request.headers.get("User-Agent")
         )
+        logger.info(f"[SUBMIT] Invitation {invitation.id} submitted successfully")
         
         # Send confirmation email to candidate
         EmailService.send_submission_confirmation(
@@ -501,16 +497,19 @@ def upload_document_public():
     """
     try:
         token = request.args.get("token")
+        logger.info(f"[DOC_UPLOAD] Received token from query params: {token} (type: {type(token).__name__})")
+        
         if not token:
             return error_response("Token is required", 400)
         
         # Verify invitation
+        logger.info(f"[DOC_UPLOAD] Calling get_by_token with: {token}")
         invitation = InvitationService.get_by_token(token)
         if not invitation:
             return error_response("Invalid or expired invitation", 404)
         
-        # Mark as in progress
-        InvitationService.mark_as_in_progress(invitation.id)
+        # Mark as in progress (pass token, not ID)
+        InvitationService.mark_as_in_progress(token)
         
         # Get file
         if 'file' not in request.files:
@@ -531,32 +530,46 @@ def upload_document_public():
         metadata_schema = DocumentUploadSchema(document_type=document_type, notes=notes)
         
         # Upload document
-        upload_dir = current_app.config.get("UPLOAD_FOLDER", "uploads")
-        document = DocumentService.upload_document(
+        document, error = DocumentService.upload_document(
             tenant_id=invitation.tenant_id,
             invitation_id=invitation.id,
             file=file,
-            document_type=metadata_schema.document_type,
-            notes=metadata_schema.notes,
-            upload_dir=upload_dir
+            document_type=metadata_schema.document_type
         )
         
-        # Build response
-        response = DocumentResponseSchema.model_validate({
-            **document.to_dict(),
-            "file_size_mb": document.file_size_mb,
-            "file_extension": document.file_extension,
-        })
+        if error:
+            logger.error(f"[DOC_UPLOAD] Upload failed with error: {error}")
+            return error_response(error, 400)
         
-        return jsonify(response.model_dump()), 201
+        if not document:
+            logger.error("[DOC_UPLOAD] Upload returned no document and no error")
+            return error_response("Document upload failed", 500)
+        
+        logger.info(f"[DOC_UPLOAD] Successfully uploaded document {document.id}")
+        
+        # Build response
+        try:
+            response = DocumentResponseSchema.model_validate(document.to_dict())
+            return jsonify(response.model_dump()), 201
+        except Exception as resp_error:
+            logger.error(f"[DOC_UPLOAD] Response building failed: {resp_error}")
+            # Return a simpler response if schema validation fails
+            return jsonify({
+                "id": document.id,
+                "document_type": document.document_type,
+                "file_name": document.file_name,
+                "message": "Document uploaded successfully"
+            }), 201
         
     except ValidationError as e:
+        logger.error(f"[DOC_UPLOAD] Validation error: {e.errors()}")
         return error_response("Validation error", 400, e.errors())
     except ValueError as e:
+        logger.error(f"[DOC_UPLOAD] ValueError: {str(e)}")
         return error_response(str(e), 400)
     except Exception as e:
         db.session.rollback()
-        current_app.logger.error(f"Error uploading document: {e}")
+        logger.error(f"[DOC_UPLOAD] Unexpected error: {e}", exc_info=True)
         return error_response("Internal server error", 500)
 
 

@@ -4,7 +4,7 @@ import logging
 import logging.config
 from typing import Type
 
-from flask import Flask
+from flask import Flask, request, has_request_context, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -119,6 +119,10 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import invitation_routes
     from app.routes import document_routes
     from app.routes import public_document_routes
+    from app.routes import public_onboarding_routes
+    from app.routes import team_routes
+    from app.routes import candidate_assignment_routes
+    from app.routes import candidate_onboarding_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -141,6 +145,18 @@ def register_blueprints(app: Flask) -> None:
     # Document Management routes
     app.register_blueprint(document_routes.document_bp)
     app.register_blueprint(public_document_routes.public_document_bp)
+    
+    # Public Onboarding routes (resume parsing, etc.)
+    app.register_blueprint(public_onboarding_routes.public_onboarding_bp)
+    
+    # Team Management routes
+    app.register_blueprint(team_routes.team_bp)
+    
+    # Candidate Assignment routes
+    app.register_blueprint(candidate_assignment_routes.assignment_bp)
+    
+    # Candidate Onboarding Workflow routes
+    app.register_blueprint(candidate_onboarding_routes.onboarding_bp)
 
 
 def register_inngest(app: Flask) -> None:
@@ -150,6 +166,9 @@ def register_inngest(app: Flask) -> None:
         from app.inngest import inngest_client
         from app.inngest.functions import INNGEST_FUNCTIONS
         
+        # Get the Inngest serve path (default: /api/inngest)
+        inngest_path = app.config.get('INNGEST_SERVE_PATH', '/api/inngest')
+        
         # Register Inngest endpoint - serve() registers routes directly on the app
         inngest_serve_func(
             app,
@@ -157,14 +176,24 @@ def register_inngest(app: Flask) -> None:
             INNGEST_FUNCTIONS,
         )
         
-        # Exempt Inngest endpoint from rate limiting
-        # The Inngest SDK handles its own rate limiting and retries,
-        # so the Flask app's global rate limit should not apply here.
-        # Exempt the function that registers the Inngest routes.
-        limiter.exempt(inngest_serve_func)
+        # Exempt Inngest endpoint from rate limiting using before_request
+        # The Inngest SDK handles its own rate limiting and retries
+        @app.before_request
+        def _exempt_inngest_from_rate_limit():
+            """Exempt Inngest endpoints from Flask-Limiter rate limiting."""
+            if request.path and request.path.startswith(inngest_path):
+                # Mark this endpoint as exempt from rate limiting
+                # Flask-Limiter checks g._rate_limiting_complete flag
+                g._rate_limiting_complete = True
+                
+                # Optional: Suppress heartbeat logs in dev mode (PUT requests are sync/heartbeat)
+                # Uncomment the lines below to reduce log noise:
+                # if request.method == 'PUT':
+                #     g._suppress_access_log = True
         
         app.logger.info(f"Inngest: Registered {len(INNGEST_FUNCTIONS)} functions")
-        app.logger.info(f"Inngest: Serving at {app.config.get('INNGEST_SERVE_PATH', '/api/inngest')}")
+        app.logger.info(f"Inngest: Serving at {inngest_path}")
+        app.logger.info(f"Inngest: Rate limiting exempted for {inngest_path}")
     except ImportError as e:
         app.logger.warning(f"Inngest not available: {e}")
     except Exception as e:
@@ -203,7 +232,11 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     
     # Initialize extensions
     db.init_app(app)
+    
+    # Initialize limiter with logging
     limiter.init_app(app)
+    app.logger.info("Rate limiter initialized with Inngest exemption")
+    
     cors.init_app(app, resources={
         r"/*": {
             "origins": app.config.get("CORS_ORIGINS", ["*"]),

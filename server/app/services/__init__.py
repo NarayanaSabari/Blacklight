@@ -87,6 +87,8 @@ from app.services.candidate_service import CandidateService
 from app.services.invitation_service import InvitationService
 from app.services.document_service import DocumentService
 from app.services.email_service import EmailService
+from app.services.team_management_service import TeamManagementService
+from app.services.candidate_assignment_service import CandidateAssignmentService
 
 __all__ = [
     "AuditLogService",
@@ -102,4 +104,6 @@ __all__ = [
     "InvitationService",
     "DocumentService",
     "EmailService",
+    "TeamManagementService",
+    "CandidateAssignmentService",
 ]

@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle2, AlertCircle, XCircle, ArrowRight } from 'lucide-react';
 import { useVerifyInvitation } from '@/hooks/useOnboarding';
-import { CandidateOnboardingFlow } from '@/components/onboarding/CandidateOnboardingFlow';
+import { CandidateOnboardingFlow } from '@/components/onboarding/CandidateOnboardingFlow_v2';
 
 export default function OnboardingPage() {
   const { token } = useParams<{ token: string }>();

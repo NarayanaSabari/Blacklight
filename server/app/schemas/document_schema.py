@@ -294,16 +294,17 @@ class DocumentResponseSchema(BaseModel):
     invitation_id: Optional[int]
     document_type: str
     file_name: str
-    file_path: str
+    file_key: str  # Changed from file_path to match model
+    file_path: Optional[str] = None  # Legacy field, now optional
     file_size: int
     mime_type: str
+    storage_backend: Optional[str] = 'local'
     uploaded_by_id: Optional[int]
     uploaded_at: datetime
     is_verified: bool
     verified_by_id: Optional[int]
     verified_at: Optional[datetime]
     verification_notes: Optional[str]
-    notes: Optional[str]
     
     # Computed properties
     file_size_mb: float

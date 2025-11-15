@@ -32,14 +32,14 @@ export function UsersPage() {
     queryFn: () => fetchUsers({ search: searchQuery }),
   });
 
-  const users = usersData?.users || [];
+  const users = usersData?.items || [];
 
   // Calculate stats
   const stats = {
     total: users.length,
     active: users.filter((u) => u.is_active).length,
-    recruiters: users.filter((u) => u.role.name === 'RECRUITER').length,
-    hiring_managers: users.filter((u) => u.role.name === 'HIRING_MANAGER').length,
+    recruiters: users.filter((u) => u.roles?.some(r => r.name === 'RECRUITER')).length,
+    hiring_managers: users.filter((u) => u.roles?.some(r => r.name === 'HIRING_MANAGER')).length,
   };
 
   return (

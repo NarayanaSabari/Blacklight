@@ -43,21 +43,42 @@ echo -e "${BLUE}📚 Installing dependencies with uv (resolving all transitive d
 # Use --resolution highest to ensure all transitive dependencies are resolved
 uv pip install --resolution highest -r requirements-dev.txt
 
-# Start Docker services (PostgreSQL, Redis, and Inngest)
-echo -e "\n${BLUE}🐳 Starting PostgreSQL, Redis, and Inngest Dev Server...${NC}"
-docker-compose -f docker-compose.local.yml up -d
+# Start Docker services (PostgreSQL and Redis only - Inngest runs separately)
+echo -e "\n${BLUE}🐳 Starting PostgreSQL and Redis...${NC}"
+docker-compose -f docker-compose.local.yml up -d postgres redis
 
 # Wait for services to be healthy
 echo -e "${BLUE}⏳ Waiting for services to be ready...${NC}"
 sleep 3
 
-# Check if services are healthy
-until docker-compose -f docker-compose.local.yml ps | grep -q "healthy"; do
-    echo -e "${YELLOW}   Still waiting for services...${NC}"
-    sleep 2
+# Check each service individually
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    # Check PostgreSQL
+    PG_STATUS=$(docker inspect blacklight-postgres-local --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+    
+    # Check Redis
+    REDIS_STATUS=$(docker inspect blacklight-redis-local --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+    
+    if [ "$PG_STATUS" = "healthy" ] && [ "$REDIS_STATUS" = "healthy" ]; then
+        echo -e "${GREEN}✅ PostgreSQL and Redis are healthy!${NC}"
+        echo -e "   • PostgreSQL: ${GREEN}healthy${NC}"
+        echo -e "   • Redis:      ${GREEN}healthy${NC}\n"
+        break
+    else
+        echo -e "${YELLOW}   PostgreSQL: $PG_STATUS | Redis: $REDIS_STATUS${NC}"
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        sleep 2
+    fi
 done
 
-echo -e "${GREEN}✅ PostgreSQL, Redis, and Inngest are ready!${NC}\n"
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    echo -e "${RED}❌ Services failed to become healthy after $MAX_RETRIES attempts${NC}"
+    echo -e "${YELLOW}💡 Run 'docker-compose -f docker-compose.local.yml logs' to check logs${NC}"
+    exit 1
+fi
 
 # Check if .env exists, if not copy from example
 if [ ! -f ".env" ]; then
@@ -89,14 +110,17 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo -e "${BLUE}📊 Service URLs:${NC}"
 echo -e "   • Flask API:          ${GREEN}http://localhost:5000${NC}"
 echo -e "   • API Health:         ${GREEN}http://localhost:5000/api/health${NC}"
-echo -e "   • Inngest Dashboard:  ${GREEN}http://localhost:8288${NC}"
 echo -e "   • pgAdmin (optional): ${GREEN}http://localhost:5050${NC}"
 echo -e "   • Redis Commander:    ${GREEN}http://localhost:8081${NC}\n"
 
+echo -e "${YELLOW}💡 Next Steps:${NC}"
+echo -e "   ${YELLOW}1. Start Inngest in a separate terminal:${NC}"
+echo -e "      ${BLUE}npx inngest-cli@latest dev${NC}"
+echo -e "   ${YELLOW}2. Inngest Dashboard will be at: ${GREEN}http://localhost:8288${NC}\n"
+
 echo -e "${YELLOW}💡 Tips:${NC}"
 echo -e "   • Press Ctrl+C to stop the Flask server"
-echo -e "   • Run './stop-local.sh' to stop all Docker services"
-echo -e "   • View Inngest workflows at http://localhost:8288"
+echo -e "   • Run './stop-local.sh' to stop Docker services"
 echo -e "   • Run 'docker-compose -f docker-compose.local.yml --profile tools up -d' for pgAdmin/Redis Commander\n"
 
 # Run Flask development server

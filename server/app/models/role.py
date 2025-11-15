@@ -53,7 +53,7 @@ class Role(db.Model):
         'Permission',
         secondary='role_permissions',
         back_populates='roles',
-        lazy='dynamic'
+        lazy='selectin'  # Load permissions automatically with selectin strategy
     )
     
     # Table constraints
@@ -92,6 +92,7 @@ class Role(db.Model):
         }
         
         if include_permissions:
+            # permissions is now a list (lazy='selectin'), not a query
             data['permissions'] = [p.to_dict() for p in self.permissions]
         
         return data

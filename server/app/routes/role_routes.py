@@ -224,6 +224,60 @@ def update_system_role_permissions(role_id):
 
 
 # ============================================================================
+# SIMPLIFIED ROLE ROUTES (Uses current user's tenant from JWT)
+# ============================================================================
+
+@bp.route('/roles', methods=['GET'])
+@require_portal_auth
+@require_permission('roles.view')
+def get_roles():
+    """
+    Get all roles available to current user's tenant (system roles + tenant's custom roles).
+    
+    Uses tenant_id from authenticated user's JWT token.
+    
+    Query Parameters:
+        include_inactive (bool): Include inactive roles
+        include_permissions (bool): Include permission details
+        
+    Returns:
+        200: List of roles
+        500: Server error
+    """
+    try:
+        # Get tenant_id from authenticated user's JWT token
+        portal_user = getattr(request, 'portal_user', {})
+        tenant_id = portal_user.get('tenant_id')
+        
+        if not tenant_id:
+            return jsonify({'error': 'Tenant ID not found in session'}), 400
+        
+        include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
+        include_permissions = request.args.get('include_permissions', 'false').lower() == 'true'
+        
+        roles = RoleService.get_all_roles(
+            include_inactive=include_inactive,
+            tenant_id=tenant_id
+        )
+        
+        if include_permissions:
+            response_roles = [RoleWithPermissions.model_validate(r) for r in roles]
+        else:
+            response_roles = [RoleResponse.model_validate(r) for r in roles]
+        
+        response = RoleListResponse(
+            roles=response_roles,
+            total=len(roles),
+            page=1,
+            per_page=len(roles)
+        )
+        
+        return jsonify(response.model_dump()), 200
+    except Exception as e:
+        return jsonify({'error': 'Failed to fetch roles', 'message': str(e)}), 500
+
+
+# ============================================================================
 # TENANT ROLE ROUTES (Available to Tenant Admins)
 # ============================================================================
 

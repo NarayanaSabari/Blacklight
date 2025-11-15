@@ -19,6 +19,7 @@ export interface PortalUser {
   locked_until: string | null;
   created_at: string;
   updated_at: string;
+  permissions: string[]; // Added permissions field
   tenant?: {
     id: number;
     slug: string;

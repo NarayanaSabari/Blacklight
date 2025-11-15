@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
     trigger=inngest.TriggerCron(cron="0 9 * * *"),
     name="Check Expiring Invitations"
 )
-async def check_expiring_invitations_workflow(ctx: inngest.Context, step: inngest.Step) -> dict:
+async def check_expiring_invitations_workflow(ctx: inngest.Context) -> dict:
     """
     Send reminder emails for invitations expiring in 24 hours
     Runs daily at 9 AM
@@ -25,7 +25,7 @@ async def check_expiring_invitations_workflow(ctx: inngest.Context, step: innges
     logger.info("[INNGEST] Running expiring invitations check")
     
     # Step 1: Fetch expiring invitations
-    expiring_invitations = await step.run(
+    expiring_invitations = await ctx.step.run(
         "fetch-expiring",
         fetch_expiring_invitations_step,
         hours=24
@@ -35,7 +35,7 @@ async def check_expiring_invitations_workflow(ctx: inngest.Context, step: innges
     
     # Step 2: Send reminder emails
     for invitation in expiring_invitations:
-        await step.run(
+        await ctx.step.run(
             f"send-reminder-{invitation['id']}",
             send_reminder_email_step,
             invitation
@@ -52,7 +52,7 @@ async def check_expiring_invitations_workflow(ctx: inngest.Context, step: innges
     trigger=inngest.TriggerCron(cron="0 8 * * *"),
     name="Generate Daily Statistics"
 )
-async def generate_daily_stats_workflow(ctx: inngest.Context, step: inngest.Step) -> dict:
+async def generate_daily_stats_workflow(ctx: inngest.Context) -> dict:
     """
     Generate daily recruiting statistics
     Runs daily at 8 AM
@@ -60,13 +60,13 @@ async def generate_daily_stats_workflow(ctx: inngest.Context, step: inngest.Step
     logger.info("[INNGEST] Generating daily statistics")
     
     # Step 1: Calculate metrics for all tenants
-    all_stats = await step.run(
+    all_stats = await ctx.step.run(
         "calculate-all-stats",
         calculate_daily_stats_step
     )
     
     # Step 2: Store in cache/database
-    await step.run(
+    await ctx.step.run(
         "store-stats",
         store_stats_step,
         all_stats

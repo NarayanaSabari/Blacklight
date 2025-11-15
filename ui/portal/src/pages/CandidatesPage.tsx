@@ -41,9 +41,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Users, Plus, Search, Loader2, MoreVertical, Pencil, Trash2, Eye, TrendingUp, UserCheck, Clock } from 'lucide-react';
+import { Users, Plus, Search, Loader2, MoreVertical, Pencil, Trash2, Eye, TrendingUp, UserCheck, Clock, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { candidateApi } from '@/lib/candidateApi';
+import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import type { CandidateListItem, CandidateStatus } from '@/types/candidate';
 
 const STATUS_COLORS: Record<CandidateStatus, string> = {
@@ -66,11 +67,14 @@ export function CandidatesPage() {
   const [page, setPage] = useState(1);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [candidateToDelete, setCandidateToDelete] = useState<number | null>(null);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [candidateToAssign, setCandidateToAssign] = useState<CandidateListItem | null>(null);
 
   // Fetch stats
   const { data: stats } = useQuery({
     queryKey: ['candidate-stats'],
     queryFn: () => candidateApi.getStats(),
+    staleTime: 0, // Always refetch to ensure fresh data
   });
 
   // Fetch candidates
@@ -83,20 +87,29 @@ export function CandidatesPage() {
         status: statusFilter !== 'all' ? (statusFilter as CandidateStatus) : undefined,
         search: searchQuery || undefined,
       }),
+    staleTime: 0, // Always refetch to ensure fresh data after mutations
   });
 
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: number) => candidateApi.deleteCandidate(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['candidates'] });
-      queryClient.invalidateQueries({ queryKey: ['candidate-stats'] });
+    onSuccess: async () => {
+      // Force immediate refetch of data
+      await queryClient.refetchQueries({ queryKey: ['candidates'] });
+      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
       toast.success('Candidate deleted successfully');
       setDeleteDialogOpen(false);
       setCandidateToDelete(null);
     },
-    onError: () => {
-      toast.error('Failed to delete candidate');
+    onError: async (error: Error) => {
+      // Log the error for debugging
+      console.error('Delete error:', error);
+      toast.error(error.message || 'Failed to delete candidate');
+      setDeleteDialogOpen(false);
+      setCandidateToDelete(null);
+      // Force refetch anyway in case the candidate was actually deleted
+      await queryClient.refetchQueries({ queryKey: ['candidates'] });
+      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
     },
   });
 
@@ -329,6 +342,16 @@ export function CandidatesPage() {
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              className="gap-2"
+                              onClick={() => {
+                                setCandidateToAssign(candidate);
+                                setAssignDialogOpen(true);
+                              }}
+                            >
+                              <UserPlus className="h-4 w-4" />
+                              Assign
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               className="gap-2 text-destructive"
                               onClick={() => handleDelete(candidate.id)}
                             >
@@ -395,6 +418,20 @@ export function CandidatesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Candidate Assignment Dialog */}
+      {candidateToAssign && (
+        <CandidateAssignmentDialog
+          candidateId={candidateToAssign.id}
+          candidateName={candidateToAssign.full_name || `${candidateToAssign.first_name} ${candidateToAssign.last_name}`}
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+          onSuccess={() => {
+            toast.success('Candidate assigned successfully!');
+            setCandidateToAssign(null);
+          }}
+        />
+      )}
     </div>
   );
 }

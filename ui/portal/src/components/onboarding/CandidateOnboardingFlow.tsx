@@ -1,7 +1,7 @@
 /**
  * CandidateOnboardingFlow Component
- * Multi-step wizard for candidate self-onboarding
- * Steps: 1) Personal Info, 2) Resume Upload, 3) Additional Documents, 4) Review & Submit
+ * Multi-step wizard for candidate self-onboarding with AI resume parsing
+ * Steps: 1) Personal Info, 2) Resume Upload + AI Parsing, 3) Review Parsed Data, 4) Additional Documents, 5) Final Review & Submit
  */
 
 import { useState } from 'react';
@@ -40,7 +40,13 @@ import {
   Paperclip,
   Eye,
   Loader2,
+  Sparkles,
+  Edit3,
+  Upload,
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
 import { DocumentUpload, type UploadedFile } from '@/components/documents/DocumentUpload';
 import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnboarding';
 import type { InvitationWithRelations } from '@/types';

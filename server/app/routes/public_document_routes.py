@@ -134,6 +134,58 @@ def upload_public_document():
                 status=400
             ).model_dump()), 400
         
+        # 🆕 NEW: Parse resume if document_type is 'resume'
+        if document_type == 'resume' and document:
+            try:
+                from app.services.resume_parser import ResumeParserService
+                from app.utils.text_extractor import extract_text_from_file
+                from app.services.skills_matcher import SkillsMatcher
+                import logging
+                
+                logger = logging.getLogger(__name__)
+                parser = ResumeParserService()
+                skills_matcher = SkillsMatcher()
+                
+                logger.info(f"[PARSE] Starting resume parsing for invitation {invitation.id}")
+                
+                # Extract text from uploaded file
+                text = extract_text_from_file(document.file_path)
+                
+                if not text or len(text.strip()) < 50:
+                    logger.warning(f"[PARSE] Insufficient text extracted from resume for invitation {invitation.id} (length: {len(text) if text else 0})")
+                else:
+                    # Parse with AI
+                    parsed_data = parser.parse_resume(text, file_type=document.file_extension)
+                    
+                    # Enhance skills with skills matcher
+                    if parsed_data.get('skills'):
+                        skills_analysis = skills_matcher.extract_skills(' '.join(parsed_data['skills']))
+                        parsed_data['skills'] = skills_analysis['matched_skills']
+                        parsed_data['skills_categories'] = skills_analysis['categories']
+                    
+                    # Store parsed data in invitation_data
+                    current_data = invitation.invitation_data or {}
+                    current_data['parsed_resume_data'] = parsed_data
+                    invitation.invitation_data = current_data
+                    # Note: Will be committed below with last_activity_at update
+                    
+                    # Log the actual structure for debugging
+                    logger.info(f"[PARSE] ✅ Resume parsed successfully for invitation {invitation.id}")
+                    logger.info(f"[PARSE] Extracted: {len(parsed_data.get('skills', []))} skills, "
+                               f"{len(parsed_data.get('education', []))} education entries, "
+                               f"{len(parsed_data.get('work_experience', []))} work experiences")
+                    logger.info(f"[PARSE] Education type: {type(parsed_data.get('education'))}")
+                    logger.info(f"[PARSE] Work experience type: {type(parsed_data.get('work_experience'))}")
+                    if parsed_data.get('education'):
+                        logger.info(f"[PARSE] First education entry: {parsed_data['education'][0] if parsed_data['education'] else 'None'}")
+                    if parsed_data.get('work_experience'):
+                        logger.info(f"[PARSE] First work experience entry: {parsed_data['work_experience'][0] if parsed_data['work_experience'] else 'None'}")
+                
+            except Exception as e:
+                logger.error(f"[PARSE] Failed to parse resume for invitation {invitation.id}: {e}", exc_info=True)
+                # Don't fail the upload, just log the error
+                # Candidate can still be created with form data
+        
         # Update invitation's last_activity_at
         invitation.last_activity_at = datetime.now(timezone.utc)
         db.session.commit()

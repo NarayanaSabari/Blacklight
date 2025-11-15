@@ -129,3 +129,50 @@ from app.schemas.document_schema import (
     DocumentTypeConfigSchema,
     DocumentTypesConfigResponseSchema,
 )
+
+from app.schemas.team_management_schema import (
+    AssignManagerSchema,
+    RemoveManagerSchema,
+    UserBasicInfoSchema,
+    TeamMemberSchema,
+    ManagerWithCountSchema,
+    TeamHierarchyResponseSchema,
+    AssignManagerResponseSchema,
+    RemoveManagerResponseSchema,
+    AvailableManagersResponseSchema,
+)
+
+from app.schemas.candidate_assignment_schema import (
+    AssignCandidateSchema,
+    ReassignCandidateSchema,
+    UnassignCandidateSchema,
+    MarkNotificationReadSchema,
+    UserInfoSchema,
+    CandidateInfoSchema,
+    AssignmentSchema,
+    AssignmentNotificationSchema,
+    AssignCandidateResponseSchema,
+    ReassignCandidateResponseSchema,
+    UnassignCandidateResponseSchema,
+    CandidateAssignmentsResponseSchema,
+    UserAssignedCandidatesResponseSchema,
+    AssignmentHistoryResponseSchema,
+    NotificationsResponseSchema,
+    MarkNotificationReadResponseSchema,
+)
+
+from app.schemas.candidate_onboarding_schema import (
+    OnboardCandidateSchema,
+    ApproveCandidateSchema,
+    RejectCandidateSchema,
+    UpdateOnboardingStatusSchema,
+    GetOnboardingCandidatesQuerySchema,
+    OnboardingUserInfoSchema,
+    CandidateOnboardingInfoSchema,
+    OnboardCandidateResponseSchema,
+    ApproveCandidateResponseSchema,
+    RejectCandidateResponseSchema,
+    OnboardingCandidatesListResponseSchema,
+    UpdateOnboardingStatusResponseSchema,
+    OnboardingStatsSchema,
+)

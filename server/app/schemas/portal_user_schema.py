@@ -16,6 +16,7 @@ class PortalUserCreateSchema(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100, description="First name")
     last_name: str = Field(..., min_length=1, max_length=100, description="Last name")
     phone: Optional[str] = Field(None, max_length=20, description="Phone number")
+    role_id: int = Field(..., description="Role ID to assign to the user")
     
     model_config = ConfigDict(from_attributes=True)
 

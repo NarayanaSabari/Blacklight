@@ -101,6 +101,7 @@ export function InvitationList({ onViewDetails, onCreateNew }: InvitationListPro
 
   const handleResend = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (resendMutation.isPending) return; // Prevent double-click
     resendMutation.mutate(id);
   };
 

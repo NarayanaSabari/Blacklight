@@ -143,8 +143,12 @@ class InvitationService:
             
             logger.info(f"[INNGEST] Attempting to send event 'email/invitation' for invitation {invitation.id}")
             
+            # Use event ID for deduplication (prevents duplicate emails within 24h)
+            event_id = f"invitation-{invitation.id}-{invitation.token[:16]}"
+            
             event_result = inngest_client.send_sync(
                 inngest.Event(
+                    id=event_id,
                     name="email/invitation",
                     data={
                         "invitation_id": invitation.id,
@@ -208,8 +212,16 @@ class InvitationService:
         Returns:
             CandidateInvitation or None
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[SERVICE] get_by_token called with: {token} (type: {type(token).__name__})")
+        logger.info(f"[SERVICE] CandidateInvitation.token column type: {CandidateInvitation.token.type}")
+        
         query = select(CandidateInvitation).where(CandidateInvitation.token == token)
+        logger.info(f"[SERVICE] Query compiled: {query}")
+        
         invitation = db.session.execute(query).scalar_one_or_none()
+        logger.info(f"[SERVICE] Result: {invitation}")
         return invitation
     
     @staticmethod
@@ -265,6 +277,13 @@ class InvitationService:
         if not invitation.can_be_resent:
             raise ValueError(f"Invitation with status '{invitation.status}' cannot be resent")
         
+        # Prevent duplicate resends within 5 seconds (handles double-clicks)
+        if invitation.updated_at:
+            time_since_update = (datetime.utcnow() - invitation.updated_at).total_seconds()
+            if time_since_update < 5:
+                logger.warning(f"Prevented duplicate resend for invitation {invitation_id} (last updated {time_since_update:.2f}s ago)")
+                return invitation  # Return existing invitation without resending
+        
         # Generate NEW token
         old_token = invitation.token
         invitation.token = CandidateInvitation.generate_token()
@@ -305,10 +324,14 @@ class InvitationService:
             onboarding_url = f"{settings.frontend_base_url}/onboard/{invitation.token}"
             expiry_date = invitation.expires_at.strftime("%B %d, %Y at %I:%M %p UTC")
 
-            logger.info(f"[INNGEST] Attempting to send event 'email/invitation' for invitation {invitation.id}")
+            logger.info(f"[INNGEST] Attempting to send event 'email/invitation' for invitation {invitation.id} (RESEND)")
+            
+            # Use unique event ID for each resend (includes token to allow resends)
+            event_id = f"invitation-{invitation.id}-{invitation.token[:16]}"
             
             event_result = inngest_client.send_sync(
                 inngest.Event(
+                    id=event_id,
                     name="email/invitation",
                     data={
                         "invitation_id": invitation.id,
@@ -545,13 +568,14 @@ class InvitationService:
         invitation_id: int,
         tenant_id: int,
         reviewed_by_id: int,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        edited_data: Optional[Dict] = None
     ) -> Candidate:
         """
         Approve invitation and create candidate record.
         
         This method:
-        1. Creates a Candidate from invitation data
+        1. Creates a Candidate from invitation data (with optional HR edits)
         2. Moves documents from invitation to candidate
         3. Triggers resume re-parsing
         4. Updates invitation status
@@ -562,6 +586,7 @@ class InvitationService:
             tenant_id: Tenant ID for isolation
             reviewed_by_id: ID of portal user approving
             notes: Optional review notes
+            edited_data: Optional dict of HR-edited fields to override submission data
             
         Returns:
             Created Candidate record
@@ -579,39 +604,168 @@ class InvitationService:
         if not invitation.invitation_data:
             raise ValueError("No invitation data to create candidate from")
         
-        # Extract data from invitation_data
-        data = invitation.invitation_data
+        # Extract data from invitation_data and merge with HR edits
+        data = invitation.invitation_data.copy()
+        if edited_data:
+            # Merge HR edits (HR edits take precedence)
+            data.update(edited_data)
+            logger.info(f"Merged HR edits for invitation {invitation_id}: {list(edited_data.keys())}")
         
         # Create candidate record
+        # Build full_name from parts if not provided
+        full_name = data.get('full_name')
+        if not full_name:
+            first_name = data.get('first_name') or invitation.first_name or ''
+            last_name = data.get('last_name') or invitation.last_name or ''
+            full_name = f"{first_name} {last_name}".strip()
+        
+        # Get experience years from either field name
+        experience_years = data.get('experience_years') or data.get('years_of_experience') or data.get('total_experience_years')
+        
+        # Get professional summary
+        summary = data.get('summary') or data.get('professional_summary')
+        
+        # Get position/title
+        position = data.get('position') or data.get('current_job_title') or data.get('current_title')
+
+        # 🆕 SMART DATA EXTRACTION
+        # Priority: parsed_resume_data > form data > defaults
+        parsed_resume = data.get('parsed_resume_data', {}) or {}
+
+        # Helper to get value with fallback chain
+        def get_field(form_key, parsed_key=None, default=None):
+            """
+            Get value from form data or parsed resume data
+            Priority: form data > parsed resume > default
+            """
+            parsed_key = parsed_key or form_key
+            form_value = data.get(form_key)
+            
+            # If form has explicit value, use it
+            if form_value is not None and form_value != '':
+                return form_value
+            
+            # Otherwise try parsed resume
+            return parsed_resume.get(parsed_key, default)
+
+        # Helper to ensure lists
+        def ensure_list(value):
+            """Convert None/empty to [], otherwise ensure it's a list"""
+            if value is None or value == '':
+                return []
+            if isinstance(value, list):
+                return value
+            return [value]
+
+        # Extract education - prefer structured, fallback to text
+        education_data = None
+        if parsed_resume and isinstance(parsed_resume.get('education'), list):
+            # Use parsed structured data
+            education_data = parsed_resume['education']
+            logger.info(f"Using parsed education data: {len(education_data)} entries")
+        elif parsed_resume and isinstance(parsed_resume.get('education'), str):
+            # Handle string from parsed data (convert to structured format)
+            edu_text = parsed_resume['education']
+            if edu_text and edu_text.strip():
+                education_data = [{
+                    'degree': 'Not specified',
+                    'field_of_study': None,
+                    'institution': 'Not specified',
+                    'graduation_year': None,
+                    'description': edu_text.strip()
+                }]
+                logger.info("Using parsed 'education' string (converted to structured)")
+            else:
+                education_data = []
+        else:
+            # Fallback: convert form text to single structured entry
+            edu_text = data.get('education')
+            if edu_text and isinstance(edu_text, str) and edu_text.strip():
+                education_data = [{
+                    'degree': 'Not specified',
+                    'field_of_study': None,
+                    'institution': 'Not specified',
+                    'graduation_year': None,
+                    'description': edu_text.strip()
+                }]
+                logger.info("Using form text for education (no parsed data)")
+            else:
+                education_data = []
+
+        # Extract work experience - prefer structured, fallback to text
+        work_exp_data = None
+        # Check both 'work_experience' and 'experience' field names (frontend inconsistency)
+        if parsed_resume and isinstance(parsed_resume.get('work_experience'), list):
+            # Use parsed structured data (correct field name)
+            work_exp_data = parsed_resume['work_experience']
+            logger.info(f"Using parsed work_experience: {len(work_exp_data)} entries")
+        elif parsed_resume and isinstance(parsed_resume.get('experience'), list):
+            # Use parsed structured data (legacy field name from frontend)
+            work_exp_data = parsed_resume['experience']
+            logger.info(f"Using parsed experience: {len(work_exp_data)} entries")
+        elif parsed_resume and isinstance(parsed_resume.get('experience'), str):
+            # Handle string from parsed data (convert to structured format)
+            exp_text = parsed_resume['experience']
+            if exp_text and exp_text.strip():
+                work_exp_data = [{
+                    'title': 'Not specified',
+                    'company': 'Not specified',
+                    'location': None,
+                    'start_date': None,
+                    'end_date': None,
+                    'is_current': False,
+                    'description': exp_text.strip()
+                }]
+                logger.info("Using parsed 'experience' string (converted to structured)")
+            else:
+                work_exp_data = []
+        else:
+            # Fallback: convert form text to single structured entry
+            exp_text = data.get('work_experience')
+            if exp_text and isinstance(exp_text, str) and exp_text.strip():
+                work_exp_data = [{
+                    'title': 'Not specified',
+                    'company': 'Not specified',
+                    'location': None,
+                    'start_date': None,
+                    'end_date': None,
+                    'is_current': False,
+                    'description': exp_text.strip()
+                }]
+                logger.info("Using form text for work experience (no parsed data)")
+            else:
+                work_exp_data = []
+
         candidate = Candidate(
             tenant_id=invitation.tenant_id,
             first_name=data.get('first_name') or invitation.first_name or '',
-            last_name=data.get('last_name') or invitation.last_name,
+            last_name=data.get('last_name') or invitation.last_name or '',
             email=invitation.email,
             phone=data.get('phone'),
-            status='NEW',  # Default status for new candidates
+            status='NEW',
             source='self_onboarding',
-            onboarding_type='self_onboarding',
             
-            # Professional details from form
-            full_name=data.get('full_name'),
-            location=data.get('location'),
-            linkedin_url=data.get('linkedin_url'),
-            portfolio_url=data.get('portfolio_url'),
-            current_title=data.get('current_title'),
-            total_experience_years=data.get('total_experience_years'),
-            professional_summary=data.get('professional_summary'),
+            # Professional details - use smart getter
+            full_name=full_name,
+            location=get_field('location'),
+            linkedin_url=get_field('linkedin_url'),
+            portfolio_url=get_field('portfolio_url'),
+            current_title=position or get_field('current_title'),
+            total_experience_years=experience_years or get_field('total_experience_years'),
+            professional_summary=summary or get_field('professional_summary'),
             
-            # Arrays
-            skills=data.get('skills'),
-            certifications=data.get('certifications'),
-            languages=data.get('languages'),
-            preferred_locations=data.get('preferred_locations'),
+            # Arrays - ensure always lists, prefer parsed data
+            skills=ensure_list(get_field('skills', default=[])),
+            certifications=ensure_list(get_field('certifications', default=[])),
+            languages=ensure_list(get_field('languages', default=[])),
+            preferred_locations=ensure_list(get_field('preferred_locations', default=[])),
             
-            # JSONB structured data
-            education=data.get('education'),
-            work_experience=data.get('work_experience'),
-            parsed_resume_data=data.get('parsed_resume_data'),  # From AI parsing during onboarding
+            # JSONB structured data - use parsed or fallback to structured text
+            education=education_data,
+            work_experience=work_exp_data,
+            
+            # Store full parsed data for reference
+            parsed_resume_data=parsed_resume if parsed_resume else None,
         )
         
         db.session.add(candidate)
@@ -646,7 +800,8 @@ class InvitationService:
             extra_data={
                 'candidate_id': candidate.id,
                 'documents_moved': len(documents),
-                'has_notes': bool(notes)
+                'has_notes': bool(notes),
+                'hr_edited_fields': list(edited_data.keys()) if edited_data else None
             }
         )
         

@@ -59,7 +59,7 @@ export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId }: Re
   };
 
   const uploadFile = async () => {
-    if (!file) return;
+    if (!file || uploading) return; // Prevent duplicate uploads
 
     setUploading(true);
     setError(null);
@@ -199,20 +199,11 @@ export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId }: Re
           {!uploading && !success && (
             <Button
               onClick={uploadFile}
-              disabled={!file}
+              disabled={!file || uploading}
               className="w-full gap-2"
             >
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  Upload & Parse Resume
-                </>
-              )}
+              <Upload className="h-4 w-4" />
+              Upload & Parse Resume
             </Button>
           )}
         </div>

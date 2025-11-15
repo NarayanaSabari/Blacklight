@@ -58,7 +58,7 @@ class CandidateInvitation(BaseModel):
     rejection_reason = db.Column(Text)
     
     # Link to created candidate (after approval)
-    candidate_id = db.Column(Integer, ForeignKey('candidates.id'))
+    candidate_id = db.Column(Integer, ForeignKey('candidates.id', ondelete='SET NULL'))
     
     # Relationships
     tenant = relationship('Tenant', backref='invitations')

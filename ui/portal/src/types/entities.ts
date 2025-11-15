@@ -280,15 +280,15 @@ export interface PortalUserBasic {
 export interface PortalUserFull extends PortalUserBasic {
   tenant_id: number;
   phone: string | null;
-  role_id: number;
-  role: {
+  roles: {
     id: number;
     name: string;
     display_name: string;
     description: string | null;
     is_system_role: boolean;
     tenant_id: number | null;
-  };
+  }[];
+  permissions: string[];
   is_active: boolean;
   last_login: string | null;
   is_locked: boolean;
@@ -315,7 +315,7 @@ export interface UserUpdateRequest {
 }
 
 export interface UserListResponse {
-  users: PortalUserFull[];
+  items: PortalUserFull[];
   total: number;
   page: number;
   per_page: number;
