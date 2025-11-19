@@ -1,9 +1,9 @@
 version: "3.9"
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with pgvector extension
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: blacklight-postgres-local
     environment:
       POSTGRES_USER: postgres

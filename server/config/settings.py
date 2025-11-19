@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     inngest_serve_host: str = Field(default="http://localhost:5000", env="INNGEST_SERVE_HOST")
     inngest_serve_path: str = Field(default="/api/inngest", env="INNGEST_SERVE_PATH")
     
+    # Google Gemini API Configuration
+    google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
+    gemini_embedding_model: str = Field(default="models/embedding-001", env="GEMINI_EMBEDDING_MODEL")
+    gemini_embedding_dimension: int = Field(default=768, env="GEMINI_EMBEDDING_DIMENSION")
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"

@@ -7,6 +7,8 @@ export { LoginPage } from './LoginPage';
 export { DashboardPage } from './DashboardPage';
 export { CandidatesPage } from './CandidatesPage';
 export { CandidateDetailPage } from './CandidateDetailPage';
+export { CandidateMatchesPage } from './CandidateMatchesPage';
+export { JobDetailPage } from './JobDetailPage';
 export { JobsPage } from './JobsPage';
 export { ApplicationsPage } from './ApplicationsPage';
 export { InterviewsPage } from './InterviewsPage';

@@ -308,6 +308,37 @@ def upload_and_create():
         
         logger.info(f"[UPLOAD-{request_id}] Successfully uploaded and parsed resume for candidate {result['candidate_id']}")
         
+        # Trigger background job for embedding generation and job matching
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            import threading
+            
+            def trigger_job_matching():
+                try:
+                    inngest_client.send_sync(
+                        inngest.Event(
+                            name="job-match/generate-candidate",
+                            data={
+                                "candidate_id": result['candidate_id'],
+                                "tenant_id": tenant_id,
+                                "min_score": 50.0,
+                                "trigger": "resume_upload"
+                            }
+                        )
+                    )
+                    logger.info(f"[UPLOAD-{request_id}] Triggered job matching workflow for candidate {result['candidate_id']}")
+                except Exception as e:
+                    logger.warning(f"[UPLOAD-{request_id}] Failed to trigger job matching in thread: {str(e)}")
+            
+            # Run in background thread to not block response
+            thread = threading.Thread(target=trigger_job_matching, daemon=True)
+            thread.start()
+            logger.info(f"[UPLOAD-{request_id}] Started background thread for job matching")
+        except Exception as e:
+            # Don't fail the upload if background job trigger fails
+            logger.warning(f"[UPLOAD-{request_id}] Failed to start job matching thread: {str(e)}")
+        
         # Return response with parsed data
         response = UploadResumeResponseSchema(
             candidate_id=result['candidate_id'],
@@ -364,6 +395,37 @@ def upload_resume_for_candidate(candidate_id: int):
                 result.get('error', 'Failed to upload and parse resume'),
                 500
             )
+        
+        # Trigger background job for embedding generation and job matching
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            import threading
+            
+            def trigger_job_matching():
+                try:
+                    inngest_client.send_sync(
+                        inngest.Event(
+                            name="job-match/generate-candidate",
+                            data={
+                                "candidate_id": candidate_id,
+                                "tenant_id": tenant_id,
+                                "min_score": 50.0,
+                                "trigger": "resume_upload"
+                            }
+                        )
+                    )
+                    logger.info(f"Triggered job matching workflow for candidate {candidate_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to trigger job matching in thread: {str(e)}")
+            
+            # Run in background thread to not block response
+            thread = threading.Thread(target=trigger_job_matching, daemon=True)
+            thread.start()
+            logger.info(f"Started background thread for job matching candidate {candidate_id}")
+        except Exception as e:
+            # Don't fail the upload if background job trigger fails
+            logger.warning(f"Failed to start job matching thread for candidate {candidate_id}: {str(e)}")
         
         # Return response
         response = UploadResumeResponseSchema(

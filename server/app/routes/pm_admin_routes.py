@@ -74,6 +74,11 @@ def debug_admin():
 @bp.route("/auth/fix-admin-password", methods=["POST"])
 def fix_admin_password():
     """Fix admin password by resetting to bcrypt hash."""
+    from config.settings import settings
+    
+    if settings.is_production:
+        return jsonify({"error": "This endpoint is not available in production"}), 403
+
     import bcrypt
     from app.models import PMAdminUser
     from sqlalchemy import select

@@ -145,3 +145,15 @@ export type {
   OnboardingStats,
   OnboardingStatsFilters,
 } from './onboarding';
+
+export type {
+  JobPosting,
+  JobMatch,
+  JobMatchListResponse,
+  JobMatchStats,
+  GenerateMatchesRequest,
+  GenerateMatchesResponse,
+  JobMatchFilters,
+  MatchGrade,
+  GradeBadgeConfig,
+} from './jobMatch';

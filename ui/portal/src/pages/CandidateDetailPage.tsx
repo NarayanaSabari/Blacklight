@@ -36,12 +36,14 @@ import {
   Pencil,
   UserPlus,
   Users,
+  Target,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { candidateApi } from '@/lib/candidateApi';
 import { documentApi } from '@/lib/documentApi';
 import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
+import { jobMatchApi } from '@/lib/jobMatchApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
@@ -110,6 +112,13 @@ export function CandidateDetailPage() {
 
   // Get current assignment (PENDING status since there's no acceptance workflow)
   const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'PENDING');
+
+  // Fetch top job matches
+  const { data: matchesData } = useQuery({
+    queryKey: ['candidateMatches', id],
+    queryFn: () => jobMatchApi.getCandidateMatches(Number(id), { per_page: 3, sort_by: 'match_score', sort_order: 'desc' }),
+    enabled: !!id,
+  });
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -262,6 +271,14 @@ export function CandidateDetailPage() {
         </div>
 
         <div className="flex gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => navigate(`/candidates/${id}/matches`)}
+          >
+            <Target className="h-4 w-4 mr-2" />
+            View Matches
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -517,6 +534,76 @@ export function CandidateDetailPage() {
 
           {/* Right Column - Additional Info */}
           <div className="space-y-6">
+            {/* Job Matches Preview */}
+            {matchesData && matchesData.total_matches > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5" />
+                      Top Job Matches
+                    </CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate(`/candidates/${id}/matches`)}
+                    >
+                      View All ({matchesData.total_matches})
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {matchesData.matches.slice(0, 3).map((match) => (
+                    <div
+                      key={match.id}
+                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                      onClick={() => navigate(`/candidates/${id}/matches`)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-sm truncate">
+                            {match.job_posting?.title}
+                          </h4>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {match.job_posting?.company}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge
+                            variant={
+                              match.match_grade === 'A+' || match.match_grade === 'A'
+                                ? 'default'
+                                : match.match_grade === 'B'
+                                ? 'secondary'
+                                : 'outline'
+                            }
+                            className="font-bold"
+                          >
+                            {match.match_grade}
+                          </Badge>
+                          <span className="text-xs font-medium">
+                            {match.match_score.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-1 mt-2">
+                        {match.matched_skills?.slice(0, 3).map((skill, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {skill}
+                          </Badge>
+                        ))}
+                        {(match.matched_skills?.length || 0) > 3 && (
+                          <span className="text-xs text-muted-foreground self-center">
+                            +{(match.matched_skills?.length || 0) - 3}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Professional Details */}
             <Card>
               <CardHeader>

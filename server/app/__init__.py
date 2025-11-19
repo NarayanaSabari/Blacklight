@@ -123,6 +123,10 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import team_routes
     from app.routes import candidate_assignment_routes
     from app.routes import candidate_onboarding_routes
+    from app.routes import job_import_routes
+    from app.routes import job_match_routes
+    from app.routes import job_posting_routes
+    from app.routes import embedding_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -157,6 +161,18 @@ def register_blueprints(app: Flask) -> None:
     
     # Candidate Onboarding Workflow routes
     app.register_blueprint(candidate_onboarding_routes.onboarding_bp)
+    
+        # Job Import and Management routes
+    app.register_blueprint(job_import_routes.job_import_bp)
+    
+    # Job Posting routes
+    app.register_blueprint(job_posting_routes.job_posting_bp)
+    
+    # Job Matching routes (AI-powered)
+    app.register_blueprint(job_match_routes.job_match_bp)
+    
+    # Embedding Management routes (PM_ADMIN only)
+    app.register_blueprint(embedding_routes.embedding_bp)
 
 
 def register_inngest(app: Flask) -> None:

@@ -10,6 +10,8 @@ import { CandidatesPage } from '@/pages/CandidatesPage';
 import { AddCandidatePage } from '@/pages/AddCandidatePage';
 import { EditCandidatePage } from '@/pages/EditCandidatePage';
 import { CandidateDetailPage } from '@/pages/CandidateDetailPage';
+import { CandidateMatchesPage } from '@/pages/CandidateMatchesPage';
+import { JobDetailPage } from '@/pages/JobDetailPage';
 import { JobsPage } from '@/pages/JobsPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { InterviewsPage } from '@/pages/InterviewsPage';
@@ -83,6 +85,8 @@ function App() {
                     {/* Candidate detail routes */}
                     <Route path="/candidates/new" element={<AddCandidatePage />} />
                     <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
+                    <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
+                    <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
                     <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                     <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                     <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />

@@ -71,3 +71,9 @@ from app.models.candidate_document import CandidateDocument
 # Import candidate assignment models
 from app.models.candidate_assignment import CandidateAssignment
 from app.models.assignment_notification import AssignmentNotification
+
+# Import job matching models
+from app.models.job_posting import JobPosting
+from app.models.candidate_job_match import CandidateJobMatch
+from app.models.job_application import JobApplication
+from app.models.job_import_batch import JobImportBatch

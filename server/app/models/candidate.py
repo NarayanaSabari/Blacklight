@@ -5,6 +5,7 @@ Stores candidate information with resume parsing support
 from datetime import datetime
 from sqlalchemy import String, Integer, Text, DateTime, ARRAY
 from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
 from app import db
 
 
@@ -112,6 +113,9 @@ class Candidate(BaseModel):
     
     # Full parsed resume data (raw output from parser)
     parsed_resume_data = db.Column(JSONB)
+    
+    # AI Matching Data
+    embedding = db.Column(Vector(768))  # Google Gemini embeddings for semantic matching
     
     # Relationships
     tenant = db.relationship('Tenant', backref='candidates')

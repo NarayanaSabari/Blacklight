@@ -174,6 +174,396 @@ def setup_spacy(app: Flask) -> None:
         sys.exit(1)
 
 
+def import_jobs(app: Flask, platform: str, file_path: str, update_existing: bool = True) -> None:
+    """
+    Import jobs from JSON file into the GLOBAL job pool.
+    
+    Jobs are shared across ALL tenants. This import adds to the platform-wide job database.
+    
+    Args:
+        platform: Platform name (indeed, dice, techfetch, glassdoor, monster)
+        file_path: Path to JSON file
+        update_existing: Whether to update existing jobs (default: True)
+    """
+    from app.services.job_import_service import JobImportService
+    from pathlib import Path
+    
+    print("=" * 80)
+    print(f"IMPORTING JOBS FROM {platform.upper()} (GLOBAL JOB POOL)")
+    print("=" * 80)
+    
+    # Validate platform
+    valid_platforms = ['indeed', 'dice', 'techfetch', 'glassdoor', 'monster']
+    if platform.lower() not in valid_platforms:
+        print(f"❌ Error: Invalid platform '{platform}'")
+        print(f"   Valid platforms: {', '.join(valid_platforms)}")
+        sys.exit(1)
+    
+    # Validate file exists
+    file_path_obj = Path(file_path)
+    if not file_path_obj.exists():
+        print(f"❌ Error: File not found: {file_path}")
+        sys.exit(1)
+    
+    print(f"\n📋 Import Configuration:")
+    print(f"   Platform: {platform}")
+    print(f"   File: {file_path}")
+    print(f"   Job Scope: GLOBAL (shared across all tenants)")
+    print(f"   Update Existing: {update_existing}")
+    print(f"   File Size: {file_path_obj.stat().st_size / 1024:.2f} KB")
+    print()
+    
+    try:
+        with app.app_context():
+            # Initialize service (platform-level imports by PM_ADMIN)
+            service = JobImportService()
+            
+            # Start import
+            print(f"🚀 Starting import at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print("   Reading and parsing jobs into global pool...")
+            
+            batch = service.import_from_json(
+                file_path=str(file_path_obj),
+                platform=platform.lower(),
+                update_existing=update_existing
+            )
+            
+            # Display results
+            print("\n" + "=" * 80)
+            print("📊 IMPORT RESULTS")
+            print("=" * 80)
+            print(f"   Status: {batch.status}")
+            print(f"   Total Jobs: {batch.total_jobs}")
+            print(f"   New Jobs: {batch.new_jobs}")
+            print(f"   Updated Jobs: {batch.updated_jobs}")
+            print(f"   Failed Jobs: {batch.failed_jobs}")
+            print(f"   Success Rate: {batch.success_rate:.1f}%")
+            print(f"   Duration: {batch.duration_seconds:.2f} seconds")
+            print(f"   Batch ID: {batch.batch_id}")
+            
+            if batch.failed_jobs > 0:
+                print(f"\n⚠️  {batch.failed_jobs} jobs failed to import")
+                if batch.error_log:
+                    print("   First 5 errors:")
+                    for i, (job_id, error) in enumerate(list(batch.error_log.items())[:5]):
+                        print(f"   {i+1}. Job {job_id}: {error[:100]}")
+            
+            print("\n" + "=" * 80)
+            if batch.status == 'COMPLETED':
+                print("✅ IMPORT COMPLETED SUCCESSFULLY!")
+            elif batch.status == 'COMPLETED_WITH_ERRORS':
+                print("⚠️  IMPORT COMPLETED WITH SOME ERRORS")
+            else:
+                print("❌ IMPORT FAILED")
+            print("=" * 80)
+            
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print("❌ IMPORT FAILED")
+        print("=" * 80)
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def generate_embeddings(app: Flask, entity_type: str = "all", batch_size: int = 15) -> None:
+    """
+    Generate embeddings for candidates and/or jobs that don't have embeddings yet.
+    
+    This is a one-time backfill operation for existing data. New candidates/jobs
+    get embeddings automatically.
+    
+    Args:
+        entity_type: What to process - 'candidates', 'jobs', or 'all' (default: 'all')
+        batch_size: Number of items per batch (default: 15, max: 20)
+    """
+    from app.services.embedding_service import EmbeddingService
+    from app.models.candidate import Candidate
+    from app.models.job_posting import JobPosting
+    from sqlalchemy import select
+    import time
+    
+    print("=" * 80)
+    print("EMBEDDING GENERATION - BACKFILL EXISTING DATA")
+    print("=" * 80)
+    
+    # Validate entity type
+    valid_types = ['candidates', 'jobs', 'all']
+    if entity_type.lower() not in valid_types:
+        print(f"❌ Error: Invalid entity_type '{entity_type}'")
+        print(f"   Valid types: {', '.join(valid_types)}")
+        sys.exit(1)
+    
+    # Validate batch size
+    if batch_size < 1 or batch_size > 20:
+        print(f"❌ Error: batch_size must be between 1 and 20 (got {batch_size})")
+        sys.exit(1)
+    
+    print(f"\n📋 Configuration:")
+    print(f"   Entity Type: {entity_type}")
+    print(f"   Batch Size: {batch_size}")
+    print(f"   API Rate Limit Protection: 0.5s delay between batches")
+    print()
+    
+    try:
+        with app.app_context():
+            service = EmbeddingService()
+            start_time = time.time()
+            
+            # Process candidates
+            if entity_type.lower() in ['candidates', 'all']:
+                print("=" * 80)
+                print("📊 PROCESSING CANDIDATES")
+                print("=" * 80)
+                
+                # Find candidates without embeddings
+                query = select(Candidate).where(Candidate.embedding.is_(None))
+                candidates = db.session.execute(query).scalars().all()
+                
+                total_candidates = len(candidates)
+                print(f"\nFound {total_candidates} candidates without embeddings")
+                
+                if total_candidates > 0:
+                    print(f"Processing in batches of {batch_size}...\n")
+                    
+                    successful = 0
+                    failed = 0
+                    
+                    for i in range(0, total_candidates, batch_size):
+                        batch = candidates[i:i + batch_size]
+                        batch_num = (i // batch_size) + 1
+                        total_batches = (total_candidates + batch_size - 1) // batch_size
+                        
+                        print(f"Batch {batch_num}/{total_batches} ({len(batch)} candidates):")
+                        
+                        for candidate in batch:
+                            try:
+                                embedding = service.generate_candidate_embedding(candidate)
+                                
+                                if embedding:
+                                    candidate.embedding = embedding
+                                    db.session.commit()
+                                    successful += 1
+                                    print(f"  ✅ {candidate.id}: {candidate.first_name} {candidate.last_name}")
+                                else:
+                                    failed += 1
+                                    print(f"  ❌ {candidate.id}: Failed (embedding was None)")
+                                    
+                            except Exception as e:
+                                failed += 1
+                                print(f"  ❌ {candidate.id}: {str(e)[:80]}")
+                                db.session.rollback()
+                        
+                        # Rate limiting delay
+                        if i + batch_size < total_candidates:
+                            print(f"  ⏳ Waiting 0.5s (rate limit)...\n")
+                            time.sleep(0.5)
+                    
+                    print(f"\n📊 Candidate Results:")
+                    print(f"   Total: {total_candidates}")
+                    print(f"   Successful: {successful}")
+                    print(f"   Failed: {failed}")
+                    print(f"   Success Rate: {(successful/total_candidates*100):.1f}%")
+                else:
+                    print("✅ All candidates already have embeddings!")
+            
+            # Process jobs
+            if entity_type.lower() in ['jobs', 'all']:
+                print("\n" + "=" * 80)
+                print("📊 PROCESSING JOB POSTINGS")
+                print("=" * 80)
+                
+                # Find jobs without embeddings
+                query = select(JobPosting).where(JobPosting.embedding.is_(None))
+                jobs = db.session.execute(query).scalars().all()
+                
+                total_jobs = len(jobs)
+                print(f"\nFound {total_jobs} jobs without embeddings")
+                
+                if total_jobs > 0:
+                    print(f"Processing in batches of {batch_size}...\n")
+                    
+                    successful = 0
+                    failed = 0
+                    
+                    for i in range(0, total_jobs, batch_size):
+                        batch = jobs[i:i + batch_size]
+                        batch_num = (i // batch_size) + 1
+                        total_batches = (total_jobs + batch_size - 1) // batch_size
+                        
+                        print(f"Batch {batch_num}/{total_batches} ({len(batch)} jobs):")
+                        
+                        for job in batch:
+                            try:
+                                embedding = service.generate_job_embedding(job)
+                                
+                                if embedding:
+                                    job.embedding = embedding
+                                    db.session.commit()
+                                    successful += 1
+                                    print(f"  ✅ {job.id}: {job.title} @ {job.company}")
+                                else:
+                                    failed += 1
+                                    print(f"  ❌ {job.id}: Failed (embedding was None)")
+                                    
+                            except Exception as e:
+                                failed += 1
+                                print(f"  ❌ {job.id}: {str(e)[:80]}")
+                                db.session.rollback()
+                        
+                        # Rate limiting delay
+                        if i + batch_size < total_jobs:
+                            print(f"  ⏳ Waiting 0.5s (rate limit)...\n")
+                            time.sleep(0.5)
+                    
+                    print(f"\n📊 Job Results:")
+                    print(f"   Total: {total_jobs}")
+                    print(f"   Successful: {successful}")
+                    print(f"   Failed: {failed}")
+                    print(f"   Success Rate: {(successful/total_jobs*100):.1f}%")
+                else:
+                    print("✅ All jobs already have embeddings!")
+            
+            # Final summary
+            duration = time.time() - start_time
+            print("\n" + "=" * 80)
+            print("✅ EMBEDDING GENERATION COMPLETE!")
+            print("=" * 80)
+            print(f"   Total Duration: {duration:.2f} seconds")
+            print(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print()
+            
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print("❌ EMBEDDING GENERATION FAILED")
+        print("=" * 80)
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def import_all_jobs(app: Flask, jobs_dir: str = "../jobs") -> None:
+    """
+    Import jobs from all platforms in the jobs directory into the GLOBAL job pool.
+    
+    Jobs are shared across ALL tenants. This import adds to the platform-wide job database.
+    
+    Args:
+        jobs_dir: Directory containing job JSON files (default: "../jobs")
+    """
+    from pathlib import Path
+    from app.services.job_import_service import JobImportService
+    
+    print("=" * 80)
+    print("BULK IMPORT: ALL JOB PLATFORMS (GLOBAL JOB POOL)")
+    print("=" * 80)
+    
+    jobs_path = Path(jobs_dir)
+    if not jobs_path.exists():
+        print(f"❌ Error: Jobs directory not found: {jobs_dir}")
+        sys.exit(1)
+    
+    # Find all job JSON files
+    platform_files = {
+        'indeed': list(jobs_path.glob('indeed_jobs_*.json')),
+        'dice': list(jobs_path.glob('dice_jobs_*.json')),
+        'techfetch': list(jobs_path.glob('techfetch_jobs_*.json')),
+        'glassdoor': list(jobs_path.glob('glassdoor_jobs_*.json')),
+        'monster': list(jobs_path.glob('monster_jobs_*.json')),
+    }
+    
+    total_files = sum(len(files) for files in platform_files.values())
+    if total_files == 0:
+        print(f"❌ No job files found in {jobs_dir}")
+        print("   Expected files: *_jobs_*.json")
+        sys.exit(1)
+    
+    print(f"\n📋 Found {total_files} job file(s):")
+    for platform, files in platform_files.items():
+        if files:
+            for file in files:
+                file_size = file.stat().st_size / 1024
+                print(f"   • {platform}: {file.name} ({file_size:.2f} KB)")
+    
+    print(f"\n🚀 Starting bulk import at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("   Jobs will be added to the GLOBAL pool (shared across all tenants)")
+    print()
+    
+    results = {}
+    total_imported = 0
+    total_failed = 0
+    
+    try:
+        with app.app_context():
+            # Initialize service (platform-level imports by PM_ADMIN)
+            service = JobImportService()
+            
+            for platform, files in platform_files.items():
+                if not files:
+                    continue
+                
+                for file in files:
+                    print(f"\n{'─' * 80}")
+                    print(f"📥 Importing {platform.upper()}: {file.name}")
+                    print(f"{'─' * 80}")
+                    
+                    try:
+                        batch = service.import_from_json(
+                            file_path=str(file),
+                            platform=platform,
+                            update_existing=True
+                        )
+                        
+                        results[file.name] = {
+                            'platform': platform,
+                            'status': batch.status,
+                            'total': batch.total_jobs,
+                            'new': batch.new_jobs,
+                            'updated': batch.updated_jobs,
+                            'failed': batch.failed_jobs,
+                            'duration': batch.duration_seconds,
+                        }
+                        
+                        total_imported += batch.new_jobs + batch.updated_jobs
+                        total_failed += batch.failed_jobs
+                        
+                        print(f"✅ {batch.new_jobs} new, {batch.updated_jobs} updated, {batch.failed_jobs} failed")
+                        
+                    except Exception as e:
+                        print(f"❌ Failed: {str(e)}")
+                        results[file.name] = {'status': 'FAILED', 'error': str(e)}
+            
+            # Summary
+            print("\n" + "=" * 80)
+            print("📊 BULK IMPORT SUMMARY")
+            print("=" * 80)
+            print(f"   Files Processed: {len(results)}")
+            print(f"   Total Jobs Imported: {total_imported}")
+            print(f"   Total Failed: {total_failed}")
+            print()
+            
+            for filename, result in results.items():
+                if result.get('status') == 'FAILED':
+                    print(f"   ❌ {filename}: {result.get('error', 'Unknown error')}")
+                else:
+                    print(f"   ✅ {filename}: {result['new']} new, {result['updated']} updated ({result['duration']:.1f}s)")
+            
+            print("\n" + "=" * 80)
+            print("✅ BULK IMPORT COMPLETED!")
+            print("=" * 80)
+            
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print("❌ BULK IMPORT FAILED")
+        print("=" * 80)
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     app = create_app()
     
@@ -197,6 +587,21 @@ if __name__ == "__main__":
         ),
         "seed-all": lambda: seed_all(app),
         "setup-spacy": lambda: setup_spacy(app),
+        "import-jobs": lambda: import_jobs(
+            app,
+            platform=sys.argv[2] if len(sys.argv) > 2 else "",
+            file_path=sys.argv[3] if len(sys.argv) > 3 else "",
+            update_existing=sys.argv[4].lower() != 'false' if len(sys.argv) > 4 else True
+        ),
+        "import-all-jobs": lambda: import_all_jobs(
+            app,
+            jobs_dir=sys.argv[2] if len(sys.argv) > 2 else "../jobs"
+        ),
+        "generate-embeddings": lambda: generate_embeddings(
+            app,
+            entity_type=sys.argv[2] if len(sys.argv) > 2 else "all",
+            batch_size=int(sys.argv[3]) if len(sys.argv) > 3 else 15
+        ),
     }
     
     if len(sys.argv) < 2:
@@ -216,6 +621,20 @@ if __name__ == "__main__":
         print("  seed-tenants        - Seed sample tenants")
         print("                        Usage: seed-tenants [count]")
         print("  seed-all            - Seed all (plans + PM admin + tenants)")
+        print("\nJob Import Commands (GLOBAL - shared across all tenants):")
+        print("  import-jobs         - Import jobs from single platform")
+        print("                        Usage: import-jobs <platform> <file> [update_existing]")
+        print("                        Example: import-jobs indeed ../jobs/indeed_jobs_2025-11-12.json true")
+        print("  import-all-jobs     - Import jobs from all platforms in directory")
+        print("                        Usage: import-all-jobs [jobs_dir]")
+        print("                        Example: import-all-jobs ../jobs")
+        print("\nEmbedding Commands:")
+        print("  generate-embeddings - Generate embeddings for existing data without embeddings")
+        print("                        Usage: generate-embeddings [entity_type] [batch_size]")
+        print("                        entity_type: 'candidates', 'jobs', or 'all' (default: 'all')")
+        print("                        batch_size: 1-20 (default: 15)")
+        print("                        Example: generate-embeddings all 15")
+        print("                        Example: generate-embeddings candidates 10")
         print("\nSetup Commands:")
         print("  setup-spacy         - Download and setup spaCy model for resume parsing")
         sys.exit(1)
