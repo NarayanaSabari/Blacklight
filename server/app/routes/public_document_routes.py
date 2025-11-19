@@ -38,7 +38,7 @@ def validate_invitation_token(invitation_token: str):
         ).model_dump()), 401)
     
     # Get invitation by token
-    invitation = InvitationService.get_invitation_by_token(invitation_token)
+    invitation = InvitationService.get_by_token(invitation_token)
     
     if not invitation:
         return None, (jsonify(ErrorResponse(

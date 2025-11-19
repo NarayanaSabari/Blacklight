@@ -744,6 +744,7 @@ class InvitationService:
             phone=data.get('phone'),
             status='NEW',
             source='self_onboarding',
+            onboarding_status='PENDING_ASSIGNMENT',
             
             # Professional details - use smart getter
             full_name=full_name,
