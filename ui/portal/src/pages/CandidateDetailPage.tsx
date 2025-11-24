@@ -12,7 +12,7 @@
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   Download,
@@ -67,7 +67,13 @@ import {
   DocumentViewer,
   DocumentVerificationModal,
 } from '@/components/documents';
-import type { Document, DocumentListItem } from '@/types';
+import { TagInput } from '@/components/ui/tag-input';
+import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
+import { EducationEditor } from '@/components/candidates/EducationEditor';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { candidateUpdateSchema, type CandidateUpdateInput } from '@/schemas/candidateSchema';
+import type { Document, DocumentListItem, Candidate as CandidateType } from '@/types';
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   processing: { color: 'bg-blue-500 text-white', label: 'Processing' },
@@ -93,6 +99,12 @@ export function CandidateDetailPage() {
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [formData, setFormData] = useState<CandidateUpdateInput | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Fetch candidate data
   const { data: candidate, isLoading, error } = useQuery({
@@ -218,6 +230,122 @@ export function CandidateDetailPage() {
     setSelectedDocument(null);
   };
 
+  // Edit mode handlers
+  const enterEditMode = () => {
+    if (!candidate) return;
+
+    // Initialize form data from candidate
+    setFormData({
+      first_name: candidate.first_name,
+      last_name: candidate.last_name,
+      email: candidate.email || '',
+      phone: candidate.phone || '',
+      full_name: candidate.full_name || '',
+      location: candidate.location || '',
+      linkedin_url: candidate.linkedin_url || '',
+      portfolio_url: candidate.portfolio_url || '',
+      current_title: candidate.current_title || '',
+      total_experience_years: candidate.total_experience_years,
+      notice_period: candidate.notice_period || '',
+      expected_salary: candidate.expected_salary || '',
+      professional_summary: candidate.professional_summary || '',
+      preferred_locations: candidate.preferred_locations || [],
+      skills: candidate.skills || [],
+      certifications: candidate.certifications || [],
+      languages: candidate.languages || [],
+      education: candidate.education || [],
+      work_experience: candidate.work_experience || [],
+      status: candidate.status,
+      source: candidate.source,
+    });
+    setIsEditMode(true);
+    setHasUnsavedChanges(false);
+    setValidationErrors({});
+  };
+
+  const exitEditMode = () => {
+    if (hasUnsavedChanges) {
+      if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+        return;
+      }
+    }
+    setIsEditMode(false);
+    setFormData(null);
+    setHasUnsavedChanges(false);
+    setValidationErrors({});
+  };
+
+  const updateField = (field: keyof CandidateUpdateInput, value: any) => {
+    if (!formData) return;
+
+    setFormData({ ...formData, [field]: value });
+    setHasUnsavedChanges(true);
+
+    // Clear validation error for this field
+    if (validationErrors[field]) {
+      const newErrors = { ...validationErrors };
+      delete newErrors[field];
+      setValidationErrors(newErrors);
+    }
+  };
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: CandidateUpdateInput) => candidateApi.updateCandidate(Number(id), data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+      toast.success('Candidate updated successfully');
+      setIsEditMode(false);
+      setFormData(null);
+      setHasUnsavedChanges(false);
+      setValidationErrors({});
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update candidate: ${error.message}`);
+    },
+  });
+
+  const handleSave = async () => {
+    if (!formData) return;
+
+    // Validate with Zod
+    const result = candidateUpdateSchema.safeParse(formData);
+
+    if (!result.success) {
+      const errors: Record<string, string> = {};
+
+      // Defensive check for result.error
+      if (result.error && result.error.errors) {
+        result.error.errors.forEach((err) => {
+          if (err.path[0]) {
+            errors[err.path[0].toString()] = err.message;
+          }
+        });
+      }
+
+      setValidationErrors(errors);
+      toast.error('Please fix validation errors before saving');
+      return;
+    }
+
+    // Save
+    updateMutation.mutate(formData);
+  };
+
+  // Unsaved changes warning
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+
   // Loading state
   if (isLoading) {
     return (
@@ -301,69 +429,99 @@ export function CandidateDetailPage() {
 
           {/* Right: Action Buttons */}
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => navigate(`/candidates/${id}/matches`)}
-              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-            >
-              <Target className="h-4 w-4 mr-2" />
-              Matches
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(`/candidates/${id}/edit`)}
-              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-            >
-              <Pencil className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAssignmentDialog(true)}
-              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              {currentAssignment ? 'Reassign' : 'Assign'}
-            </Button>
-            {candidate.resume_file_url && (
+            {isEditMode ? (
               <>
                 <Button
-                  variant="outline"
+                  variant="default"
                   size="sm"
-                  onClick={handleDownloadResume}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  onClick={handleSave}
+                  disabled={updateMutation.isPending || !hasUnsavedChanges}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black bg-green-600 hover:bg-green-700 text-white"
                 >
-                  <Download className="h-4 w-4 mr-2" />
-                  Resume
+                  {updateMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-2" />
+                  )}
+                  Save Changes
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleReparse}
-                  disabled={reparseMutation.isPending}
+                  onClick={exitEditMode}
+                  disabled={updateMutation.isPending}
                   className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
                 >
-                  {reparseMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Re-parse
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => navigate(`/candidates/${id}/matches`)}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  <Target className="h-4 w-4 mr-2" />
+                  Matches
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={enterEditMode}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAssignmentDialog(true)}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  {currentAssignment ? 'Reassign' : 'Assign'}
+                </Button>
+                {candidate.resume_file_url && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadResume}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Resume
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleReparse}
+                      disabled={reparseMutation.isPending}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      {reparseMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      Re-parse
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
                 </Button>
               </>
             )}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setShowDeleteDialog(true)}
-              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
           </div>
         </div>
       </div>
@@ -380,7 +538,7 @@ export function CandidateDetailPage() {
                 Contact Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {candidate.email && (
                   <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
@@ -449,7 +607,7 @@ export function CandidateDetailPage() {
                   Professional Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
                   {candidate.professional_summary}
                 </p>
@@ -469,7 +627,7 @@ export function CandidateDetailPage() {
                   {candidate.work_experience.length} position{candidate.work_experience.length !== 1 ? 's' : ''}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="space-y-6">
                   {candidate.work_experience.map((exp, index) => (
                     <div key={index}>
@@ -522,7 +680,7 @@ export function CandidateDetailPage() {
                   Education
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="space-y-4">
                   {candidate.education.map((edu, index) => (
                     <div key={index}>
@@ -560,7 +718,7 @@ export function CandidateDetailPage() {
                 {documentsResponse?.total || 0} document{documentsResponse?.total !== 1 ? 's' : ''} uploaded
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               {documentsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -657,7 +815,7 @@ export function CandidateDetailPage() {
             <CardHeader className="bg-slate-50">
               <CardTitle>Professional Details</CardTitle>
             </CardHeader>
-            <CardContent className="pt-6 space-y-4">
+            <CardContent className="space-y-4">
               {candidate.total_experience_years !== undefined && (
                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
                   <span className="text-sm font-medium text-slate-600">Experience</span>
@@ -692,25 +850,39 @@ export function CandidateDetailPage() {
           </Card>
 
           {/* Skills */}
-          {candidate.skills && candidate.skills.length > 0 && (
+          {(candidate.skills && candidate.skills.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10">
                 <CardTitle className="text-base">Skills</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
-                <div className="flex flex-wrap gap-2">
-                  {candidate.skills.map((skill, index) => (
-                    <Badge
-                      key={index}
-                      className="bg-primary text-primary-foreground border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                    >
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
+              <CardContent>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="skills">Skills</Label>
+                    <TagInput
+                      value={formData?.skills || []}
+                      onChange={(skills) => updateField('skills', skills)}
+                      placeholder="Add a skill (e.g., React, Python)..."
+                    />
+                    <p className="text-xs text-slate-500">
+                      Press Enter or blur to add a skill. Click X to remove.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {candidate.skills.map((skill, index) => (
+                      <Badge
+                        key={index}
+                        className="bg-primary text-primary-foreground border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Certifications */}
           {candidate.certifications && candidate.certifications.length > 0 && (
@@ -721,7 +893,7 @@ export function CandidateDetailPage() {
                   Certifications
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <ul className="space-y-2">
                   {candidate.certifications.map((cert, index) => (
                     <li key={index} className="flex items-start gap-2 text-sm">
@@ -743,7 +915,7 @@ export function CandidateDetailPage() {
                   Languages
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {candidate.languages.map((lang, index) => (
                     <Badge key={index} variant="outline" className="border-2 border-black">
@@ -764,7 +936,7 @@ export function CandidateDetailPage() {
                   Preferred Locations
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 <ul className="space-y-2">
                   {candidate.preferred_locations.map((loc, index) => (
                     <li key={index} className="flex items-center gap-2 text-sm">
@@ -833,7 +1005,7 @@ export function CandidateDetailPage() {
               <CardHeader className="bg-slate-50">
                 <CardTitle className="text-base">Resume Information</CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 space-y-2 text-sm">
+              <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-600">Uploaded</span>
                   <span className="font-medium text-slate-900">
