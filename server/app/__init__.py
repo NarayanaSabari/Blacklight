@@ -17,20 +17,22 @@ from config.base import BaseConfig
 db = SQLAlchemy()
 cors = CORS()
 
-# Initialize rate limiter with function to check if path should be exempt
-def _is_exempt_from_rate_limit():
-    """Check if current request should be exempt from rate limiting."""
+# Custom key function for rate limiting that exempts Inngest endpoints
+def _get_rate_limit_key():
+    """
+    Get key for rate limiting. Returns None for exempt endpoints.
+    Returning None disables rate limiting for that request.
+    """
     if has_request_context() and request.path:
-        # Exempt Inngest endpoint from rate limiting (heartbeat requests)
+        # Exempt Inngest endpoint from rate limiting (heartbeat + function execution)
         if request.path.startswith('/api/inngest'):
-            return True
-    return False
+            return None
+    # For all other endpoints, use remote address
+    return get_remote_address()
 
 limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    # Exempt specific endpoints from rate limiting
-    exempt_when=_is_exempt_from_rate_limit
+    key_func=_get_rate_limit_key,
+    default_limits=["200 per day", "50 per hour"]
 )
 redis_client = None
 
