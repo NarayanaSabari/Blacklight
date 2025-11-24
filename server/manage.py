@@ -67,6 +67,59 @@ def seed_tenants(app: Flask, count: int = 3) -> None:
 
 
 def seed_all(app: Flask) -> None:
+    """Seed all (plans + PM admin + tenants)."""
+    print("🌱 Seeding all data...")
+    
+    with app.app_context():
+        # 1. Seed subscription plans
+        from app.seeds.subscription_plans import seed_subscription_plans
+        seed_subscription_plans()
+        
+        # 2. Seed PM admin user
+        from app.seeds.pm_admin import seed_pm_admin
+        seed_pm_admin()
+        
+        # 3. Seed tenants
+        from app.seeds.tenants import seed_sample_tenants
+        seed_sample_tenants(count=5)
+        
+    print("✅ All data seeded successfully!")
+
+
+def fix_processing_candidates(app: Flask, tenant_id: int = None) -> None:
+    """
+    Fix candidates stuck in 'processing' status by updating them to 'pending_review'
+    
+    Args:
+        tenant_id: Optional tenant ID to filter by. If None, fixes all tenants.
+    """
+    from app.models.candidate import Candidate
+    from sqlalchemy import select
+    
+    with app.app_context():
+        # Build query
+        stmt = select(Candidate).where(Candidate.status == 'processing')
+        if tenant_id:
+            stmt = stmt.where(Candidate.tenant_id == tenant_id)
+        
+        stuck_candidates = list(db.session.scalars(stmt))
+        
+        if not stuck_candidates:
+            print(f"✅ No candidates stuck in 'processing' status")
+            return
+        
+        print(f"Found {len(stuck_candidates)} candidates stuck in 'processing' status")
+        
+        # Update all to pending_review
+        for candidate in stuck_candidates:
+            candidate.status = 'pending_review'
+            print(f"  - Updated candidate {candidate.id} ({candidate.first_name} {candidate.last_name}) to 'pending_review'")
+        
+        db.session.commit()
+        print(f"✅ Successfully updated {len(stuck_candidates)} candidates to 'pending_review' status")
+
+
+def seed_all(app: Flask) -> None:
     """Seed all data: plans, PM admin, roles, permissions, and sample tenants."""
     print("=" * 60)
     print("SEEDING ALL DATA")
@@ -602,6 +655,10 @@ if __name__ == "__main__":
             entity_type=sys.argv[2] if len(sys.argv) > 2 else "all",
             batch_size=int(sys.argv[3]) if len(sys.argv) > 3 else 15
         ),
+        "fix-processing-candidates": lambda: fix_processing_candidates(
+            app,
+            tenant_id=int(sys.argv[2]) if len(sys.argv) > 2 else None
+        ),
     }
     
     if len(sys.argv) < 2:
@@ -635,6 +692,10 @@ if __name__ == "__main__":
         print("                        batch_size: 1-20 (default: 15)")
         print("                        Example: generate-embeddings all 15")
         print("                        Example: generate-embeddings candidates 10")
+        print("\nMaintenance Commands:")
+        print("  fix-processing-candidates - Update stuck candidates from 'processing' to 'pending_review'")
+        print("                        Usage: fix-processing-candidates [tenant_id]")
+        print("                        Example: fix-processing-candidates 2")
         print("\nSetup Commands:")
         print("  setup-spacy         - Download and setup spaCy model for resume parsing")
         sys.exit(1)

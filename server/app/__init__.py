@@ -16,11 +16,34 @@ from config.base import BaseConfig
 # Initialize extensions
 db = SQLAlchemy()
 cors = CORS()
+
+# Initialize rate limiter with function to check if path should be exempt
+def _is_exempt_from_rate_limit():
+    """Check if current request should be exempt from rate limiting."""
+    if has_request_context() and request.path:
+        # Exempt Inngest endpoint from rate limiting (heartbeat requests)
+        if request.path.startswith('/api/inngest'):
+            return True
+    return False
+
 limiter = Limiter(
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
+    default_limits=["200 per day", "50 per hour"],
+    # Exempt specific endpoints from rate limiting
+    exempt_when=_is_exempt_from_rate_limit
 )
 redis_client = None
+
+
+class SuppressInngestHeartbeatFilter(logging.Filter):
+    """Filter to suppress Inngest heartbeat requests from access logs."""
+    
+    def filter(self, record):
+        # Suppress PUT requests to /api/inngest (Inngest heartbeat/sync)
+        if hasattr(record, 'msg') and isinstance(record.msg, str):
+            if 'PUT /api/inngest' in record.msg and '200' in record.msg:
+                return False
+        return True
 
 
 def setup_logging(app: Flask, log_format: str = "json") -> None:
@@ -38,6 +61,10 @@ def setup_logging(app: Flask, log_format: str = "json") -> None:
     
     # Set log level
     app.logger.setLevel(getattr(logging, log_level))
+    
+    # Suppress Inngest heartbeat logs from Werkzeug (Flask's request logger)
+    werkzeug_logger = logging.getLogger('werkzeug')
+    werkzeug_logger.addFilter(SuppressInngestHeartbeatFilter())
     
     # Log application startup information
     app.logger.info(
@@ -185,35 +212,25 @@ def register_inngest(app: Flask) -> None:
         # Get the Inngest serve path (default: /api/inngest)
         inngest_path = app.config.get('INNGEST_SERVE_PATH', '/api/inngest')
         
-        # Register Inngest endpoint - serve() registers routes directly on the app
+        app.logger.info(f"Inngest: Attempting to register {len(INNGEST_FUNCTIONS)} functions")
+        app.logger.info(f"Inngest: Functions to register: {[f.name for f in INNGEST_FUNCTIONS]}")
+        
+        # Register Inngest endpoint - inngest.flask.serve automatically registers at /api/inngest
+        # It only takes 3 parameters: app, client, functions (no serve_path parameter)
         inngest_serve_func(
             app,
             inngest_client,
             INNGEST_FUNCTIONS,
         )
         
-        # Exempt Inngest endpoint from rate limiting using before_request
-        # The Inngest SDK handles its own rate limiting and retries
-        @app.before_request
-        def _exempt_inngest_from_rate_limit():
-            """Exempt Inngest endpoints from Flask-Limiter rate limiting."""
-            if request.path and request.path.startswith(inngest_path):
-                # Mark this endpoint as exempt from rate limiting
-                # Flask-Limiter checks g._rate_limiting_complete flag
-                g._rate_limiting_complete = True
-                
-                # Optional: Suppress heartbeat logs in dev mode (PUT requests are sync/heartbeat)
-                # Uncomment the lines below to reduce log noise:
-                # if request.method == 'PUT':
-                #     g._suppress_access_log = True
-        
-        app.logger.info(f"Inngest: Registered {len(INNGEST_FUNCTIONS)} functions")
+        app.logger.info(f"Inngest: Successfully registered {len(INNGEST_FUNCTIONS)} functions")
         app.logger.info(f"Inngest: Serving at {inngest_path}")
-        app.logger.info(f"Inngest: Rate limiting exempted for {inngest_path}")
+        app.logger.info(f"Inngest: Rate limiting automatically exempted for {inngest_path}")
     except ImportError as e:
         app.logger.warning(f"Inngest not available: {e}")
     except Exception as e:
         app.logger.error(f"Failed to register Inngest: {e}", exc_info=True)
+        raise  # Re-raise to see full stack trace
 
 
 def create_app(config: Type[BaseConfig] = None) -> Flask:

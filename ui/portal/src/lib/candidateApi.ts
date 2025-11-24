@@ -48,17 +48,17 @@ export const candidateApi = {
    */
   listCandidates: async (filters: CandidateFilters = {}): Promise<CandidateListResponse> => {
     const params = new URLSearchParams();
-    
+
     if (filters.status) params.append('status', filters.status);
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.per_page) params.append('per_page', filters.per_page.toString());
-    
+
     // Handle skills array
     if (filters.skills && filters.skills.length > 0) {
       filters.skills.forEach(skill => params.append('skills[]', skill));
     }
-    
+
     return apiRequest.get<CandidateListResponse>(
       `/api/candidates?${params.toString()}`
     );
@@ -70,7 +70,7 @@ export const candidateApi = {
   uploadResume: async (file: File): Promise<UploadResumeResponse> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     return apiRequest.post<UploadResumeResponse>(
       '/api/candidates/upload',
       formData,
@@ -92,7 +92,7 @@ export const candidateApi = {
   ): Promise<UploadResumeResponse> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     return apiRequest.post<UploadResumeResponse>(
       `/api/candidates/${candidateId}/resume`,
       formData,
@@ -123,6 +123,28 @@ export const candidateApi = {
    */
   getStats: async (): Promise<CandidateStats> => {
     return apiRequest.get<CandidateStats>('/api/candidates/stats');
+  },
+
+  /**
+   * Get candidates pending review (status='pending_review')
+   */
+  getPendingReview: async (): Promise<CandidateListResponse> => {
+    return apiRequest.get<CandidateListResponse>('/api/candidates/pending-review');
+  },
+
+  /**
+   * Review and edit parsed candidate data
+   */
+  reviewCandidate: async (id: number, data: Partial<CandidateUpdateInput>): Promise<Candidate> => {
+    return apiRequest.put<Candidate>(`/api/candidates/${id}/review`, data);
+  },
+
+  /**
+   * Approve candidate after review
+   * Changes status from 'pending_review' to 'onboarded' and triggers job matching
+   */
+  approveCandidate: async (id: number): Promise<Candidate> => {
+    return apiRequest.post<Candidate>(`/api/candidates/${id}/approve`);
   },
 };
 

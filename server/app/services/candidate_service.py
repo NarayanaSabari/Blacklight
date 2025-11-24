@@ -458,6 +458,7 @@ class CandidateService:
         from app.models.candidate_document import CandidateDocument
         from app.models.candidate_assignment import CandidateAssignment
         from app.models.assignment_notification import AssignmentNotification
+        from app.models.candidate_job_match import CandidateJobMatch
         
         stmt = select(Candidate).where(
             Candidate.id == candidate_id,
@@ -476,7 +477,9 @@ class CandidateService:
         documents = db.session.scalars(doc_stmt).all()
         document_paths = [doc.file_path for doc in documents if doc.file_path]
         
-        # Manually delete assignment notifications first to avoid FK constraint issues
+        # Manually delete related records to avoid FK constraint issues
+        
+        # 1. Delete assignment notifications first
         assignment_stmt = select(CandidateAssignment).where(CandidateAssignment.candidate_id == candidate_id)
         assignments = db.session.scalars(assignment_stmt).all()
         for assignment in assignments:
@@ -485,6 +488,12 @@ class CandidateService:
             notifications = db.session.scalars(notification_stmt).all()
             for notification in notifications:
                 db.session.delete(notification)
+        
+        # 2. Delete job matches for this candidate
+        job_match_stmt = select(CandidateJobMatch).where(CandidateJobMatch.candidate_id == candidate_id)
+        job_matches = db.session.scalars(job_match_stmt).all()
+        for job_match in job_matches:
+            db.session.delete(job_match)
         
         # Delete candidate from database (this will cascade to related records)
         try:

@@ -48,19 +48,23 @@ import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialo
 import type { CandidateListItem, CandidateStatus } from '@/types/candidate';
 
 const STATUS_COLORS: Record<CandidateStatus, string> = {
+  processing: 'bg-orange-100 text-orange-800',
+  pending_review: 'bg-yellow-100 text-yellow-800',
   new: 'bg-blue-100 text-blue-800',
-  screening: 'bg-yellow-100 text-yellow-800',
-  interviewed: 'bg-purple-100 text-purple-800',
+  screening: 'bg-purple-100 text-purple-800',
+  interviewed: 'bg-indigo-100 text-indigo-800',
   offered: 'bg-green-100 text-green-800',
   hired: 'bg-emerald-100 text-emerald-800',
   rejected: 'bg-red-100 text-red-800',
   withdrawn: 'bg-gray-100 text-gray-800',
+  onboarded: 'bg-teal-100 text-teal-800',
+  ready_for_assignment: 'bg-cyan-100 text-cyan-800',
 };
 
 export function CandidatesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  
+
   // State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -101,10 +105,17 @@ export function CandidatesPage() {
       setDeleteDialogOpen(false);
       setCandidateToDelete(null);
     },
-    onError: async (error: Error) => {
+    onError: async (error: any) => {
       // Log the error for debugging
       console.error('Delete error:', error);
-      toast.error(error.message || 'Failed to delete candidate');
+
+      // If 404, the candidate doesn't exist (already deleted) - treat as success
+      if (error.response?.status === 404 || error.message?.includes('404')) {
+        toast.success('Candidate deleted successfully');
+      } else {
+        toast.error(error.message || 'Failed to delete candidate');
+      }
+
       setDeleteDialogOpen(false);
       setCandidateToDelete(null);
       // Force refetch anyway in case the candidate was actually deleted
@@ -204,7 +215,7 @@ export function CandidatesPage() {
                 {candidatesData?.total || 0} total candidates
               </CardDescription>
             </div>
-            
+
             <div className="flex gap-2">
               <div className="relative flex-1 md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -215,13 +226,15 @@ export function CandidatesPage() {
                   className="pl-9"
                 />
               </div>
-              
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="pending_review">Pending Review</SelectItem>
                   <SelectItem value="new">New</SelectItem>
                   <SelectItem value="screening">Screening</SelectItem>
                   <SelectItem value="interviewed">Interviewed</SelectItem>
@@ -229,12 +242,14 @@ export function CandidatesPage() {
                   <SelectItem value="hired">Hired</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
                   <SelectItem value="withdrawn">Withdrawn</SelectItem>
+                  <SelectItem value="onboarded">Onboarded</SelectItem>
+                  <SelectItem value="ready_for_assignment">Ready for Assignment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -327,14 +342,14 @@ export function CandidatesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="gap-2"
                               onClick={() => navigate(`/candidates/${candidate.id}`)}
                             >
                               <Eye className="h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               className="gap-2"
                               onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
                             >
@@ -351,6 +366,36 @@ export function CandidatesPage() {
                               <UserPlus className="h-4 w-4" />
                               Assign
                             </DropdownMenuItem>
+
+                            {/* Show Review & Approve for pending_review status */}
+                            {candidate.status === 'pending_review' && (
+                              <>
+                                <DropdownMenuItem
+                                  className="gap-2 text-blue-600"
+                                  onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  Review & Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="gap-2 text-green-600"
+                                  onClick={async () => {
+                                    try {
+                                      await candidateApi.approveCandidate(candidate.id);
+                                      toast.success('Candidate approved! Job matching in progress...');
+                                      await queryClient.refetchQueries({ queryKey: ['candidates'] });
+                                      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
+                                    } catch (error: any) {
+                                      toast.error(error.message || 'Failed to approve candidate');
+                                    }
+                                  }}
+                                >
+                                  <UserCheck className="h-4 w-4" />
+                                  Approve
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
                             <DropdownMenuItem
                               className="gap-2 text-destructive"
                               onClick={() => handleDelete(candidate.id)}

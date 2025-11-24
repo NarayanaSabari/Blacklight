@@ -2,14 +2,18 @@
  * Candidate-related types
  */
 
-export type CandidateStatus = 
-  | 'new' 
-  | 'screening' 
-  | 'interviewed' 
-  | 'offered' 
-  | 'hired' 
-  | 'rejected' 
-  | 'withdrawn';
+export type CandidateStatus =
+  | 'processing'
+  | 'pending_review'
+  | 'new'
+  | 'screening'
+  | 'interviewed'
+  | 'offered'
+  | 'hired'
+  | 'rejected'
+  | 'withdrawn'
+  | 'onboarded'
+  | 'ready_for_assignment';
 
 export interface Education {
   degree: string;
@@ -33,43 +37,43 @@ export interface WorkExperience {
 export interface Candidate {
   id: number;
   tenant_id: number;
-  
+
   // Basic Info
   first_name: string;
   last_name: string;
   email?: string;
   phone?: string;
   full_name?: string;
-  
+
   // Resume Info
   resume_file_path?: string;
   resume_file_url?: string;
   resume_uploaded_at?: string;
   resume_parsed_at?: string;
-  
+
   // Enhanced Personal Info
   location?: string;
   linkedin_url?: string;
   portfolio_url?: string;
-  
+
   // Professional Info
   current_title?: string;
   total_experience_years?: number;
   notice_period?: string;
   expected_salary?: string;
   professional_summary?: string;
-  
+
   // Arrays
   preferred_locations: string[];
   skills: string[];
   certifications: string[];
   languages: string[];
-  
+
   // JSONB data
   education: Education[];
   work_experience: WorkExperience[];
   parsed_resume_data?: Record<string, unknown>;
-  
+
   // Metadata
   status: CandidateStatus;
   source: string;
@@ -154,7 +158,7 @@ export interface CandidateUpdateInput {
 
 export interface UploadResumeResponse {
   candidate_id?: number;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'processing'; // Added 'processing' for async workflow
   message?: string;
   error?: string;
   file_info?: {

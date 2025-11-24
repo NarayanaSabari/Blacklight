@@ -43,7 +43,7 @@ class CandidateCreateSchema(BaseModel):
     work_experience: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     
     # Metadata
-    status: Optional[str] = Field(default='new', max_length=50)
+    status: Optional[str] = Field(default='processing', max_length=50)  # Default for manual upload
     source: Optional[str] = Field(default='manual', max_length=100)
     
     model_config = ConfigDict(from_attributes=True)
@@ -52,7 +52,11 @@ class CandidateCreateSchema(BaseModel):
     @classmethod
     def validate_status(cls, v: str) -> str:
         """Validate status is one of allowed values"""
-        allowed = ['new', 'screening', 'interviewed', 'offered', 'hired', 'rejected', 'withdrawn']
+        allowed = [
+            'processing', 'pending_review', 'new', 'screening', 
+            'interviewed', 'offered', 'hired', 'rejected', 'withdrawn', 
+            'onboarded', 'ready_for_assignment'
+        ]
         if v and v not in allowed:
             raise ValueError(f"Status must be one of: {', '.join(allowed)}")
         return v
@@ -63,7 +67,7 @@ class CandidateUpdateSchema(BaseModel):
     
     # All fields optional for updates
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)  # Allow empty string
     email: Optional[EmailStr] = None
     phone: Optional[str] = Field(None, max_length=20)
     full_name: Optional[str] = Field(None, max_length=200)
@@ -92,7 +96,11 @@ class CandidateUpdateSchema(BaseModel):
         """Validate status is one of allowed values"""
         if v is None:
             return v
-        allowed = ['new', 'screening', 'interviewed', 'offered', 'hired', 'rejected', 'withdrawn']
+        allowed = [
+            'processing', 'pending_review', 'new', 'screening', 
+            'interviewed', 'offered', 'hired', 'rejected', 'withdrawn', 
+            'onboarded', 'ready_for_assignment'
+        ]
         if v not in allowed:
             raise ValueError(f"Status must be one of: {', '.join(allowed)}")
         return v
@@ -171,15 +179,15 @@ class CandidateResponseSchema(BaseModel):
     expected_salary: Optional[str] = None
     professional_summary: Optional[str] = None
     
-    # Arrays
-    preferred_locations: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=list)
-    certifications: List[str] = Field(default_factory=list)
-    languages: List[str] = Field(default_factory=list)
+    # Arrays - handle None from database
+    preferred_locations: Optional[List[str]] = Field(default_factory=list)
+    skills: Optional[List[str]] = Field(default_factory=list)
+    certifications: Optional[List[str]] = Field(default_factory=list)
+    languages: Optional[List[str]] = Field(default_factory=list)
     
     # JSONB data
-    education: List[Dict[str, Any]] = Field(default_factory=list)
-    work_experience: List[Dict[str, Any]] = Field(default_factory=list)
+    education: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    work_experience: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     parsed_resume_data: Optional[Dict[str, Any]] = None
     
     # Metadata
@@ -189,6 +197,12 @@ class CandidateResponseSchema(BaseModel):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('preferred_locations', 'skills', 'certifications', 'languages', 'education', 'work_experience', mode='before')
+    @classmethod
+    def convert_none_to_empty_list(cls, v):
+        """Convert None to empty list for array fields"""
+        return v if v is not None else []
 
 
 class CandidateListItemSchema(BaseModel):
@@ -204,7 +218,7 @@ class CandidateListItemSchema(BaseModel):
     current_title: Optional[str] = None
     location: Optional[str] = None
     total_experience_years: Optional[int] = None
-    skills: List[str] = Field(default_factory=list)
+    skills: Optional[List[str]] = Field(default_factory=list)
     status: str
     source: str
     resume_uploaded_at: Optional[datetime] = None
@@ -212,6 +226,12 @@ class CandidateListItemSchema(BaseModel):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('skills', mode='before')
+    @classmethod
+    def convert_none_to_empty_list(cls, v):
+        """Convert None to empty list for skills"""
+        return v if v is not None else []
 
 
 class CandidateListResponseSchema(BaseModel):

@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     
     # Invitation Settings
     invitation_expiry_hours: int = Field(default=168, env="INVITATION_EXPIRY_HOURS")  # 7 days
-    frontend_base_url: str = Field(default="http://localhost:5173", env="FRONTEND_BASE_URL")
+    frontend_base_url: str = Field(default="http://localhost:5174", env="FRONTEND_BASE_URL")
     
     # File Storage Configuration
     storage_backend: str = Field(default="local", env="STORAGE_BACKEND")  # 'local' or 'gcs'

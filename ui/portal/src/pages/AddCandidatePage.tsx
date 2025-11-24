@@ -38,7 +38,23 @@ export function AddCandidatePage() {
 
   const handleUploadSuccess = (result: UploadResumeResponse) => {
     setParsedData(result);
-    setShowForm(true);
+    
+    // Check if this is async processing (new flow)
+    if (result.status === 'processing' || result.message?.includes('Processing')) {
+      // Show success toast for async processing
+      toast.success('Resume uploaded successfully!', {
+        description: 'AI parsing in progress. The candidate will appear in "Review Submissions" shortly.',
+        duration: 6000,
+      });
+      
+      // Navigate to candidate-management with pending-review tab
+      setTimeout(() => {
+        navigate('/candidate-management?tab=onboarding');
+      }, 2000);
+    } else {
+      // Old sync flow - show form immediately
+      setShowForm(true);
+    }
   };
 
   const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {

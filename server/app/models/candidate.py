@@ -38,9 +38,10 @@ class Candidate(BaseModel):
     status = db.Column(
         String(50), 
         nullable=False, 
-        default='NEW'
-    )  # NEW, SCREENING, INTERVIEWING, OFFERED, HIRED, REJECTED, WITHDRAWN
-    source = db.Column(String(100))  # LinkedIn, Referral, Job Board, etc.
+        default='processing'  # Default for manual upload
+    )  # processing, pending_review, new, screening, interviewed, offered, hired, rejected, withdrawn, onboarded, ready_for_assignment
+    source = db.Column(String(100))  # LinkedIn, Referral, Job Board, resume_upload, invitation, etc.
+
     
     # Onboarding Workflow Fields
     onboarding_status = db.Column(

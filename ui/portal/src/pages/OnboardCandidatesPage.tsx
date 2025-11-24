@@ -57,15 +57,18 @@ import {
   Search,
   RefreshCw,
   ClipboardList,
-  Mail, // Added Mail
+  Mail,
+  Upload, // Added for resume uploads section
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { onboardingApi } from '@/lib/onboardingApi';
 import { invitationApi } from '@/lib/api/invitationApi'; // Added import
+import { candidateApi } from '@/lib/candidateApi'; // Added for async resume uploads
 import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { teamApi } from '@/lib/teamApi';
 import { usePermissions } from '@/hooks/usePermissions';
-import type { OnboardingStatus, CandidateOnboardingInfo, InvitationWithRelations } from '@/types'; // Modified import
+import { ReviewModal } from '@/components/candidates/ReviewModal'; // Added for async resume review
+import type { OnboardingStatus, CandidateOnboardingInfo, InvitationWithRelations, Candidate } from '@/types'; // Modified import
 
 const ONBOARDING_STATUS_COLORS: Record<OnboardingStatus, string> = {
   PENDING_ASSIGNMENT: 'bg-gray-100 text-gray-800',
@@ -90,7 +93,9 @@ export function OnboardCandidatesPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [onboardDialogOpen, setOnboardDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false); // For async resume review
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateOnboardingInfo | null>(null);
+  const [selectedResumeCandidate, setSelectedResumeCandidate] = useState<Candidate | null>(null); // For async resume candidates
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState('');
 
@@ -109,7 +114,7 @@ export function OnboardCandidatesPage() {
     enabled: canViewCandidates,
   });
 
-  // Fetch submitted invitations for review
+  // Fetch submitted invitations for review (self-onboarding)
   const {
     data: submittedInvitationsData,
     isLoading: isLoadingSubmittedInvitations,
@@ -117,6 +122,16 @@ export function OnboardCandidatesPage() {
   } = useQuery({
     queryKey: ['submitted-invitations', page],
     queryFn: () => invitationApi.getSubmittedInvitations({ page, per_page: 20 }),
+    enabled: canViewCandidates && activeTab === 'pending-review',
+  });
+
+  // Fetch candidates with status='pending_review' (async resume uploads)
+  const {
+    data: pendingReviewCandidatesData,
+    isLoading: isLoadingPendingReviewCandidates,
+  } = useQuery({
+    queryKey: ['candidates-pending-review', page],
+    queryFn: () => candidateApi.getPendingReview(),
     enabled: canViewCandidates && activeTab === 'pending-review',
   });
 
@@ -418,14 +433,14 @@ export function OnboardCandidatesPage() {
   }
 
   const stats = {
-    pending_review: submittedInvitationsData?.total || 0, // Use actual count
+    pending_review: (submittedInvitationsData?.total || 0) + (pendingReviewCandidatesData?.total || 0), // Include both sources
     pending_assignment: statsData?.pending_assignment || 0,
     assigned: statsData?.assigned || 0,
     pending_onboarding: statsData?.pending_onboarding || 0,
     onboarded: statsData?.onboarded || 0,
     approved: statsData?.approved || 0,
     rejected: statsData?.rejected || 0,
-    total: (statsData?.total || 0) + (submittedInvitationsData?.total || 0), // Sum of all
+    total: (statsData?.total || 0) + (submittedInvitationsData?.total || 0) + (pendingReviewCandidatesData?.total || 0), // Sum of all
   };
 
   return (
@@ -521,121 +536,209 @@ export function OnboardCandidatesPage() {
             </div>
 
             <TabsContent value="pending-review" className="mt-0">
-              {isLoadingSubmittedInvitations ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : submittedInvitationsError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to load submitted invitations. Please try again.
-                  </AlertDescription>
-                </Alert>
-              ) : submittedInvitationsData?.items.length > 0 ? (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Submitted At</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {submittedInvitationsData.items.map((invitation) => (
-                        <TableRow key={invitation.id}>
-                          <TableCell className="font-medium">
-                            {invitation.first_name} {invitation.last_name}
-                          </TableCell>
-                          <TableCell>{invitation.email}</TableCell>
-                          <TableCell>{invitation.position || '—'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {invitation.status.replace(/_/g, ' ')}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm text-slate-600">
-                              {formatDate(invitation.submitted_at)}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
+              <div className="space-y-6">
+                {/* Async Resume Uploads Section */}
+                {(isLoadingPendingReviewCandidates || (pendingReviewCandidatesData && pendingReviewCandidatesData.candidates.length > 0)) && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Resume Uploads (AI Parsed)
+                      {pendingReviewCandidatesData && pendingReviewCandidatesData.total > 0 && (
+                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                          {pendingReviewCandidatesData.total}
+                        </Badge>
+                      )}
+                    </h3>
+                    {isLoadingPendingReviewCandidates ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </div>
+                    ) : pendingReviewCandidatesData && pendingReviewCandidatesData.candidates.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Source</TableHead>
+                            <TableHead>Uploaded At</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {pendingReviewCandidatesData.candidates.map((candidate: Candidate) => (
+                            <TableRow key={`resume-${candidate.id}`}>
+                              <TableCell className="font-medium">
+                                {candidate.first_name} {candidate.last_name}
+                              </TableCell>
+                              <TableCell>{candidate.email || '—'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="bg-yellow-50">Resume Upload</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm text-slate-600">
+                                  {candidate.resume_uploaded_at ? formatDate(candidate.resume_uploaded_at) : '—'}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedResumeCandidate(candidate);
+                                    setReviewModalOpen(true);
+                                  }}
+                                  className="gap-2"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                  Review & Approve
                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => navigate(`/invitations/${invitation.id}/review`)}>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  Review Submission
-                                </DropdownMenuItem>
-                                {canApproveCandidates && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => handleApproveInvitation(invitation.id)}>
-                                      <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                                      Approve
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleRejectInvitation(invitation.id)} className="text-red-600">
-                                      <XCircle className="h-4 w-4 mr-2" />
-                                      Reject
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : null}
+                  </div>
+                )}
 
-                  {/* Pagination */}
-                  {submittedInvitationsData && submittedInvitationsData.pages > 1 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                      <div className="text-sm text-slate-600">
-                        Page {submittedInvitationsData.page} of {submittedInvitationsData.pages}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage((p) => Math.max(1, p - 1))}
-                          disabled={page === 1}
-                        >
-                          Previous
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPage((p) => p + 1)}
-                          disabled={page === submittedInvitationsData.pages}
-                        >
-                          Next
-                        </Button>
-                      </div>
+                {/* Self-Onboarding Invitations Section */}
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Self-Onboarding Submissions
+                    {submittedInvitationsData && submittedInvitationsData.total > 0 && (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                        {submittedInvitationsData.total}
+                      </Badge>
+                    )}
+                  </h3>
+                  {isLoadingSubmittedInvitations ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                    </div>
+                  ) : submittedInvitationsError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Failed to load submitted invitations. Please try again.
+                      </AlertDescription>
+                    </Alert>
+                  ) : submittedInvitationsData?.items.length > 0 ? (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Position</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Submitted At</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {submittedInvitationsData.items.map((invitation) => (
+                            <TableRow key={`invitation-${invitation.id}`}>
+                              <TableCell className="font-medium">
+                                {invitation.first_name} {invitation.last_name}
+                              </TableCell>
+                              <TableCell>{invitation.email}</TableCell>
+                              <TableCell>{invitation.position || '—'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {invitation.status.replace(/_/g, ' ')}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm text-slate-600">
+                                  {formatDate(invitation.submitted_at)}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => navigate(`/invitations/${invitation.id}/review`)}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Review Submission
+                                    </DropdownMenuItem>
+                                    {canApproveCandidates && (
+                                      <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => handleApproveInvitation(invitation.id)}>
+                                          <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                          Approve
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleRejectInvitation(invitation.id)} className="text-red-600">
+                                          <XCircle className="h-4 w-4 mr-2" />
+                                          Reject
+                                        </DropdownMenuItem>
+                                      </>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+
+                      {/* Pagination */}
+                      {submittedInvitationsData && submittedInvitationsData.pages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                          <div className="text-sm text-slate-600">
+                            Page {submittedInvitationsData.page} of {submittedInvitationsData.pages}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPage((p) => Math.max(1, p - 1))}
+                              disabled={page === 1}
+                            >
+                              Previous
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPage((p) => p + 1)}
+                              disabled={page === submittedInvitationsData.pages}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <Mail className="h-10 w-10 mx-auto mb-3 text-slate-300" />
+                      <p className="text-sm">No self-onboarding submissions found</p>
                     </div>
                   )}
-                </>
-              ) : (
-                <div className="text-center py-12 text-slate-500">
-                  <Mail className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p className="text-lg font-medium">No submitted invitations found</p>
-                  <p className="text-sm mt-1">
-                    {searchQuery
-                      ? 'Try adjusting your search'
-                      : 'No invitations awaiting review'}
-                  </p>
                 </div>
-              )}
+
+                {/* Empty State - Both sources empty */}
+                {!isLoadingSubmittedInvitations && 
+                 !isLoadingPendingReviewCandidates && 
+                 (!submittedInvitationsData || submittedInvitationsData.items.length === 0) &&
+                 (!pendingReviewCandidatesData || pendingReviewCandidatesData.candidates.length === 0) && (
+                  <div className="text-center py-12 text-slate-500 border-2 border-dashed border-slate-200 rounded-lg">
+                    <ClipboardList className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+                    <p className="text-lg font-medium">No Submissions Pending Review</p>
+                    <p className="text-sm mt-1">
+                      Resume uploads and self-onboarding submissions will appear here
+                    </p>
+                  </div>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="pending-assignment" className="mt-0">
@@ -1144,6 +1247,20 @@ export function OnboardCandidatesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Review Modal for Async Resume Uploads */}
+      {selectedResumeCandidate && (
+        <ReviewModal
+          candidate={selectedResumeCandidate}
+          open={reviewModalOpen}
+          onOpenChange={setReviewModalOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
+            queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+            setSelectedResumeCandidate(null);
+          }}
+        />
+      )}
     </div>
   );
 }

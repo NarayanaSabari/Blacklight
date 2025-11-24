@@ -166,12 +166,28 @@ async def generate_candidate_matches_workflow(ctx: inngest.Context):
         f"for candidate {candidate_id}"
     )
     
+    # Step 4: Update candidate status to 'ready_for_assignment' if triggered by onboarding
+    if trigger == "onboarding_approval":
+        status_updated = await ctx.step.run(
+            "update-candidate-status",
+            update_candidate_status_step,
+            candidate_id,
+            "ready_for_assignment"
+        )
+        
+        if status_updated:
+            logger.info(
+                f"[INNGEST] Candidate {candidate_id} status updated to 'ready_for_assignment' "
+                f"after generating {match_result['total_matches']} matches"
+            )
+    
     return {
         "status": "completed",
         "candidate_id": candidate_id,
         "tenant_id": tenant_id,
         "total_matches": match_result["total_matches"],
-        "trigger": trigger
+        "trigger": trigger,
+        "final_status": "ready_for_assignment" if trigger == "onboarding_approval" else None
     }
 
 
@@ -387,6 +403,39 @@ def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -
             "total_matches": 0,
             "error": str(e)
         }
+
+
+def update_candidate_status_step(candidate_id: int, status: str) -> bool:
+    """
+    Update candidate status after job matching completes
+    Used to transition candidate to 'ready_for_assignment' after onboarding approval
+    """
+    try:
+        from sqlalchemy import select
+        from app.models.candidate import Candidate
+        
+        stmt = select(Candidate).where(Candidate.id == candidate_id)
+        candidate = db.session.scalar(stmt)
+        
+        if not candidate:
+            logger.error(f"[INNGEST] Cannot update status: Candidate {candidate_id} not found")
+            return False
+        
+        old_status = candidate.status
+        candidate.status = status
+        db.session.commit()
+        
+        logger.info(
+            f"[INNGEST] Candidate {candidate_id} status updated: "
+            f"'{old_status}' → '{status}' (audit trail)"
+        )
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"[INNGEST] Error updating candidate {candidate_id} status: {str(e)}")
+        db.session.rollback()
+        return False
 
 
 def generate_job_embedding_step(job_id: int) -> Dict[str, Any]:

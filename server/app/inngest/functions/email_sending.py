@@ -195,7 +195,7 @@ def fetch_invitation_step(invitation_id: int, tenant_id: int) -> dict:
 def generate_onboarding_url_step(invitation: dict) -> str:
     """Generate onboarding URL with token"""
     import os
-    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:5174")
     return f"{frontend_url}/onboarding?token={invitation['token']}"
 
 

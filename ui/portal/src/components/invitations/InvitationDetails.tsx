@@ -103,7 +103,7 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
   const config = STATUS_CONFIG[invitation.status];
   const StatusIcon = config.icon;
   const isExpired = new Date(invitation.expires_at) < new Date();
-  const canResend = ['sent', 'expired', 'cancelled'].includes(invitation.status);
+  const canResend = ['sent', 'opened', 'in_progress', 'expired', 'cancelled'].includes(invitation.status);
   const canCancel = ['sent', 'pending_review', 'submitted'].includes(invitation.status);
   const canReview = invitation.status === 'pending_review' || invitation.status === 'submitted';
 

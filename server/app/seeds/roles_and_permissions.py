@@ -53,6 +53,7 @@ def seed_roles_and_permissions():
         {"name": "candidates.view", "display_name": "View Candidates", "category": "candidates", "description": "View candidate list and details"},
         {"name": "candidates.create", "display_name": "Create Candidates", "category": "candidates", "description": "Add new candidates to the system"},
         {"name": "candidates.edit", "display_name": "Edit Candidates", "category": "candidates", "description": "Update candidate information"},
+        {"name": "candidates.update", "display_name": "Update Candidates", "category": "candidates", "description": "Update candidate information (alias for edit)"},
         {"name": "candidates.delete", "display_name": "Delete Candidates", "category": "candidates", "description": "Remove candidates from the system"},
         {"name": "candidates.upload_resume", "display_name": "Upload Resume", "category": "candidates", "description": "Upload and manage candidate resumes"},
         {"name": "candidates.export", "display_name": "Export Candidates", "category": "candidates", "description": "Export candidate data"},
@@ -63,6 +64,8 @@ def seed_roles_and_permissions():
         {"name": "candidates.view_history", "display_name": "View Assignment History", "category": "candidates", "description": "View candidate assignment history"},
         {"name": "candidates.reassign", "display_name": "Reassign Candidates", "category": "candidates", "description": "Reassign candidates to different users"},
         {"name": "candidates.approve", "display_name": "Approve Candidates", "category": "candidates", "description": "Approve manually onboarded candidates"},
+        {"name": "candidates.review", "display_name": "Review Candidates", "category": "candidates", "description": "Review and edit AI-parsed candidate data"},
+        {"name": "candidates.reject", "display_name": "Reject Candidates", "category": "candidates", "description": "Reject candidates from onboarding"},
         
         # Jobs
         {"name": "jobs.view", "display_name": "View Jobs", "category": "jobs", "description": "View job postings and applications"},
