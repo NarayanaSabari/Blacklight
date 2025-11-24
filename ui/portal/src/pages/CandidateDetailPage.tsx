@@ -1,32 +1,32 @@
 /**
- * Candidate Detail Page
+ * Candidate Detail Page - View Mode
  * 
- * Full profile view with:
+ * Enhanced universal candidate profile view with:
+ * - Polished neobrutalist design
+ * - Improved visual hierarchy
  * - Complete candidate information display
- * - Resume viewer (PDF/DOCX)
- * - Edit mode
- * - Download resume
- * - Re-parse resume
- * - Status updates
+ * - Resume management & document viewer
+ * - Job matching preview
+ * - Team assignment tracking
  */
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { 
-  ArrowLeft, 
-  Download, 
-  FileText, 
-  Briefcase, 
-  GraduationCap, 
-  Award, 
-  Languages, 
-  MapPin, 
-  Phone, 
-  Mail, 
-  Linkedin, 
-  Globe, 
-  Calendar, 
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Briefcase,
+  GraduationCap,
+  Award,
+  Languages,
+  MapPin,
+  Phone,
+  Mail,
+  Linkedin,
+  Globe,
+  Calendar,
   DollarSign,
   Clock,
   RefreshCw,
@@ -37,6 +37,8 @@ import {
   UserPlus,
   Users,
   Target,
+  Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -44,7 +46,7 @@ import { candidateApi } from '@/lib/candidateApi';
 import { documentApi } from '@/lib/documentApi';
 import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,21 +69,25 @@ import {
 } from '@/components/documents';
 import type { Document, DocumentListItem } from '@/types';
 
-const STATUS_COLORS: Record<string, string> = {
-  new: 'bg-blue-500',
-  screening: 'bg-yellow-500',
-  interviewed: 'bg-purple-500',
-  offered: 'bg-orange-500',
-  hired: 'bg-green-500',
-  rejected: 'bg-red-500',
-  withdrawn: 'bg-gray-500',
+const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
+  processing: { color: 'bg-blue-500 text-white', label: 'Processing' },
+  pending_review: { color: 'bg-yellow-500 text-white', label: 'Pending Review' },
+  new: { color: 'bg-green-500 text-white', label: 'New' },
+  screening: { color: 'bg-purple-500 text-white', label: 'Screening' },
+  interviewed: { color: 'bg-indigo-500 text-white', label: 'Interviewed' },
+  offered: { color: 'bg-orange-500 text-white', label: 'Offered' },
+  hired: { color: 'bg-green-600 text-white', label: 'Hired' },
+  rejected: { color: 'bg-red-500 text-white', label: 'Rejected' },
+  withdrawn: { color: 'bg-gray-500 text-white', label: 'Withdrawn' },
+  onboarded: { color: 'bg-teal-500 text-white', label: 'Onboarded' },
+  ready_for_assignment: { color: 'bg-cyan-500 text-white', label: 'Ready' },
 };
 
 export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
@@ -110,7 +116,7 @@ export function CandidateDetailPage() {
     staleTime: 0,
   });
 
-  // Get current assignment (PENDING status since there's no acceptance workflow)
+  // Get current assignment
   const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'PENDING');
 
   // Fetch top job matches
@@ -164,7 +170,6 @@ export function CandidateDetailPage() {
 
   // Document handlers
   const handleViewDocument = (document: DocumentListItem) => {
-    // Fetch full document details
     documentApi.getDocument(document.id).then((fullDoc) => {
       setSelectedDocument(fullDoc);
       setShowDocumentViewer(true);
@@ -244,583 +249,610 @@ export function CandidateDetailPage() {
     );
   }
 
-  return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate('/candidates')}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">
-              {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-            </h1>
-            {candidate.current_title && (
-              <p className="text-muted-foreground">{candidate.current_title}</p>
-            )}
-          </div>
-          <Badge className={STATUS_COLORS[candidate.status]}>
-            {candidate.status.toUpperCase()}
-          </Badge>
-        </div>
+  const statusConfig = STATUS_CONFIG[candidate.status] || STATUS_CONFIG.new;
 
-        <div className="flex gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => navigate(`/candidates/${id}/matches`)}
-          >
-            <Target className="h-4 w-4 mr-2" />
-            View Matches
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/candidates/${id}/edit`)}
-          >
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAssignmentDialog(true)}
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
-            {currentAssignment ? 'Reassign' : 'Assign'}
-          </Button>
-          {candidate.resume_file_url && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDownloadResume}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Resume
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReparse}
-                disabled={reparseMutation.isPending}
-              >
-                {reparseMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
+  return (
+    <div className="space-y-6">
+      {/* Header Section with Gradient Background */}
+      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          {/* Left: Name & Title */}
+          <div className="flex-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/candidates')}
+              className="mb-3 -ml-2"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Candidates
+            </Button>
+
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                {(candidate.full_name || candidate.first_name).charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-1">
+                  {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
+                </h1>
+                {candidate.current_title && (
+                  <p className="text-lg text-slate-600 font-medium mb-2">{candidate.current_title}</p>
                 )}
-                Re-parse
-              </Button>
-            </>
-          )}
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={`${statusConfig.color} border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-3 py-1`}>
+                    {statusConfig.label}
+                  </Badge>
+                  {candidate.total_experience_years !== undefined && (
+                    <Badge variant="outline" className="border-2 border-black">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      {candidate.total_experience_years}+ years
+                    </Badge>
+                  )}
+                  {candidate.source && (
+                    <Badge variant="outline" className="border-2 border-black">
+                      {candidate.source}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => navigate(`/candidates/${id}/matches`)}
+              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+            >
+              <Target className="h-4 w-4 mr-2" />
+              Matches
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/candidates/${id}/edit`)}
+              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAssignmentDialog(true)}
+              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              {currentAssignment ? 'Reassign' : 'Assign'}
+            </Button>
+            {candidate.resume_file_url && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadResume}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Resume
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReparse}
+                  disabled={reparseMutation.isPending}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  {reparseMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Re-parse
+                </Button>
+              </>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteDialog(true)}
+              className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* View Mode */}
+      {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Main Info */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Contact Information */}
-            <Card>
-              <CardHeader>
+        {/* Left Column - Main Information */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Contact Information */}
+          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <CardHeader className="bg-slate-50">
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Contact Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {candidate.email && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                    <Mail className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <a
+                      href={`mailto:${candidate.email}`}
+                      className="text-sm font-medium hover:underline text-slate-900 truncate"
+                    >
+                      {candidate.email}
+                    </a>
+                  </div>
+                )}
+                {candidate.phone && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                    <Phone className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <a
+                      href={`tel:${candidate.phone}`}
+                      className="text-sm font-medium hover:underline text-slate-900"
+                    >
+                      {candidate.phone}
+                    </a>
+                  </div>
+                )}
+                {candidate.location && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                    <MapPin className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <span className="text-sm font-medium text-slate-900">{candidate.location}</span>
+                  </div>
+                )}
+                {candidate.linkedin_url && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                    <Linkedin className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <a
+                      href={candidate.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium hover:underline text-blue-600 truncate"
+                    >
+                      LinkedIn Profile
+                    </a>
+                  </div>
+                )}
+                {candidate.portfolio_url && (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                    <Globe className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <a
+                      href={candidate.portfolio_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-medium hover:underline text-blue-600 truncate"
+                    >
+                      Portfolio
+                    </a>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Professional Summary */}
+          {candidate.professional_summary && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/5">
                 <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Contact Information
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  Professional Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {candidate.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`mailto:${candidate.email}`}
-                        className="text-sm hover:underline"
-                      >
-                        {candidate.email}
-                      </a>
-                    </div>
-                  )}
-                  {candidate.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`tel:${candidate.phone}`}
-                        className="text-sm hover:underline"
-                      >
-                        {candidate.phone}
-                      </a>
-                    </div>
-                  )}
-                  {candidate.location && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm">{candidate.location}</span>
-                    </div>
-                  )}
-                  {candidate.linkedin_url && (
-                    <div className="flex items-center gap-2">
-                      <Linkedin className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={candidate.linkedin_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm hover:underline"
-                      >
-                        LinkedIn Profile
-                      </a>
-                    </div>
-                  )}
-                  {candidate.portfolio_url && (
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={candidate.portfolio_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm hover:underline"
-                      >
-                        Portfolio
-                      </a>
-                    </div>
-                  )}
-                </div>
+              <CardContent className="pt-6">
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {candidate.professional_summary}
+                </p>
               </CardContent>
             </Card>
+          )}
 
-            {/* Professional Summary */}
-            {candidate.professional_summary && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Professional Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {candidate.professional_summary}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Work Experience */}
-            {candidate.work_experience && candidate.work_experience.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="h-5 w-5" />
-                    Work Experience
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
+          {/* Work Experience */}
+          {candidate.work_experience && candidate.work_experience.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  Work Experience
+                </CardTitle>
+                <CardDescription>
+                  {candidate.work_experience.length} position{candidate.work_experience.length !== 1 ? 's' : ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-6">
                   {candidate.work_experience.map((exp, index) => (
                     <div key={index}>
-                      {index > 0 && <Separator className="my-4" />}
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="font-semibold">{exp.title}</h4>
-                            <p className="text-sm text-muted-foreground">
+                      {index > 0 && <Separator className="my-6" />}
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <h4 className="font-bold text-lg text-slate-900">{exp.title}</h4>
+                            <p className="text-sm font-medium text-slate-600 mt-1">
                               {exp.company}
                               {exp.location && ` • ${exp.location}`}
                             </p>
                           </div>
                           {exp.is_current && (
-                            <Badge variant="secondary">Current</Badge>
+                            <Badge className="bg-green-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0">
+                              Current
+                            </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          <span>
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                          <Calendar className="h-4 w-4" />
+                          <span className="font-medium">
                             {exp.start_date} - {exp.end_date || 'Present'}
-                            {exp.duration_months && (
-                              <span className="ml-2">
-                                ({Math.floor(exp.duration_months / 12)} years{' '}
-                                {exp.duration_months % 12} months)
-                              </span>
-                            )}
                           </span>
+                          {exp.duration_months && (
+                            <span className="text-xs bg-slate-100 px-2 py-1 rounded border border-slate-300">
+                              {Math.floor(exp.duration_months / 12)}y {exp.duration_months % 12}m
+                            </span>
+                          )}
                         </div>
                         {exp.description && (
-                          <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap pl-6 border-l-2 border-primary">
                             {exp.description}
                           </p>
                         )}
                       </div>
                     </div>
                   ))}
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Education */}
-            {candidate.education && candidate.education.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <GraduationCap className="h-5 w-5" />
-                    Education
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+          {/* Education */}
+          {candidate.education && candidate.education.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-primary" />
+                  Education
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
                   {candidate.education.map((edu, index) => (
                     <div key={index}>
                       {index > 0 && <Separator className="my-4" />}
-                      <div className="space-y-1">
-                        <h4 className="font-semibold">{edu.degree}</h4>
+                      <div className="space-y-2">
+                        <h4 className="font-bold text-lg text-slate-900">{edu.degree}</h4>
                         {edu.field_of_study && (
-                          <p className="text-sm text-muted-foreground">
-                            {edu.field_of_study}
-                          </p>
+                          <p className="text-sm text-slate-600 font-medium">{edu.field_of_study}</p>
                         )}
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-slate-500">
                           {edu.institution}
-                          {edu.graduation_year && ` • ${edu.graduation_year}`}
+                          {edu.graduation_year && ` • Class of ${edu.graduation_year}`}
                         </p>
                         {edu.gpa && (
-                          <p className="text-sm text-muted-foreground">
-                            GPA: {edu.gpa}
+                          <p className="text-sm text-slate-500">
+                            <span className="font-medium">GPA:</span> {edu.gpa}
                           </p>
                         )}
                       </div>
                     </div>
                   ))}
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Documents Section */}
-            <Card>
+          {/* Documents Section */}
+          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <CardHeader className="bg-slate-50">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Documents
+              </CardTitle>
+              <CardDescription>
+                {documentsResponse?.total || 0} document{documentsResponse?.total !== 1 ? 's' : ''} uploaded
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {documentsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <DocumentList
+                  documents={documentsResponse?.documents || []}
+                  loading={documentsLoading}
+                  onView={handleViewDocument}
+                  onDownload={handleDownloadDocument}
+                  onVerify={handleVerifyDocument}
+                  onDelete={handleDeleteDocument}
+                  showFilters={false}
+                  emptyMessage="No documents uploaded yet"
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Sidebar */}
+        <div className="space-y-6">
+          {/* Job Matches Preview */}
+          {matchesData && matchesData.total_matches > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-primary/5 to-secondary/5">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Documents
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Top Matches
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/candidates/${id}/matches`)}
+                    className="text-primary hover:text-primary"
+                  >
+                    All ({matchesData.total_matches})
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {matchesData.matches.slice(0, 3).map((match) => (
+                  <div
+                    key={match.id}
+                    className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] cursor-pointer transition-all"
+                    onClick={() => navigate(`/candidates/${id}/matches`)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-sm truncate text-slate-900">
+                          {match.job_posting?.title}
+                        </h4>
+                        <p className="text-xs text-slate-600 truncate">
+                          {match.job_posting?.company}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <Badge
+                          className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${match.match_grade === 'A+' || match.match_grade === 'A'
+                            ? 'bg-green-500 text-white'
+                            : match.match_grade === 'B'
+                              ? 'bg-yellow-500 text-white'
+                              : 'bg-slate-500 text-white'
+                            }`}
+                        >
+                          {match.match_grade}
+                        </Badge>
+                        <span className="text-xs font-bold text-slate-900">
+                          {match.match_score.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {match.matched_skills?.slice(0, 3).map((skill, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs border border-black">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {(match.matched_skills?.length || 0) > 3 && (
+                        <span className="text-xs text-slate-500 self-center font-medium">
+                          +{(match.matched_skills?.length || 0) - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Professional Details */}
+          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <CardHeader className="bg-slate-50">
+              <CardTitle>Professional Details</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              {candidate.total_experience_years !== undefined && (
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
+                  <span className="text-sm font-medium text-slate-600">Experience</span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {candidate.total_experience_years} years
+                  </span>
+                </div>
+              )}
+              {candidate.notice_period && (
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
+                  <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Notice Period
+                  </span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {candidate.notice_period}
+                  </span>
+                </div>
+              )}
+              {candidate.expected_salary && (
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded border-2 border-green-500">
+                  <span className="text-sm font-medium text-green-700 flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />
+                    Expected Salary
+                  </span>
+                  <span className="text-sm font-bold text-green-900">
+                    {candidate.expected_salary}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Skills */}
+          {candidate.skills && candidate.skills.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10">
+                <CardTitle className="text-base">Skills</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="flex flex-wrap gap-2">
+                  {candidate.skills.map((skill, index) => (
+                    <Badge
+                      key={index}
+                      className="bg-primary text-primary-foreground border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                      {skill}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Certifications */}
+          {candidate.certifications && candidate.certifications.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Award className="h-5 w-5 text-yellow-600" />
+                  Certifications
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                {documentsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  <DocumentList
-                    documents={documentsResponse?.documents || []}
-                    loading={documentsLoading}
-                    onView={handleViewDocument}
-                    onDownload={handleDownloadDocument}
-                    onVerify={handleVerifyDocument}
-                    onDelete={handleDeleteDocument}
-                    showFilters={false}
-                    emptyMessage="No documents uploaded yet"
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column - Additional Info */}
-          <div className="space-y-6">
-            {/* Job Matches Preview */}
-            {matchesData && matchesData.total_matches > 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Target className="h-5 w-5" />
-                      Top Job Matches
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate(`/candidates/${id}/matches`)}
-                    >
-                      View All ({matchesData.total_matches})
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {matchesData.matches.slice(0, 3).map((match) => (
-                    <div
-                      key={match.id}
-                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                      onClick={() => navigate(`/candidates/${id}/matches`)}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-sm truncate">
-                            {match.job_posting?.title}
-                          </h4>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {match.job_posting?.company}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Badge
-                            variant={
-                              match.match_grade === 'A+' || match.match_grade === 'A'
-                                ? 'default'
-                                : match.match_grade === 'B'
-                                ? 'secondary'
-                                : 'outline'
-                            }
-                            className="font-bold"
-                          >
-                            {match.match_grade}
-                          </Badge>
-                          <span className="text-xs font-medium">
-                            {match.match_score.toFixed(0)}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-1 mt-2">
-                        {match.matched_skills?.slice(0, 3).map((skill, idx) => (
-                          <Badge key={idx} variant="secondary" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {(match.matched_skills?.length || 0) > 3 && (
-                          <span className="text-xs text-muted-foreground self-center">
-                            +{(match.matched_skills?.length || 0) - 3}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+              <CardContent className="pt-6">
+                <ul className="space-y-2">
+                  {candidate.certifications.map((cert, index) => (
+                    <li key={index} className="flex items-start gap-2 text-sm">
+                      <span className="text-yellow-600 mt-0.5">•</span>
+                      <span className="text-slate-700">{cert}</span>
+                    </li>
                   ))}
-                </CardContent>
-              </Card>
-            )}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Professional Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Professional Details</CardTitle>
+          {/* Languages */}
+          {candidate.languages && candidate.languages.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Languages className="h-5 w-5 text-blue-600" />
+                  Languages
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {candidate.total_experience_years !== undefined && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Experience</span>
-                    <span className="text-sm font-medium">
-                      {candidate.total_experience_years} years
-                    </span>
-                  </div>
-                )}
-                {candidate.notice_period && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      Notice Period
-                    </span>
-                    <span className="text-sm font-medium">
-                      {candidate.notice_period}
-                    </span>
-                  </div>
-                )}
-                {candidate.expected_salary && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      Expected Salary
-                    </span>
-                    <span className="text-sm font-medium">
-                      {candidate.expected_salary}
-                    </span>
-                  </div>
-                )}
+              <CardContent className="pt-6">
+                <div className="flex flex-wrap gap-2">
+                  {candidate.languages.map((lang, index) => (
+                    <Badge key={index} variant="outline" className="border-2 border-black">
+                      {lang}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Preferred Locations */}
+          {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MapPin className="h-5 w-5 text-red-600" />
+                  Preferred Locations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ul className="space-y-2">
+                  {candidate.preferred_locations.map((loc, index) => (
+                    <li key={index} className="flex items-center gap-2 text-sm">
+                      <MapPin className="h-3 w-3 text-slate-400" />
+                      <span className="text-slate-700">{loc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Current Assignment */}
+          {currentAssignment && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-blue-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  Current Assignment
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-600">Assigned To</span>
+                  <span className="font-bold text-slate-900 text-right">{currentAssignment.assigned_to?.full_name}</span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-600">Role</span>
+                  <span className="text-slate-900">{currentAssignment.assigned_to?.roles?.[0]?.name || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-600">Email</span>
+                  <span className="text-slate-900 text-xs">{currentAssignment.assigned_to?.email}</span>
+                </div>
                 <Separator />
-                <div className="space-y-2">
-                  <span className="text-sm text-muted-foreground">Source</span>
-                  <div>
-                    <Badge variant="outline">{candidate.source}</Badge>
-                  </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-600">Assigned By</span>
+                  <span className="text-slate-900">{currentAssignment.assigned_by?.full_name}</span>
                 </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-slate-600">Date</span>
+                  <span className="text-slate-900">{new Date(currentAssignment.assigned_at).toLocaleDateString()}</span>
+                </div>
+                {currentAssignment.reason && (
+                  <>
+                    <Separator />
+                    <div>
+                      <span className="text-slate-600 block mb-1">Reason:</span>
+                      <p className="text-slate-900">{currentAssignment.reason}</p>
+                    </div>
+                  </>
+                )}
+                <Badge
+                  className={`mt-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${currentAssignment.status === 'PENDING' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'
+                    }`}
+                >
+                  {currentAssignment.status}
+                </Badge>
               </CardContent>
             </Card>
+          )}
 
-            {/* Skills */}
-            {candidate.skills && candidate.skills.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Skills</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {candidate.skills.map((skill, index) => (
-                      <Badge key={index} variant="secondary">
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Certifications */}
-            {candidate.certifications && candidate.certifications.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Award className="h-5 w-5" />
-                    Certifications
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="list-disc list-inside space-y-1">
-                    {candidate.certifications.map((cert, index) => (
-                      <li key={index} className="text-sm text-muted-foreground">
-                        {cert}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Languages */}
-            {candidate.languages && candidate.languages.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Languages className="h-5 w-5" />
-                    Languages
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {candidate.languages.map((lang, index) => (
-                      <Badge key={index} variant="outline">
-                        {lang}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Preferred Locations */}
-            {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Preferred Locations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="list-disc list-inside space-y-1">
-                    {candidate.preferred_locations.map((loc, index) => (
-                      <li key={index} className="text-sm text-muted-foreground">
-                        {loc}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Resume Info */}
-            {candidate.resume_uploaded_at && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Resume Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
+          {/* Resume Info */}
+          {candidate.resume_uploaded_at && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <CardHeader className="bg-slate-50">
+                <CardTitle className="text-base">Resume Information</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Uploaded</span>
+                  <span className="font-medium text-slate-900">
+                    {new Date(candidate.resume_uploaded_at).toLocaleDateString()}
+                  </span>
+                </div>
+                {candidate.resume_parsed_at && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Uploaded</span>
-                    <span>
-                      {new Date(candidate.resume_uploaded_at).toLocaleDateString()}
+                    <span className="text-slate-600">Parsed</span>
+                    <span className="font-medium text-slate-900">
+                      {new Date(candidate.resume_parsed_at).toLocaleDateString()}
                     </span>
                   </div>
-                  {candidate.resume_parsed_at && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Parsed</span>
-                      <span>
-                        {new Date(candidate.resume_parsed_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Current Assignment */}
-            {currentAssignment && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Current Assignment
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Assigned To</span>
-                    <span className="font-medium">{currentAssignment.assigned_to?.full_name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Role</span>
-                    <span>{currentAssignment.assigned_to?.roles?.[0]?.name || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email</span>
-                    <span className="text-xs">{currentAssignment.assigned_to?.email}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Assigned By</span>
-                    <span>{currentAssignment.assigned_by?.full_name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Date</span>
-                    <span>{new Date(currentAssignment.assigned_at).toLocaleDateString()}</span>
-                  </div>
-                  {currentAssignment.reason && (
-                    <div className="mt-3 pt-3 border-t">
-                      <span className="text-muted-foreground block mb-1">Reason:</span>
-                      <p className="text-sm">{currentAssignment.reason}</p>
-                    </div>
-                  )}
-                  <Badge variant={currentAssignment.status === 'PENDING' ? 'default' : 'secondary'} className="mt-2">
-                    {currentAssignment.status}
-                  </Badge>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Metadata */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Metadata</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Created</span>
-                  <span>{new Date(candidate.created_at).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Updated</span>
-                  <span>{new Date(candidate.updated_at).toLocaleDateString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">ID</span>
-                  <span className="font-mono text-xs">{candidate.id}</span>
-                </div>
+                )}
               </CardContent>
             </Card>
-          </div>
+          )}
         </div>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -828,66 +860,56 @@ export function CandidateDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Candidate</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete{' '}
-              <strong>
-                {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-              </strong>
-              ? This action cannot be undone.
+              Are you sure you want to delete this candidate? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-red-600 hover:bg-red-700"
             >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                'Delete'
-              )}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Document Viewer Modal */}
-      <DocumentViewer
-        document={selectedDocument}
-        open={showDocumentViewer}
-        onClose={() => {
-          setShowDocumentViewer(false);
-          setSelectedDocument(null);
-        }}
-        onDownload={handleDownloadDocument}
-      />
+      {/* Assignment Dialog */}
+      {showAssignmentDialog && (
+        <CandidateAssignmentDialog
+          open={showAssignmentDialog}
+          onClose={() => setShowAssignmentDialog(false)}
+          candidateId={Number(id)}
+          candidateName={candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
+          currentAssignment={currentAssignment}
+        />
+      )}
+
+      {/* Document Viewer */}
+      {showDocumentViewer && selectedDocument && (
+        <DocumentViewer
+          document={selectedDocument}
+          open={showDocumentViewer}
+          onClose={() => {
+            setShowDocumentViewer(false);
+            setSelectedDocument(null);
+          }}
+        />
+      )}
 
       {/* Document Verification Modal */}
-      <DocumentVerificationModal
-        document={selectedDocument}
-        open={showVerificationModal}
-        onClose={() => {
-          setShowVerificationModal(false);
-          setSelectedDocument(null);
-        }}
-        onVerified={handleDocumentVerified}
-      />
-
-      {/* Candidate Assignment Dialog */}
-      <CandidateAssignmentDialog
-        candidateId={Number(id)}
-        candidateName={candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-        open={showAssignmentDialog}
-        onOpenChange={setShowAssignmentDialog}
-        isReassignment={!!currentAssignment}
-        onSuccess={() => {
-          toast.success(currentAssignment ? 'Candidate reassigned successfully!' : 'Candidate assigned successfully!');
-          queryClient.invalidateQueries({ queryKey: ['candidate-assignments', id] });
-        }}
-      />
+      {showVerificationModal && selectedDocument && (
+        <DocumentVerificationModal
+          document={selectedDocument}
+          open={showVerificationModal}
+          onClose={() => {
+            setShowVerificationModal(false);
+            setSelectedDocument(null);
+          }}
+          onVerified={handleDocumentVerified}
+        />
+      )}
     </div>
   );
 }
