@@ -72,6 +72,7 @@ import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEdit
 import { EducationEditor } from '@/components/candidates/EducationEditor';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { candidateUpdateSchema, type CandidateUpdateInput } from '@/schemas/candidateSchema';
 import type { Document, DocumentListItem, Candidate as CandidateType } from '@/types';
 
@@ -539,67 +540,118 @@ export function CandidateDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {candidate.email && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                    <Mail className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                    <a
-                      href={`mailto:${candidate.email}`}
-                      className="text-sm font-medium hover:underline text-slate-900 truncate"
-                    >
-                      {candidate.email}
-                    </a>
+              {isEditMode ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData?.email || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('email', e.target.value)}
+                      className="border-2 border-black"
+                    />
                   </div>
-                )}
-                {candidate.phone && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                    <Phone className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                    <a
-                      href={`tel:${candidate.phone}`}
-                      className="text-sm font-medium hover:underline text-slate-900"
-                    >
-                      {candidate.phone}
-                    </a>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={formData?.phone || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('phone', e.target.value)}
+                      className="border-2 border-black"
+                    />
                   </div>
-                )}
-                {candidate.location && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                    <MapPin className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                    <span className="text-sm font-medium text-slate-900">{candidate.location}</span>
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Location</Label>
+                    <Input
+                      id="location"
+                      value={formData?.location || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('location', e.target.value)}
+                      className="border-2 border-black"
+                    />
                   </div>
-                )}
-                {candidate.linkedin_url && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                    <Linkedin className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                    <a
-                      href={candidate.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium hover:underline text-blue-600 truncate"
-                    >
-                      LinkedIn Profile
-                    </a>
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedin">LinkedIn URL</Label>
+                    <Input
+                      id="linkedin"
+                      value={formData?.linkedin_url || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('linkedin_url', e.target.value)}
+                      className="border-2 border-black"
+                    />
                   </div>
-                )}
-                {candidate.portfolio_url && (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                    <Globe className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                    <a
-                      href={candidate.portfolio_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium hover:underline text-blue-600 truncate"
-                    >
-                      Portfolio
-                    </a>
+                  <div className="space-y-2">
+                    <Label htmlFor="portfolio">Portfolio URL</Label>
+                    <Input
+                      id="portfolio"
+                      value={formData?.portfolio_url || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('portfolio_url', e.target.value)}
+                      className="border-2 border-black"
+                    />
                   </div>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {candidate.email && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                      <Mail className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                      <a
+                        href={`mailto:${candidate.email}`}
+                        className="text-sm font-medium hover:underline text-slate-900 truncate"
+                      >
+                        {candidate.email}
+                      </a>
+                    </div>
+                  )}
+                  {candidate.phone && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                      <Phone className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                      <a
+                        href={`tel:${candidate.phone}`}
+                        className="text-sm font-medium hover:underline text-slate-900"
+                      >
+                        {candidate.phone}
+                      </a>
+                    </div>
+                  )}
+                  {candidate.location && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                      <MapPin className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-900">{candidate.location}</span>
+                    </div>
+                  )}
+                  {candidate.linkedin_url && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                      <Linkedin className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                      <a
+                        href={candidate.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium hover:underline text-blue-600 truncate"
+                      >
+                        LinkedIn Profile
+                      </a>
+                    </div>
+                  )}
+                  {candidate.portfolio_url && (
+                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
+                      <Globe className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                      <a
+                        href={candidate.portfolio_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium hover:underline text-blue-600 truncate"
+                      >
+                        Portfolio
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Professional Summary */}
-          {candidate.professional_summary && (
+          {(candidate.professional_summary || isEditMode) && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/5">
                 <CardTitle className="flex items-center gap-2">
@@ -608,71 +660,89 @@ export function CandidateDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {candidate.professional_summary}
-                </p>
+                {isEditMode ? (
+                  <Textarea
+                    value={formData?.professional_summary || ''}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('professional_summary', e.target.value)}
+                    className="min-h-[150px] border-2 border-black"
+                    placeholder="Enter professional summary..."
+                  />
+                ) : (
+                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                    {candidate.professional_summary}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
 
           {/* Work Experience */}
-          {candidate.work_experience && candidate.work_experience.length > 0 && (
+          {(candidate.work_experience && candidate.work_experience.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-slate-50">
                 <CardTitle className="flex items-center gap-2">
                   <Briefcase className="h-5 w-5 text-primary" />
                   Work Experience
                 </CardTitle>
-                <CardDescription>
-                  {candidate.work_experience.length} position{candidate.work_experience.length !== 1 ? 's' : ''}
-                </CardDescription>
+                {!isEditMode && (
+                  <CardDescription>
+                    {candidate.work_experience?.length || 0} position{(candidate.work_experience?.length || 0) !== 1 ? 's' : ''}
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  {candidate.work_experience.map((exp, index) => (
-                    <div key={index}>
-                      {index > 0 && <Separator className="my-6" />}
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h4 className="font-bold text-lg text-slate-900">{exp.title}</h4>
-                            <p className="text-sm font-medium text-slate-600 mt-1">
-                              {exp.company}
-                              {exp.location && ` • ${exp.location}`}
-                            </p>
+                {isEditMode ? (
+                  <WorkExperienceEditor
+                    value={formData?.work_experience || []}
+                    onChange={(exp) => updateField('work_experience', exp)}
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    {candidate.work_experience.map((exp, index) => (
+                      <div key={index}>
+                        {index > 0 && <Separator className="my-6" />}
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h4 className="font-bold text-lg text-slate-900">{exp.title}</h4>
+                              <p className="text-sm font-medium text-slate-600 mt-1">
+                                {exp.company}
+                                {exp.location && ` • ${exp.location}`}
+                              </p>
+                            </div>
+                            {exp.is_current && (
+                              <Badge className="bg-green-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0">
+                                Current
+                              </Badge>
+                            )}
                           </div>
-                          {exp.is_current && (
-                            <Badge className="bg-green-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0">
-                              Current
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
-                          <Calendar className="h-4 w-4" />
-                          <span className="font-medium">
-                            {exp.start_date} - {exp.end_date || 'Present'}
-                          </span>
-                          {exp.duration_months && (
-                            <span className="text-xs bg-slate-100 px-2 py-1 rounded border border-slate-300">
-                              {Math.floor(exp.duration_months / 12)}y {exp.duration_months % 12}m
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <Calendar className="h-4 w-4" />
+                            <span className="font-medium">
+                              {exp.start_date} - {exp.end_date || 'Present'}
                             </span>
+                            {exp.duration_months && (
+                              <span className="text-xs bg-slate-100 px-2 py-1 rounded border border-slate-300">
+                                {Math.floor(exp.duration_months / 12)}y {exp.duration_months % 12}m
+                              </span>
+                            )}
+                          </div>
+                          {exp.description && (
+                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap pl-6 border-l-2 border-primary">
+                              {exp.description}
+                            </p>
                           )}
                         </div>
-                        {exp.description && (
-                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap pl-6 border-l-2 border-primary">
-                            {exp.description}
-                          </p>
-                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Education */}
-          {candidate.education && candidate.education.length > 0 && (
+          {(candidate.education && candidate.education.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-slate-50">
                 <CardTitle className="flex items-center gap-2">
@@ -681,31 +751,43 @@ export function CandidateDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {candidate.education.map((edu, index) => (
-                    <div key={index}>
-                      {index > 0 && <Separator className="my-4" />}
-                      <div className="space-y-2">
-                        <h4 className="font-bold text-lg text-slate-900">{edu.degree}</h4>
-                        {edu.field_of_study && (
-                          <p className="text-sm text-slate-600 font-medium">{edu.field_of_study}</p>
-                        )}
-                        <p className="text-sm text-slate-500">
-                          {edu.institution}
-                          {edu.graduation_year && ` • Class of ${edu.graduation_year}`}
-                        </p>
-                        {edu.gpa && (
-                          <p className="text-sm text-slate-500">
-                            <span className="font-medium">GPA:</span> {edu.gpa}
-                          </p>
-                        )}
+                {isEditMode ? (
+                  <EducationEditor
+                    value={formData?.education || []}
+                    onChange={(edu) => updateField('education', edu)}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {candidate.education.map((edu, index) => (
+                      <div key={index}>
+                        {index > 0 && <Separator className="my-4" />}
+                        <div className="space-y-2">
+                          <h4 className="font-bold text-lg text-slate-900">{edu.degree}</h4>
+                          {edu.field_of_study && (
+                            <p className="text-sm font-medium text-slate-700">{edu.field_of_study}</p>
+                          )}
+                          <p className="text-sm text-slate-600">{edu.institution}</p>
+                          <div className="flex items-center gap-4 text-xs text-slate-500">
+                            {edu.graduation_year && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {edu.graduation_year}
+                              </span>
+                            )}
+                            {edu.gpa && (
+                              <span className="font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                                GPA: {edu.gpa}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Documents Section */}
           <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -816,35 +898,72 @@ export function CandidateDetailPage() {
               <CardTitle>Professional Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {candidate.total_experience_years !== undefined && (
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
-                  <span className="text-sm font-medium text-slate-600">Experience</span>
-                  <span className="text-sm font-bold text-slate-900">
-                    {candidate.total_experience_years} years
-                  </span>
-                </div>
-              )}
-              {candidate.notice_period && (
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
-                  <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Notice Period
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">
-                    {candidate.notice_period}
-                  </span>
-                </div>
-              )}
-              {candidate.expected_salary && (
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded border-2 border-green-500">
-                  <span className="text-sm font-medium text-green-700 flex items-center gap-1">
-                    <DollarSign className="h-3 w-3" />
-                    Expected Salary
-                  </span>
-                  <span className="text-sm font-bold text-green-900">
-                    {candidate.expected_salary}
-                  </span>
-                </div>
+              {isEditMode ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="experience">Total Experience (Years)</Label>
+                    <Input
+                      id="experience"
+                      type="number"
+                      min="0"
+                      max="70"
+                      value={formData?.total_experience_years ?? ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('total_experience_years', e.target.value ? parseInt(e.target.value) : null)}
+                      className="border-2 border-black"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="notice">Notice Period</Label>
+                    <Input
+                      id="notice"
+                      value={formData?.notice_period || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('notice_period', e.target.value)}
+                      className="border-2 border-black"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="salary">Expected Salary</Label>
+                    <Input
+                      id="salary"
+                      value={formData?.expected_salary || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('expected_salary', e.target.value)}
+                      className="border-2 border-black"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {candidate.total_experience_years !== undefined && (
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
+                      <span className="text-sm font-medium text-slate-600">Experience</span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {candidate.total_experience_years} years
+                      </span>
+                    </div>
+                  )}
+                  {candidate.notice_period && (
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
+                      <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Notice Period
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {candidate.notice_period}
+                      </span>
+                    </div>
+                  )}
+                  {candidate.expected_salary && (
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded border-2 border-green-500">
+                      <span className="text-sm font-medium text-green-700 flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" />
+                        Expected Salary
+                      </span>
+                      <span className="text-sm font-bold text-green-700">
+                        {candidate.expected_salary}
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -885,7 +1004,7 @@ export function CandidateDetailPage() {
           ) : null}
 
           {/* Certifications */}
-          {candidate.certifications && candidate.certifications.length > 0 && (
+          {(candidate.certifications && candidate.certifications.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-slate-50">
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -894,20 +1013,33 @@ export function CandidateDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {candidate.certifications.map((cert, index) => (
-                    <li key={index} className="flex items-start gap-2 text-sm">
-                      <span className="text-yellow-600 mt-0.5">•</span>
-                      <span className="text-slate-700">{cert}</span>
-                    </li>
-                  ))}
-                </ul>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <TagInput
+                      value={formData?.certifications || []}
+                      onChange={(certs) => updateField('certifications', certs)}
+                      placeholder="Add certification..."
+                    />
+                    <p className="text-xs text-slate-500">
+                      Press Enter to add.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {candidate.certifications.map((cert, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm">
+                        <span className="text-yellow-600 mt-0.5">•</span>
+                        <span className="text-slate-700">{cert}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Languages */}
-          {candidate.languages && candidate.languages.length > 0 && (
+          {(candidate.languages && candidate.languages.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-slate-50">
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -916,19 +1048,32 @@ export function CandidateDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {candidate.languages.map((lang, index) => (
-                    <Badge key={index} variant="outline" className="border-2 border-black">
-                      {lang}
-                    </Badge>
-                  ))}
-                </div>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <TagInput
+                      value={formData?.languages || []}
+                      onChange={(langs) => updateField('languages', langs)}
+                      placeholder="Add language..."
+                    />
+                    <p className="text-xs text-slate-500">
+                      Press Enter to add.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {candidate.languages.map((lang, index) => (
+                      <Badge key={index} variant="outline" className="border-2 border-black">
+                        {lang}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Preferred Locations */}
-          {candidate.preferred_locations && candidate.preferred_locations.length > 0 && (
+          {(candidate.preferred_locations && candidate.preferred_locations.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
               <CardHeader className="bg-slate-50">
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -937,17 +1082,30 @@ export function CandidateDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {candidate.preferred_locations.map((loc, index) => (
-                    <li key={index} className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-3 w-3 text-slate-400" />
-                      <span className="text-slate-700">{loc}</span>
-                    </li>
-                  ))}
-                </ul>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <TagInput
+                      value={formData?.preferred_locations || []}
+                      onChange={(locs) => updateField('preferred_locations', locs)}
+                      placeholder="Add location..."
+                    />
+                    <p className="text-xs text-slate-500">
+                      Press Enter to add.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {candidate.preferred_locations.map((loc, index) => (
+                      <li key={index} className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-3 w-3 text-slate-400" />
+                        <span className="text-slate-700">{loc}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {/* Current Assignment */}
           {currentAssignment && (

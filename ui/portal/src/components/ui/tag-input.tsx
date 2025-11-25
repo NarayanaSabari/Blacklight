@@ -74,6 +74,7 @@ export function TagInput({
                                 <Button
                                     variant="ghost"
                                     size="sm"
+                                    type="button"
                                     className="h-4 w-4 p-0 hover:bg-transparent"
                                     onClick={() => removeTag(index)}
                                 >

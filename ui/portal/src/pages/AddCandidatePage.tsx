@@ -1,34 +1,32 @@
 /**
  * Add Candidate Page
- * Dedicated page for adding candidates with resume upload or manual entry
+ * Simplified page for adding candidates with resume upload, manual entry, or email invitation
  */
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Upload, PenSquare, ArrowLeft, Mail, FileUp, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Upload, PenSquare, ArrowLeft, FileUp, Mail, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { ResumeUpload } from '@/components/candidates/ResumeUpload';
-import { ResumeViewer } from '@/components/candidates/ResumeViewer';
 import { CandidateForm } from '@/components/candidates/CandidateForm';
 import { invitationApi } from '@/lib/api/invitationApi';
 import type { CandidateCreateInput, CandidateUpdateInput, UploadResumeResponse } from '@/types/candidate';
 import type { InvitationCreateRequest, InvitationWithRelations } from '@/types/invitation';
 
+type AddMethod = 'choice' | 'upload' | 'manual' | 'invite';
+
 export function AddCandidatePage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string>('manual');
-  const [manualSubTab, setManualSubTab] = useState<string>('upload');
+  const [addMethod, setAddMethod] = useState<AddMethod>('choice');
   const [parsedData, setParsedData] = useState<UploadResumeResponse | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  
+
   // Email invite form state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteFirstName, setInviteFirstName] = useState('');
@@ -38,7 +36,7 @@ export function AddCandidatePage() {
 
   const handleUploadSuccess = (result: UploadResumeResponse) => {
     setParsedData(result);
-    
+
     // Check if this is async processing (new flow)
     if (result.status === 'processing' || result.message?.includes('Processing')) {
       // Show success toast for async processing
@@ -46,329 +44,382 @@ export function AddCandidatePage() {
         description: 'AI parsing in progress. The candidate will appear in "Review Submissions" shortly.',
         duration: 6000,
       });
-      
+
       // Navigate to candidate-management with pending-review tab
       setTimeout(() => {
         navigate('/candidate-management?tab=onboarding');
       }, 2000);
     } else {
-      // Old sync flow - show form immediately
-      setShowForm(true);
-    }
-  };
-
-  const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {
-    // If we have parsed data with candidate_id, the candidate was already created
-    if (parsedData?.candidate_id) {
-      // Navigate to candidate detail page
-      navigate(`/candidates/${parsedData.candidate_id}`);
-    } else {
-      // Create candidate manually
-      try {
-        const { candidateApi } = await import('@/lib/candidateApi');
-        const newCandidate = await candidateApi.createCandidate(data as CandidateCreateInput);
-        navigate(`/candidates/${newCandidate.id}`);
-      } catch (error) {
-        console.error('Failed to create candidate:', error);
+      // Old sync flow - candidate already created with parsed data
+      toast.success('Resume parsed successfully!');
+      if (result.candidate_id) {
+        navigate(`/candidates/${result.candidate_id}`);
       }
     }
   };
 
+  const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {
+    try {
+      const { candidateApi } = await import('@/lib/candidateApi');
+      const newCandidate = await candidateApi.createCandidate(data as CandidateCreateInput);
+      toast.success('Candidate created successfully!');
+      navigate(`/candidates/${newCandidate.id}`);
+    } catch (error) {
+      console.error('Failed to create candidate:', error);
+      toast.error('Failed to create candidate');
+    }
+  };
+
   const handleCancel = () => {
-    navigate('/candidates');
+    if (addMethod === 'choice') {
+      navigate('/candidates');
+    } else {
+      setAddMethod('choice');
+      setParsedData(null);
+      // Reset invite form
+      setInviteEmail('');
+      setInviteFirstName('');
+      setInviteLastName('');
+      setInviteMessage('');
+      setDuplicateError(false);
+    }
   };
 
   // Send invitation mutation
   const sendInviteMutation = useMutation<InvitationWithRelations, Error, InvitationCreateRequest>({
     mutationFn: (data) => invitationApi.create(data),
     onSuccess: () => {
-      toast.success("Invitation sent successfully! The candidate will receive an email with onboarding instructions.");
-      setInviteEmail("");
-      setInviteFirstName("");
-      setInviteLastName("");
-      setInviteMessage("");
+      toast.success('Invitation sent successfully! The candidate will receive an email with onboarding instructions.');
+      setInviteEmail('');
+      setInviteFirstName('');
+      setInviteLastName('');
+      setInviteMessage('');
       setDuplicateError(false);
       navigate('/invitations');
     },
     onError: (error: any) => {
-      // Handle 409 Conflict - invitation already exists
       if (error?.status === 409 || error?.message?.includes('already exists')) {
         setDuplicateError(true);
-        toast.error(
-          "An active invitation already exists for this email address.",
-          {
-            description: "Please check the invitations list or use the resend option if needed.",
-            duration: 5000,
-            action: {
-              label: "View Invitations",
-              onClick: () => navigate('/invitations')
-            }
-          }
-        );
+        toast.error('An active invitation already exists for this email address.', {
+          description: 'Please check the invitations list or use the resend option if needed.',
+        });
       } else {
-        setDuplicateError(false);
-        toast.error(error?.message || "Failed to send invitation");
+        toast.error(`Failed to send invitation: ${error.message || 'Unknown error'}`);
       }
-    }
+    },
   });
 
   const handleSendInvite = () => {
-    if (!inviteEmail || !inviteFirstName || !inviteLastName) {
-      toast.error("Please fill in all required fields");
+    if (!inviteEmail || !inviteFirstName) {
+      toast.error('Email and first name are required');
       return;
     }
 
     sendInviteMutation.mutate({
-      email: inviteEmail,
-      first_name: inviteFirstName,
-      last_name: inviteLastName,
-      recruiter_notes: inviteMessage || undefined,
-      expiry_hours: 168, // 7 days
+      email: inviteEmail.trim(),
+      first_name: inviteFirstName.trim(),
+      last_name: inviteLastName.trim(),
+      recruiter_notes: inviteMessage.trim() || undefined,
     });
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate('/candidates')}
-          className="gap-2"
+          onClick={handleCancel}
+          className="mb-3 -ml-2"
         >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Candidates
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {addMethod === 'choice' ? 'Back to Candidates' : 'Back to Options'}
         </Button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            +
+          </div>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-1">
+              Add New Candidate
+            </h1>
+            <p className="text-lg text-slate-600">
+              {addMethod === 'choice' && 'Choose how you want to add a candidate'}
+              {addMethod === 'upload' && 'Upload and parse resume with AI'}
+              {addMethod === 'manual' && 'Manually enter candidate details'}
+              {addMethod === 'invite' && 'Send email invitation to candidate'}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Add New Candidate</h1>
-        <p className="text-slate-600 mt-1">
-          Upload a resume for AI parsing or enter candidate details manually
-        </p>
-      </div>
-
-      {/* Main Content */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {showForm ? 'Review & Edit Information' : 'Choose Input Method'}
-          </CardTitle>
-          <CardDescription>
-            {showForm
-              ? 'Review the parsed information and make any necessary edits'
-              : 'Select how you want to add the candidate'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!showForm ? (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="manual" className="gap-2">
-                  <PenSquare className="h-4 w-4" />
-                  Manual Entry
-                </TabsTrigger>
-                <TabsTrigger value="invite" className="gap-2">
-                  <Mail className="h-4 w-4" />
-                  Email Invite
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="manual" className="space-y-4">
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-purple-900 mb-2">Manual Entry</h3>
-                  <p className="text-sm text-purple-700">
-                    Upload a resume for AI parsing or manually enter candidate information.
-                  </p>
+      {/* Content */}
+      {addMethod === 'choice' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Email Invitation Option */}
+          <Card
+            className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer group md:col-span-2"
+            onClick={() => setAddMethod('invite')}
+          >
+            <CardHeader className="bg-gradient-to-br from-purple-50 to-pink-50">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-purple-500 text-white flex items-center justify-center border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] group-hover:scale-110 transition-transform">
+                  <Mail className="h-10 w-10" />
                 </div>
-                
-                {/* Sub-tabs for Manual Entry */}
-                <Tabs value={manualSubTab} onValueChange={setManualSubTab} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 mb-4">
-                    <TabsTrigger value="upload" className="gap-2">
-                      <FileUp className="h-4 w-4" />
-                      Upload Resume
-                    </TabsTrigger>
-                    <TabsTrigger value="form" className="gap-2">
-                      <PenSquare className="h-4 w-4" />
-                      Type Details
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="upload" className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                      <h3 className="font-semibold text-blue-900 mb-2">AI-Powered Resume Parsing</h3>
-                      <p className="text-sm text-blue-700">
-                        Upload a resume in PDF or DOCX format. Our AI will automatically extract candidate 
-                        information including personal details, skills, experience, and education.
-                      </p>
-                    </div>
-                    <ResumeUpload onUploadSuccess={handleUploadSuccess} />
-                  </TabsContent>
-
-                  <TabsContent value="form" className="space-y-4">
-                    <CandidateForm
-                      onSubmit={handleFormSubmit}
-                      onCancel={handleCancel}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </TabsContent>
-
-              <TabsContent value="invite" className="space-y-4">
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                  <h3 className="font-semibold text-green-900 mb-2">Send Email Invitation</h3>
-                  <p className="text-sm text-green-700 mb-2">
-                    Send an email invitation to the candidate. They can fill out their information 
-                    and upload their resume through a personalized link.
-                  </p>
-                  <p className="text-xs text-green-600 flex items-start gap-1">
-                    <span className="font-semibold">Note:</span>
-                    <span>Each email can only have one active invitation. If an invitation already exists, you can resend it from the Invitations page.</span>
-                  </p>
-                </div>
-
-                <div className="space-y-4 max-w-2xl">
-                  {duplicateError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Duplicate Invitation Detected</AlertTitle>
-                      <AlertDescription className="space-y-2">
-                        <p>An active invitation already exists for <strong>{inviteEmail}</strong>.</p>
-                        <p className="text-sm">
-                          This email address already has a pending invitation. You can:
-                        </p>
-                        <ul className="list-disc list-inside text-sm space-y-1 mt-2">
-                          <li>View existing invitations and resend if needed</li>
-                          <li>Wait for the candidate to complete their onboarding</li>
-                          <li>Check if the invitation has expired and needs to be resent</li>
-                        </ul>
-                        <div className="flex gap-2 mt-3">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate('/invitations')}
-                          >
-                            View Invitations
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setDuplicateError(false)}
-                          >
-                            Dismiss
-                          </Button>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="invite-first-name">First Name *</Label>
-                      <Input
-                        id="invite-first-name"
-                        placeholder="John"
-                        value={inviteFirstName}
-                        onChange={(e) => setInviteFirstName(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="invite-last-name">Last Name *</Label>
-                      <Input
-                        id="invite-last-name"
-                        placeholder="Doe"
-                        value={inviteLastName}
-                        onChange={(e) => setInviteLastName(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-email">Email Address *</Label>
-                    <Input
-                      id="invite-email"
-                      type="email"
-                      placeholder="john.doe@example.com"
-                      value={inviteEmail}
-                      onChange={(e) => {
-                        setInviteEmail(e.target.value);
-                        setDuplicateError(false); // Clear error when email changes
-                      }}
-                      required
-                    />
-                    <p className="text-xs text-slate-500">
-                      If an active invitation already exists for this email, you'll need to resend it instead.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-message">Personal Message (Optional)</Label>
-                    <Textarea
-                      id="invite-message"
-                      placeholder="Add a personal message to the invitation email..."
-                      rows={4}
-                      value={inviteMessage}
-                      onChange={(e) => setInviteMessage(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      onClick={handleSendInvite}
-                      disabled={!inviteEmail || !inviteFirstName || !inviteLastName || sendInviteMutation.isPending}
-                      className="gap-2"
-                    >
-                      <Mail className="h-4 w-4" />
-                      {sendInviteMutation.isPending ? 'Sending...' : 'Send Invitation'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleCancel}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h3 className="font-semibold text-green-900 mb-2">✓ Resume Parsed Successfully</h3>
-                <p className="text-sm text-green-700">
-                  We've extracted the information below from the resume. Please review and edit 
-                  as needed before saving.
-                </p>
               </div>
-              
-              {/* Two-Column Layout: Form + Resume Viewer */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Column: Form */}
-                <div className="lg:col-span-1">
-                  <CandidateForm
-                    parsedData={parsedData?.parsed_data}
-                    onSubmit={handleFormSubmit}
-                    onCancel={handleCancel}
+              <CardTitle className="text-center text-xl">Email Invitation</CardTitle>
+              <CardDescription className="text-center">
+                Send an email invitation for the candidate to complete their profile themselves
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span>Self-service onboarding</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span>Automated email workflow</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span>Candidate fills own details</span>
+                </div>
+              </div>
+              <Button
+                className="w-full mt-6 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddMethod('invite');
+                }}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Send Invitation
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Resume Upload Option */}
+          <Card
+            className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer group"
+            onClick={() => setAddMethod('upload')}
+          >
+            <CardHeader className="bg-gradient-to-br from-blue-50 to-indigo-50">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-blue-500 text-white flex items-center justify-center border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] group-hover:scale-110 transition-transform">
+                  <Upload className="h-10 w-10" />
+                </div>
+              </div>
+              <CardTitle className="text-center text-xl">Resume Upload</CardTitle>
+              <CardDescription className="text-center">
+                Upload a PDF or DOCX resume and let AI extract candidate information automatically
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Automatic information extraction</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Skills, experience, and education parsed</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Fast and accurate</span>
+                </div>
+              </div>
+              <Button
+                className="w-full mt-6 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddMethod('upload');
+                }}
+              >
+                <FileUp className="h-4 w-4 mr-2" />
+                Upload Resume
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Manual Entry Option */}
+          <Card
+            className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer group"
+            onClick={() => setAddMethod('manual')}
+          >
+            <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-green-500 text-white flex items-center justify-center border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] group-hover:scale-110 transition-transform">
+                  <PenSquare className="h-10 w-10" />
+                </div>
+              </div>
+              <CardTitle className="text-center text-xl">Manual Entry</CardTitle>
+              <CardDescription className="text-center">
+                Manually fill in candidate information using a detailed form
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span>Complete control over data entry</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span>Perfect for referrals and interviews</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span>Detailed and customizable</span>
+                </div>
+              </div>
+              <Button
+                className="w-full mt-6 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddMethod('manual');
+                }}
+              >
+                <PenSquare className="h-4 w-4 mr-2" />
+                Type Details
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : addMethod === 'upload' ? (
+        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] max-w-3xl">
+          <CardHeader className="bg-gradient-to-br from-blue-50 to-indigo-50">
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5 text-blue-600" />
+              Upload Resume
+            </CardTitle>
+            <CardDescription>
+              Upload a resume in PDF or DOCX format. Our AI will automatically extract candidate information.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResumeUpload onUploadSuccess={handleUploadSuccess} />
+          </CardContent>
+        </Card>
+      ) : addMethod === 'manual' ? (
+        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50">
+            <CardTitle className="flex items-center gap-2">
+              <PenSquare className="h-5 w-5 text-green-600" />
+              Manual Entry
+            </CardTitle>
+            <CardDescription>
+              Fill in the candidate information manually
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CandidateForm
+              parsedData={parsedData?.parsed_data}
+              onSubmit={handleFormSubmit}
+              onCancel={handleCancel}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] max-w-2xl">
+          <CardHeader className="bg-gradient-to-br from-purple-50 to-pink-50">
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-purple-600" />
+              Send Email Invitation
+            </CardTitle>
+            <CardDescription>
+              The candidate will receive an email invitation to complete their profile
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {duplicateError && (
+                <Alert variant="destructive" className="border-2 border-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    An active invitation already exists for this email. Please check the invitations list.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invite-first-name">First Name *</Label>
+                  <Input
+                    id="invite-first-name"
+                    value={inviteFirstName}
+                    onChange={(e) => setInviteFirstName(e.target.value)}
+                    placeholder="John"
+                    className="border-2 border-black"
+                    required
                   />
                 </div>
 
-                {/* Right Column: Resume Viewer */}
-                <div className="lg:col-span-1 lg:sticky lg:top-6 lg:self-start">
-                  <ResumeViewer
-                    resumeUrl={parsedData?.file_info?.file_url}
-                    resumeFileName={parsedData?.file_info?.original_filename}
-                    candidateName={parsedData?.parsed_data?.full_name as string}
+                <div className="space-y-2">
+                  <Label htmlFor="invite-last-name">Last Name</Label>
+                  <Input
+                    id="invite-last-name"
+                    value={inviteLastName}
+                    onChange={(e) => setInviteLastName(e.target.value)}
+                    placeholder="Doe"
+                    className="border-2 border-black"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-email">Email Address *</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => {
+                    setInviteEmail(e.target.value);
+                    setDuplicateError(false);
+                  }}
+                  placeholder="john.doe@example.com"
+                  className="border-2 border-black"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-message">Custom Message (Optional)</Label>
+                <Textarea
+                  id="invite-message"
+                  value={inviteMessage}
+                  onChange={(e) => setInviteMessage(e.target.value)}
+                  placeholder="Add a personal message to the invitation email..."
+                  rows={4}
+                  className="border-2 border-black"
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t-2 border-slate-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancel}
+                  className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendInvite}
+                  disabled={sendInviteMutation.isPending || !inviteEmail || !inviteFirstName}
+                  className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-purple-600 hover:bg-purple-700"
+                >
+                  {sendInviteMutation.isPending ? 'Sending...' : 'Send Invitation'}
+                </Button>
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

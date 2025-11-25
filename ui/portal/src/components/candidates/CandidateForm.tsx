@@ -15,29 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, Plus, Trash2, Briefcase, GraduationCap } from 'lucide-react';
+import { TagInput } from '@/components/ui/tag-input';
+import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
+import { EducationEditor } from '@/components/candidates/EducationEditor';
+import { candidateUpdateSchema as candidateSchema } from '@/schemas/candidateSchema';
+import { toast } from 'sonner';
+import { ZodError } from 'zod';
 import type { Candidate, CandidateCreateInput, CandidateUpdateInput, CandidateStatus } from '@/types/candidate';
-
-interface WorkExperience {
-  title: string;
-  company: string;
-  location?: string;
-  start_date?: string;
-  end_date?: string;
-  is_current?: boolean;
-  description?: string;
-  duration_months?: number;
-}
-
-interface Education {
-  degree: string;
-  field_of_study?: string;
-  institution: string;
-  graduation_year?: number;
-  gpa?: number;
-}
 
 interface CandidateFormProps {
   candidate?: Candidate; // If provided, form is in edit mode
@@ -82,18 +66,13 @@ export function CandidateForm({
     certifications: [],
     languages: [],
     preferred_locations: [],
+    work_experience: [],
+    education: [],
     status: 'new',
     source: 'manual',
   });
 
-  const [skillInput, setSkillInput] = useState('');
-  const [certInput, setCertInput] = useState('');
-  const [langInput, setLangInput] = useState('');
-  const [locInput, setLocInput] = useState('');
-
-  // Work experience and education state
-  const [workExperience, setWorkExperience] = useState<WorkExperience[]>([]);
-  const [education, setEducation] = useState<Education[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Initialize form data
   useEffect(() => {
@@ -117,15 +96,11 @@ export function CandidateForm({
         certifications: candidate.certifications || [],
         languages: candidate.languages || [],
         preferred_locations: candidate.preferred_locations || [],
-        education: candidate.education,
-        work_experience: candidate.work_experience,
+        education: candidate.education || [],
+        work_experience: candidate.work_experience || [],
         status: candidate.status,
         source: candidate.source,
       });
-      
-      // Initialize work experience and education
-      setWorkExperience(candidate.work_experience || []);
-      setEducation(candidate.education || []);
     } else if (parsedData) {
       // Create mode with parsed data: pre-fill from resume
       setFormData({
@@ -144,147 +119,63 @@ export function CandidateForm({
         certifications: (parsedData.certifications as string[]) || [],
         languages: (parsedData.languages as string[]) || [],
         preferred_locations: (parsedData.preferred_locations as string[]) || [],
+        work_experience: (parsedData.work_experience as any[]) || [],
+        education: (parsedData.education as any[]) || [],
         status: 'new',
         source: 'resume_upload',
       });
-      
-      // Initialize work experience and education from parsed data
-      setWorkExperience((parsedData.work_experience as WorkExperience[]) || []);
-      setEducation((parsedData.education as Education[]) || []);
     }
   }, [candidate, parsedData]);
 
-  const handleInputChange = (field: keyof CandidateCreateInput, value: string | number | undefined) => {
+  const handleInputChange = (field: keyof CandidateCreateInput, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const addSkill = () => {
-    if (skillInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        skills: [...(prev.skills || []), skillInput.trim()],
-      }));
-      setSkillInput('');
+    // Clear error for this field
+    if (errors[field]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
-  };
-
-  const removeSkill = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      skills: prev.skills?.filter((_, i) => i !== index),
-    }));
-  };
-
-  const addCertification = () => {
-    if (certInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        certifications: [...(prev.certifications || []), certInput.trim()],
-      }));
-      setCertInput('');
-    }
-  };
-
-  const removeCertification = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      certifications: prev.certifications?.filter((_, i) => i !== index),
-    }));
-  };
-
-  const addLanguage = () => {
-    if (langInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        languages: [...(prev.languages || []), langInput.trim()],
-      }));
-      setLangInput('');
-    }
-  };
-
-  const removeLanguage = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      languages: prev.languages?.filter((_, i) => i !== index),
-    }));
-  };
-
-  const addPreferredLocation = () => {
-    if (locInput.trim()) {
-      setFormData((prev) => ({
-        ...prev,
-        preferred_locations: [...(prev.preferred_locations || []), locInput.trim()],
-      }));
-      setLocInput('');
-    }
-  };
-
-  const removePreferredLocation = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      preferred_locations: prev.preferred_locations?.filter((_, i) => i !== index),
-    }));
-  };
-
-  // Work Experience handlers
-  const addWorkExperience = () => {
-    setWorkExperience([...workExperience, {
-      title: '',
-      company: '',
-      location: '',
-      start_date: '',
-      end_date: '',
-      is_current: false,
-      description: '',
-    }]);
-  };
-
-  const updateWorkExperience = (index: number, field: keyof WorkExperience, value: string | boolean | number | undefined) => {
-    const updated = [...workExperience];
-    updated[index] = { ...updated[index], [field]: value };
-    setWorkExperience(updated);
-  };
-
-  const removeWorkExperience = (index: number) => {
-    setWorkExperience(workExperience.filter((_, i) => i !== index));
-  };
-
-  // Education handlers
-  const addEducation = () => {
-    setEducation([...education, {
-      degree: '',
-      field_of_study: '',
-      institution: '',
-      graduation_year: undefined,
-      gpa: undefined,
-    }]);
-  };
-
-  const updateEducation = (index: number, field: keyof Education, value: string | number | undefined) => {
-    const updated = [...education];
-    updated[index] = { ...updated[index], [field]: value };
-    setEducation(updated);
-  };
-
-  const removeEducation = (index: number) => {
-    setEducation(education.filter((_, i) => i !== index));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Include work experience and education in submission
-    // Ensure is_current always has a boolean value
-    const submitData = {
-      ...formData,
-      work_experience: workExperience.map(exp => ({
-        ...exp,
-        is_current: exp.is_current || false,
-      })),
-      education: education,
-    };
-    
-    onSubmit(submitData);
+    setErrors({});
+
+    try {
+      // Validate with Zod
+      // We use partial validation for create since some fields might be optional in UI but required in schema
+      // or vice versa depending on strictness. 
+      // Ideally we should use the schema to parse.
+
+      // Clean up empty strings to null/undefined where appropriate for numbers
+      const dataToValidate = {
+        ...formData,
+        total_experience_years: formData.total_experience_years === '' ? null : formData.total_experience_years,
+      };
+
+      // For creation, we might need to ensure required fields are present
+      // The schema handles this.
+      const validatedData = candidateSchema.parse(dataToValidate);
+
+      console.log('Form submission data:', validatedData);
+      onSubmit(validatedData as CandidateCreateInput);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const newErrors: Record<string, string> = {};
+        error.errors.forEach((err) => {
+          const path = err.path.join('.');
+          newErrors[path] = err.message;
+        });
+        setErrors(newErrors);
+        toast.error('Please fix the validation errors');
+        console.error('Validation errors:', newErrors);
+      } else {
+        console.error('Form submission error:', error);
+        toast.error('An unexpected error occurred');
+      }
+    }
   };
 
   return (
@@ -292,7 +183,7 @@ export function CandidateForm({
       {/* Basic Information */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Basic Information</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="first_name">First Name *</Label>
@@ -300,8 +191,10 @@ export function CandidateForm({
               id="first_name"
               value={formData.first_name}
               onChange={(e) => handleInputChange('first_name', e.target.value)}
+              className={errors.first_name ? 'border-red-500' : ''}
               required
             />
+            {errors.first_name && <p className="text-xs text-red-500">{errors.first_name}</p>}
           </div>
 
           <div className="space-y-2">
@@ -310,8 +203,10 @@ export function CandidateForm({
               id="last_name"
               value={formData.last_name}
               onChange={(e) => handleInputChange('last_name', e.target.value)}
+              className={errors.last_name ? 'border-red-500' : ''}
               required
             />
+            {errors.last_name && <p className="text-xs text-red-500">{errors.last_name}</p>}
           </div>
 
           <div className="space-y-2">
@@ -321,7 +216,9 @@ export function CandidateForm({
               type="email"
               value={formData.email || ''}
               onChange={(e) => handleInputChange('email', e.target.value)}
+              className={errors.email ? 'border-red-500' : ''}
             />
+            {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
           </div>
 
           <div className="space-y-2">
@@ -331,7 +228,9 @@ export function CandidateForm({
               type="tel"
               value={formData.phone || ''}
               onChange={(e) => handleInputChange('phone', e.target.value)}
+              className={errors.phone ? 'border-red-500' : ''}
             />
+            {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
           </div>
 
           <div className="space-y-2">
@@ -368,7 +267,7 @@ export function CandidateForm({
       {/* Professional Information */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Professional Information</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="current_title">Current Title</Label>
@@ -386,7 +285,7 @@ export function CandidateForm({
               id="total_experience_years"
               type="number"
               min="0"
-              value={formData.total_experience_years || ''}
+              value={formData.total_experience_years ?? ''}
               onChange={(e) => handleInputChange('total_experience_years', e.target.value ? parseInt(e.target.value) : undefined)}
             />
           </div>
@@ -427,7 +326,7 @@ export function CandidateForm({
       {/* Links */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Links</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="linkedin_url">LinkedIn URL</Label>
@@ -437,7 +336,9 @@ export function CandidateForm({
               value={formData.linkedin_url || ''}
               onChange={(e) => handleInputChange('linkedin_url', e.target.value)}
               placeholder="https://linkedin.com/in/username"
+              className={errors.linkedin_url ? 'border-red-500' : ''}
             />
+            {errors.linkedin_url && <p className="text-xs text-red-500">{errors.linkedin_url}</p>}
           </div>
 
           <div className="space-y-2">
@@ -448,7 +349,9 @@ export function CandidateForm({
               value={formData.portfolio_url || ''}
               onChange={(e) => handleInputChange('portfolio_url', e.target.value)}
               placeholder="https://portfolio.com"
+              className={errors.portfolio_url ? 'border-red-500' : ''}
             />
+            {errors.portfolio_url && <p className="text-xs text-red-500">{errors.portfolio_url}</p>}
           </div>
         </div>
       </div>
@@ -456,336 +359,59 @@ export function CandidateForm({
       {/* Skills */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Skills</h3>
-        
-        <div className="flex gap-2">
-          <Input
-            value={skillInput}
-            onChange={(e) => setSkillInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
-            placeholder="Add a skill..."
-          />
-          <Button type="button" onClick={addSkill} variant="outline" size="icon">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {formData.skills?.map((skill, index) => (
-            <Badge key={index} variant="secondary" className="gap-1">
-              {skill}
-              <button
-                type="button"
-                onClick={() => removeSkill(index)}
-                className="ml-1 hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
+        <TagInput
+          value={formData.skills || []}
+          onChange={(skills) => handleInputChange('skills', skills)}
+          placeholder="Add a skill..."
+        />
       </div>
 
       {/* Certifications */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Certifications</h3>
-        
-        <div className="flex gap-2">
-          <Input
-            value={certInput}
-            onChange={(e) => setCertInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCertification())}
-            placeholder="Add a certification..."
-          />
-          <Button type="button" onClick={addCertification} variant="outline" size="icon">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {formData.certifications?.map((cert, index) => (
-            <Badge key={index} variant="secondary" className="gap-1">
-              {cert}
-              <button
-                type="button"
-                onClick={() => removeCertification(index)}
-                className="ml-1 hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
+        <TagInput
+          value={formData.certifications || []}
+          onChange={(certs) => handleInputChange('certifications', certs)}
+          placeholder="Add a certification..."
+        />
       </div>
 
       {/* Languages */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Languages</h3>
-        
-        <div className="flex gap-2">
-          <Input
-            value={langInput}
-            onChange={(e) => setLangInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addLanguage())}
-            placeholder="Add a language..."
-          />
-          <Button type="button" onClick={addLanguage} variant="outline" size="icon">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {formData.languages?.map((lang, index) => (
-            <Badge key={index} variant="secondary" className="gap-1">
-              {lang}
-              <button
-                type="button"
-                onClick={() => removeLanguage(index)}
-                className="ml-1 hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
+        <TagInput
+          value={formData.languages || []}
+          onChange={(langs) => handleInputChange('languages', langs)}
+          placeholder="Add a language..."
+        />
       </div>
 
       {/* Preferred Locations */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-slate-900">Preferred Work Locations</h3>
-        
-        <div className="flex gap-2">
-          <Input
-            value={locInput}
-            onChange={(e) => setLocInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addPreferredLocation())}
-            placeholder="Add a preferred location..."
-          />
-          <Button type="button" onClick={addPreferredLocation} variant="outline" size="icon">
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {formData.preferred_locations?.map((loc, index) => (
-            <Badge key={index} variant="secondary" className="gap-1">
-              {loc}
-              <button
-                type="button"
-                onClick={() => removePreferredLocation(index)}
-                className="ml-1 hover:text-destructive"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
+        <TagInput
+          value={formData.preferred_locations || []}
+          onChange={(locs) => handleInputChange('preferred_locations', locs)}
+          placeholder="Add a preferred location..."
+        />
       </div>
 
       {/* Work Experience */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Briefcase className="h-5 w-5" />
-            Work Experience
-          </h3>
-          <Button type="button" onClick={addWorkExperience} variant="outline" size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Experience
-          </Button>
-        </div>
-
-        {workExperience.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8 border-2 border-dashed rounded-lg">
-            No work experience added yet. Click "Add Experience" to get started.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {workExperience.map((exp, index) => (
-              <Card key={index}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">Experience #{index + 1}</CardTitle>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeWorkExperience(index)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Job Title *</Label>
-                      <Input
-                        value={exp.title}
-                        onChange={(e) => updateWorkExperience(index, 'title', e.target.value)}
-                        placeholder="e.g., Senior Software Engineer"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Company *</Label>
-                      <Input
-                        value={exp.company}
-                        onChange={(e) => updateWorkExperience(index, 'company', e.target.value)}
-                        placeholder="e.g., Google"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Location</Label>
-                      <Input
-                        value={exp.location || ''}
-                        onChange={(e) => updateWorkExperience(index, 'location', e.target.value)}
-                        placeholder="e.g., San Francisco, CA"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Start Date</Label>
-                      <Input
-                        type="month"
-                        value={exp.start_date || ''}
-                        onChange={(e) => updateWorkExperience(index, 'start_date', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>End Date</Label>
-                      <Input
-                        type="month"
-                        value={exp.end_date || ''}
-                        onChange={(e) => updateWorkExperience(index, 'end_date', e.target.value)}
-                        disabled={exp.is_current}
-                      />
-                    </div>
-                    <div className="space-y-2 flex items-end">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={exp.is_current || false}
-                          onChange={(e) => {
-                            updateWorkExperience(index, 'is_current', e.target.checked);
-                            if (e.target.checked) {
-                              updateWorkExperience(index, 'end_date', '');
-                            }
-                          }}
-                          className="h-4 w-4"
-                        />
-                        <span className="text-sm font-medium">Current Position</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      value={exp.description || ''}
-                      onChange={(e) => updateWorkExperience(index, 'description', e.target.value)}
-                      rows={4}
-                      placeholder="Describe your responsibilities and achievements..."
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <h3 className="text-lg font-semibold text-slate-900">Work Experience</h3>
+        <WorkExperienceEditor
+          value={formData.work_experience || []}
+          onChange={(exp) => handleInputChange('work_experience', exp)}
+        />
       </div>
 
       {/* Education */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <GraduationCap className="h-5 w-5" />
-            Education
-          </h3>
-          <Button type="button" onClick={addEducation} variant="outline" size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Education
-          </Button>
-        </div>
-
-        {education.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8 border-2 border-dashed rounded-lg">
-            No education added yet. Click "Add Education" to get started.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {education.map((edu, index) => (
-              <Card key={index}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-base">Education #{index + 1}</CardTitle>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeEducation(index)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Degree *</Label>
-                      <Input
-                        value={edu.degree}
-                        onChange={(e) => updateEducation(index, 'degree', e.target.value)}
-                        placeholder="e.g., Bachelor of Science"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Field of Study</Label>
-                      <Input
-                        value={edu.field_of_study || ''}
-                        onChange={(e) => updateEducation(index, 'field_of_study', e.target.value)}
-                        placeholder="e.g., Computer Science"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Institution *</Label>
-                      <Input
-                        value={edu.institution}
-                        onChange={(e) => updateEducation(index, 'institution', e.target.value)}
-                        placeholder="e.g., MIT"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Graduation Year</Label>
-                      <Input
-                        type="number"
-                        min="1950"
-                        max="2050"
-                        value={edu.graduation_year || ''}
-                        onChange={(e) => updateEducation(index, 'graduation_year', e.target.value ? parseInt(e.target.value) : undefined)}
-                        placeholder="e.g., 2020"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>GPA</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="4"
-                        value={edu.gpa || ''}
-                        onChange={(e) => updateEducation(index, 'gpa', e.target.value ? parseFloat(e.target.value) : undefined)}
-                        placeholder="e.g., 3.8"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <h3 className="text-lg font-semibold text-slate-900">Education</h3>
+        <EducationEditor
+          value={formData.education || []}
+          onChange={(edu) => handleInputChange('education', edu)}
+        />
       </div>
 
       {/* Form Actions */}

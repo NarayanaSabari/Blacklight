@@ -85,6 +85,7 @@ export function EducationEditor({
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             removeEducation(index);
@@ -193,6 +194,7 @@ export function EducationEditor({
             {!disabled && (
                 <Button
                     variant="outline"
+                    type="button"
                     onClick={addEducation}
                     className="w-full border-2 border-dashed border-primary text-primary hover:bg-primary/5"
                 >
