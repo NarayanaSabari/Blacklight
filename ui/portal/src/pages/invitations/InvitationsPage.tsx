@@ -82,15 +82,15 @@ function StatsCard({
   iconColor: string;
 }) {
   return (
-    <Card>
+    <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
+            <p className="text-sm font-black text-slate-700 uppercase tracking-wide">{title}</p>
+            <p className="text-4xl font-black text-slate-900 mt-2">{value}</p>
           </div>
-          <div className={`rounded-full bg-muted p-3 ${iconColor}`}>
-            <Icon className="h-5 w-5" />
+          <div className={`rounded-lg border-2 border-black p-3 ${iconColor} bg-opacity-20`}>
+            <Icon className="h-6 w-6" />
           </div>
         </div>
       </CardContent>

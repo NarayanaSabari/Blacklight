@@ -88,7 +88,7 @@ export function OnboardCandidatesPage() {
   const [activeTab, setActiveTab] = useState<TabValue>('pending-assignment');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
-  
+
   // Dialogs and selected items
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [onboardDialogOpen, setOnboardDialogOpen] = useState(false);
@@ -252,7 +252,7 @@ export function OnboardCandidatesPage() {
 
   // Reject invitation mutation
   const rejectInvitationMutation = useMutation({
-    mutationFn: (data: { invitationId: number; rejectionReason: string }) => 
+    mutationFn: (data: { invitationId: number; rejectionReason: string }) =>
       invitationApi.reject(data.invitationId, { rejection_reason: data.rejectionReason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['submitted-invitations'] });
@@ -346,16 +346,16 @@ export function OnboardCandidatesPage() {
   };
 
   // Filter candidates by search query (only for non-pending-review tabs)
-  const filteredCandidates = activeTab !== 'pending-review' 
+  const filteredCandidates = activeTab !== 'pending-review'
     ? (candidatesData?.candidates.filter((candidate) => {
-        if (!searchQuery) return true;
-        const query = searchQuery.toLowerCase();
-        return (
-          candidate.first_name.toLowerCase().includes(query) ||
-          candidate.last_name.toLowerCase().includes(query) ||
-          candidate.email.toLowerCase().includes(query)
-        );
-      }) || [])
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        candidate.first_name.toLowerCase().includes(query) ||
+        candidate.last_name.toLowerCase().includes(query) ||
+        candidate.email.toLowerCase().includes(query)
+      );
+    }) || [])
     : [];
 
   // Format date
@@ -445,18 +445,6 @@ export function OnboardCandidatesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header with contextual help */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <ClipboardList className="h-5 w-5 text-blue-600 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-slate-900">Review & Approve Candidate Submissions</h3>
-            <p className="text-sm text-slate-600 mt-1">
-              Review candidate submissions, approve qualified candidates, and manage the onboarding workflow.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Tabs and Content */}
       <Card>
@@ -536,209 +524,155 @@ export function OnboardCandidatesPage() {
             </div>
 
             <TabsContent value="pending-review" className="mt-0">
-              <div className="space-y-6">
-                {/* Async Resume Uploads Section */}
-                {(isLoadingPendingReviewCandidates || (pendingReviewCandidatesData && pendingReviewCandidatesData.candidates.length > 0)) && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                      <Upload className="h-4 w-4" />
-                      Resume Uploads (AI Parsed)
-                      {pendingReviewCandidatesData && pendingReviewCandidatesData.total > 0 && (
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                          {pendingReviewCandidatesData.total}
-                        </Badge>
-                      )}
-                    </h3>
-                    {isLoadingPendingReviewCandidates ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-12 w-full" />
-                        <Skeleton className="h-12 w-full" />
-                      </div>
-                    ) : pendingReviewCandidatesData && pendingReviewCandidatesData.candidates.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Source</TableHead>
-                            <TableHead>Uploaded At</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {pendingReviewCandidatesData.candidates.map((candidate: Candidate) => (
-                            <TableRow key={`resume-${candidate.id}`}>
-                              <TableCell className="font-medium">
-                                {candidate.first_name} {candidate.last_name}
-                              </TableCell>
-                              <TableCell>{candidate.email || '—'}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="bg-yellow-50">Resume Upload</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm text-slate-600">
-                                  {candidate.resume_uploaded_at ? formatDate(candidate.resume_uploaded_at) : '—'}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedResumeCandidate(candidate);
-                                    setReviewModalOpen(true);
-                                  }}
-                                  className="gap-2"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  Review & Approve
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    ) : null}
-                  </div>
-                )}
-
-                {/* Self-Onboarding Invitations Section */}
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Self-Onboarding Submissions
-                    {submittedInvitationsData && submittedInvitationsData.total > 0 && (
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                        {submittedInvitationsData.total}
-                      </Badge>
-                    )}
-                  </h3>
-                  {isLoadingSubmittedInvitations ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                  ) : submittedInvitationsError ? (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Failed to load submitted invitations. Please try again.
-                      </AlertDescription>
-                    </Alert>
-                  ) : submittedInvitationsData?.items.length > 0 ? (
-                    <>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Position</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Submitted At</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {submittedInvitationsData.items.map((invitation) => (
-                            <TableRow key={`invitation-${invitation.id}`}>
-                              <TableCell className="font-medium">
-                                {invitation.first_name} {invitation.last_name}
-                              </TableCell>
-                              <TableCell>{invitation.email}</TableCell>
-                              <TableCell>{invitation.position || '—'}</TableCell>
-                              <TableCell>
-                                <Badge variant="outline">
-                                  {invitation.status.replace(/_/g, ' ')}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="text-sm text-slate-600">
-                                  {formatDate(invitation.submitted_at)}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => navigate(`/invitations/${invitation.id}/review`)}>
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      Review Submission
-                                    </DropdownMenuItem>
-                                    {canApproveCandidates && (
-                                      <>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => handleApproveInvitation(invitation.id)}>
-                                          <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                                          Approve
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleRejectInvitation(invitation.id)} className="text-red-600">
-                                          <XCircle className="h-4 w-4 mr-2" />
-                                          Reject
-                                        </DropdownMenuItem>
-                                      </>
-                                    )}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-
-                      {/* Pagination */}
-                      {submittedInvitationsData && submittedInvitationsData.pages > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                          <div className="text-sm text-slate-600">
-                            Page {submittedInvitationsData.page} of {submittedInvitationsData.pages}
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPage((p) => Math.max(1, p - 1))}
-                              disabled={page === 1}
-                            >
-                              Previous
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setPage((p) => p + 1)}
-                              disabled={page === submittedInvitationsData.pages}
-                            >
-                              Next
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-center py-8 text-slate-500">
-                      <Mail className="h-10 w-10 mx-auto mb-3 text-slate-300" />
-                      <p className="text-sm">No self-onboarding submissions found</p>
-                    </div>
-                  )}
+              {/* Pending Review Table */}
+              {isLoadingPendingReviewCandidates || isLoadingSubmittedInvitations ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
                 </div>
+              ) : (
+                <>
+                  {/* Combine candidates and invitations */}
+                  {(() => {
+                    const candidates = pendingReviewCandidatesData?.candidates || [];
+                    const invitations = submittedInvitationsData?.items || [];
+                    const hasPendingReviews = candidates.length > 0 || invitations.length > 0;
 
-                {/* Empty State - Both sources empty */}
-                {!isLoadingSubmittedInvitations && 
-                 !isLoadingPendingReviewCandidates && 
-                 (!submittedInvitationsData || submittedInvitationsData.items.length === 0) &&
-                 (!pendingReviewCandidatesData || pendingReviewCandidatesData.candidates.length === 0) && (
-                  <div className="text-center py-12 text-slate-500 border-2 border-dashed border-slate-200 rounded-lg">
-                    <ClipboardList className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                    <p className="text-lg font-medium">No Submissions Pending Review</p>
-                    <p className="text-sm mt-1">
-                      Resume uploads and self-onboarding submissions will appear here
-                    </p>
-                  </div>
-                )}
-              </div>
+                    if (!hasPendingReviews) {
+                      return (
+                        <Card className="border-2 border-dashed border-slate-300">
+                          <CardContent className="flex flex-col items-center justify-center py-16">
+                            <div className="rounded-full bg-green-100 p-6 mb-4">
+                              <CheckCircle2 className="h-16 w-16 text-green-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-slate-900 mb-2">All Caught Up!</h3>
+                            <p className="text-base text-slate-600 text-center max-w-md">
+                              No candidates pending review at the moment.<br />
+                              New resume uploads and email submissions will appear here.
+                            </p>
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    return (
+                      <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-black">
+                          <CardTitle className="text-lg font-bold">Pending Review</CardTitle>
+                          <CardDescription>
+                            {candidates.length + invitations.length} submission{candidates.length + invitations.length === 1 ? '' : 's'} awaiting your review
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Email</TableHead>
+                                <TableHead>Source</TableHead>
+                                <TableHead>Submitted</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {/* Resume Upload Candidates */}
+                              {candidates.map((candidate) => (
+                                <TableRow key={`candidate-${candidate.id}`}>
+                                  <TableCell>
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold border-2 border-black">
+                                        {candidate.first_name?.[0]}{candidate.last_name?.[0]}
+                                      </div>
+                                      <div className="font-medium text-slate-900">
+                                        {candidate.first_name} {candidate.last_name}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-slate-600">{candidate.email || '—'}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="bg-yellow-50 border-yellow-300 text-yellow-800">
+                                      <Upload className="h-3 w-3 mr-1" />
+                                      Resume Upload
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-sm text-slate-600">
+                                    {candidate.created_at ? new Date(candidate.created_at).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                    }) : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                                      onClick={() => navigate(`/candidates/${candidate.id}?mode=review`)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      Review
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+
+                              {/* Email Invitations */}
+                              {invitations.map((invitation) => (
+                                <TableRow key={`invitation-${invitation.id}`}>
+                                  <TableCell>
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold border-2 border-black">
+                                        {invitation.first_name?.[0]}{invitation.last_name?.[0]}
+                                      </div>
+                                      <div className="font-medium text-slate-900">
+                                        {invitation.first_name} {invitation.last_name}
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-slate-600">{invitation.email}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="bg-blue-50 border-blue-300 text-blue-800">
+                                      <Mail className="h-3 w-3 mr-1" />
+                                      Email Invitation
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-sm text-slate-600">
+                                    {invitation.submitted_at ? new Date(invitation.submitted_at).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric',
+                                    }) : '—'}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      variant="default"
+                                      size="sm"
+                                      className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                                      onClick={() => {
+                                        // Navigate to candidate detail if invitation has been converted
+                                        // For now, use invitation review page as fallback
+                                        if (invitation.candidate_id) {
+                                          navigate(`/candidates/${invitation.candidate_id}?mode=review`);
+                                        } else {
+                                          navigate(`/invitations/${invitation.id}/review`);
+                                        }
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      Review
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="pending-assignment" className="mt-0">

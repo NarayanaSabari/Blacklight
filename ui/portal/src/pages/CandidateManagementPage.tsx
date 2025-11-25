@@ -1,20 +1,19 @@
 /**
- * Unified Candidate Management Page
- * HR-focused workflow: Add candidates, manage onboarding, and track invitations
+ * Unified Candidate Management Page - Sidebar Navigation Layout
+ * HR-focused workflow with persistent sidebar and action dashboard
  */
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-  UserPlus, 
-  ClipboardList, 
-  Mail, 
-  Upload, 
-  FileText, 
+import { Badge } from '@/components/ui/badge';
+import {
+  UserPlus,
+  ClipboardList,
+  Mail,
+  FileText,
   Users,
   CheckCircle2,
   Inbox
@@ -25,18 +24,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CandidatesPage } from './CandidatesPage';
 import { OnboardCandidatesPage } from './OnboardCandidatesPage';
 import InvitationsPage from './invitations/InvitationsPage';
+import { cn } from '@/lib/utils';
+
+type SectionType = 'onboarding' | 'invitations' | 'candidates';
 
 export function CandidateManagementPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get('tab') || 'onboarding';
-  const [activeTab, setActiveTab] = useState<string>(tab);
+  const [activeSection, setActiveSection] = useState<SectionType>(tab as SectionType);
 
   // Fetch real-time stats
   const { data: submittedInvitations, isLoading: loadingInvitations } = useQuery({
     queryKey: ['submitted-invitations-count'],
     queryFn: () => invitationApi.getSubmittedInvitations({ page: 1, per_page: 1 }),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
   });
 
   const { data: statsData, isLoading: loadingStats } = useQuery({
@@ -45,15 +47,15 @@ export function CandidateManagementPage() {
     refetchInterval: 30000,
   });
 
-  // Sync URL with active tab
+  // Sync URL with active section
   useEffect(() => {
-    if (tab !== activeTab) {
-      setActiveTab(tab);
+    if (tab !== activeSection) {
+      setActiveSection(tab as SectionType);
     }
-  }, [tab, activeTab]);
+  }, [tab, activeSection]);
 
-  const handleTabChange = (value: string) => {
-    setActiveTab(value);
+  const handleSectionChange = (value: SectionType) => {
+    setActiveSection(value);
     setSearchParams({ tab: value });
   };
 
@@ -68,30 +70,50 @@ export function CandidateManagementPage() {
 
   const isLoadingStats = loadingInvitations || loadingStats;
 
+  // Sidebar navigation items
+  const navItems = [
+    {
+      id: 'onboarding' as SectionType,
+      label: 'Review Submissions',
+      icon: ClipboardList,
+      badge: needsReviewCount,
+      badgeVariant: 'destructive' as const,
+      description: 'Review and approve candidates',
+    },
+    {
+      id: 'invitations' as SectionType,
+      label: 'Email Invitations',
+      icon: Mail,
+      description: 'Track and manage invites',
+    },
+    {
+      id: 'candidates' as SectionType,
+      label: 'All Candidates',
+      icon: FileText,
+      description: 'Complete database',
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Page Header with Quick Actions */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">HR Candidate Management</h1>
-          <p className="text-slate-600 mt-1">
-            Manage recruitment workflow and candidate pipeline
-          </p>
-        </div>
-        
-        {/* Quick Action Buttons */}
-        <div className="flex gap-3">
-          <Button 
-            variant="outline" 
+      {/* Page Header */}
+      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+              <Users className="h-8 w-8" />
+            </div>
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">HR Candidate Management</h1>
+              <p className="text-lg text-slate-600 mt-1">
+                Manage recruitment workflow and candidate pipeline
+              </p>
+            </div>
+          </div>
+
+          <Button
             onClick={() => navigate('/candidates/new')}
-            className="gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Upload Resume
-          </Button>
-          <Button 
-            onClick={() => navigate('/candidates/new')}
-            className="gap-2"
+            className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
           >
             <UserPlus className="h-4 w-4" />
             Add Candidate
@@ -99,138 +121,67 @@ export function CandidateManagementPage() {
         </div>
       </div>
 
-      {/* Simplified Action-Oriented Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card 
-          className="border-l-4 border-l-amber-500 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => handleTabChange('onboarding')}
-        >
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardDescription className="flex items-center gap-2 text-sm font-medium">
-                <Inbox className="h-5 w-5 text-amber-500" />
-                Needs Review
-              </CardDescription>
-              <div className="text-xs text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded">
-                Action Required
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoadingStats ? (
-              <Skeleton className="h-10 w-16" />
-            ) : (
-              <CardTitle className="text-4xl text-amber-600">{needsReviewCount}</CardTitle>
-            )}
-            <p className="text-sm text-slate-600 mt-2">
-              Candidate submissions awaiting approval
-            </p>
-          </CardContent>
-        </Card>
+      {/* Sidebar Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        {/* Left Sidebar - Navigation */}
+        <aside className="space-y-2">
+          <Card className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sticky top-6">
+            <CardHeader className="bg-slate-50 pb-4">
+              <CardTitle className="text-lg font-bold">Navigation</CardTitle>
+              <CardDescription className="text-sm">Select workflow section</CardDescription>
+            </CardHeader>
+            <CardContent className="p-2">
+              <nav className="space-y-1">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeSection === item.id;
 
-        <Card 
-          className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => handleTabChange('onboarding')}
-        >
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardDescription className="flex items-center gap-2 text-sm font-medium">
-                <CheckCircle2 className="h-5 w-5 text-blue-500" />
-                Ready to Assign
-              </CardDescription>
-              <div className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">
-                Next Step
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoadingStats ? (
-              <Skeleton className="h-10 w-16" />
-            ) : (
-              <CardTitle className="text-4xl text-blue-600">{readyToAssignCount}</CardTitle>
-            )}
-            <p className="text-sm text-slate-600 mt-2">
-              Approved candidates awaiting assignment
-            </p>
-          </CardContent>
-        </Card>
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleSectionChange(item.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-3 rounded border-2 transition-all text-left',
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                          : 'bg-white border-slate-200 hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
+                      )}
+                    >
+                      <Icon className={cn('h-5 w-5 flex-shrink-0', isActive ? 'text-primary-foreground' : 'text-slate-600')} />
+                      <div className="flex-1 min-w-0">
+                        <div className={cn('font-semibold text-sm', isActive ? 'text-primary-foreground' : 'text-slate-900')}>
+                          {item.label}
+                        </div>
+                        <div className={cn('text-xs truncate', isActive ? 'text-primary-foreground/80' : 'text-slate-500')}>
+                          {item.description}
+                        </div>
+                      </div>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <Badge
+                          variant={item.badgeVariant || 'secondary'}
+                          className="border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-bold"
+                        >
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </CardContent>
+          </Card>
+        </aside>
 
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardDescription className="flex items-center gap-2 text-sm font-medium">
-                <Users className="h-5 w-5 text-green-500" />
-                Active Pipeline
-              </CardDescription>
-              <div className="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded">
-                In Progress
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isLoadingStats ? (
-              <Skeleton className="h-10 w-16" />
-            ) : (
-              <CardTitle className="text-4xl text-green-600">{activePipelineCount}</CardTitle>
-            )}
-            <p className="text-sm text-slate-600 mt-2">
-              Candidates currently being onboarded
-            </p>
-          </CardContent>
-        </Card>
+        {/* Main Dashboard Area */}
+        <main className="space-y-6">
+          {/* Dynamic Content Area */}
+          <div>
+            {activeSection === 'onboarding' && <OnboardCandidatesPage />}
+            {activeSection === 'invitations' && <InvitationsPage />}
+            {activeSection === 'candidates' && <CandidatesPage />}
+          </div>
+        </main>
       </div>
-
-      {/* Workflow Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-6 h-auto p-1">
-          <TabsTrigger 
-            value="onboarding" 
-            className="gap-2 py-3 data-[state=active]:bg-blue-500 data-[state=active]:text-white"
-          >
-            <ClipboardList className="h-4 w-4" />
-            <div className="text-left">
-              <div className="font-semibold text-sm">Review Submissions</div>
-              {!isLoadingStats && needsReviewCount > 0 && (
-                <div className="text-xs opacity-80">({needsReviewCount} pending)</div>
-              )}
-            </div>
-          </TabsTrigger>
-          
-          <TabsTrigger 
-            value="invitations" 
-            className="gap-2 py-3 data-[state=active]:bg-purple-500 data-[state=active]:text-white"
-          >
-            <Mail className="h-4 w-4" />
-            <div className="text-left">
-              <div className="font-semibold text-sm">Email Invitations</div>
-              <div className="text-xs opacity-80">Track & manage invites</div>
-            </div>
-          </TabsTrigger>
-
-          <TabsTrigger 
-            value="candidates" 
-            className="gap-2 py-3 data-[state=active]:bg-green-500 data-[state=active]:text-white"
-          >
-            <FileText className="h-4 w-4" />
-            <div className="text-left">
-              <div className="font-semibold text-sm">All Candidates</div>
-              <div className="text-xs opacity-80">Complete database</div>
-            </div>
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="onboarding" className="space-y-4 mt-0">
-          <OnboardCandidatesPage />
-        </TabsContent>
-
-        <TabsContent value="invitations" className="space-y-4 mt-0">
-          <InvitationsPage />
-        </TabsContent>
-
-        <TabsContent value="candidates" className="space-y-4 mt-0">
-          <CandidatesPage />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }

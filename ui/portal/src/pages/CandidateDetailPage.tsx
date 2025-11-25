@@ -10,7 +10,7 @@
  * - Team assignment tracking
  */
 
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import {
@@ -39,6 +39,8 @@ import {
   Target,
   Sparkles,
   TrendingUp,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -93,13 +95,20 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+
+  // Review mode detection
+  const searchParams = new URLSearchParams(location.search);
+  const isReviewMode = searchParams.get('mode') === 'review';
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -161,6 +170,31 @@ export function CandidateDetailPage() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to re-parse resume: ${error.message}`);
+    },
+  });
+
+  // Approve mutation (for review mode)
+  const approveMutation = useMutation({
+    mutationFn: () => candidateApi.approveCandidate(Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+      queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      toast.success('Candidate approved successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to approve: ${error.message}`);
+    },
+  });
+
+  // Reject mutation (for review mode)
+  const rejectMutation = useMutation({
+    mutationFn: () => candidateApi.deleteCandidate(Number(id)),
+    onSuccess: () => {
+      toast.success('Candidate rejected');
+      navigate('/candidate-management?tab=onboarding');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to reject: ${error.message}`);
     },
   });
 
@@ -346,6 +380,15 @@ export function CandidateDetailPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
+  // Restrict review mode access to candidates with pending_review status
+  useEffect(() => {
+    if (isReviewMode && candidate && candidate.status !== 'pending_review') {
+      // Redirect to normal candidate detail page if not in review status
+      toast.error('Review mode is only available for candidates pending review');
+      navigate(`/candidates/${id}`, { replace: true });
+    }
+  }, [isReviewMode, candidate, id, navigate]);
+
 
   // Loading state
   if (isLoading) {
@@ -382,6 +425,64 @@ export function CandidateDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Review Actions Header (only shown in review mode) */}
+      {isReviewMode && (
+        <div className="bg-amber-50 border-2 border-amber-500 rounded-lg p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center border-2 border-black">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Review Candidate</h3>
+                <p className="text-sm text-slate-600 mt-0.5">
+                  Approve this candidate, reject them, or edit their profile before approving
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                onClick={() => navigate('/candidate-management?tab=onboarding')}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to List
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                onClick={() => setShowRejectDialog(true)}
+                disabled={rejectMutation.isPending}
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                onClick={() => isEditMode ? exitEditMode() : enterEditMode()}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                {isEditMode ? 'Cancel Edit' : 'Edit'}
+              </Button>
+              <Button
+                size="sm"
+                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                onClick={() => approveMutation.mutate()}
+                disabled={approveMutation.isPending}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                {approveMutation.isPending ? 'Approving...' : 'Approve'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header Section with Gradient Background */}
       <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -456,7 +557,7 @@ export function CandidateDetailPage() {
                   Cancel
                 </Button>
               </>
-            ) : (
+            ) : !isReviewMode ? (
               <>
                 <Button
                   variant="default"
@@ -522,7 +623,7 @@ export function CandidateDetailPage() {
                   Delete
                 </Button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -824,7 +925,7 @@ export function CandidateDetailPage() {
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
           {/* Job Matches Preview */}
-          {matchesData && matchesData.total_matches > 0 && (
+          {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-primary/5 to-secondary/5">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1200,6 +1301,27 @@ export function CandidateDetailPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Confirmation Dialog (Review Mode) */}
+      <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Candidate</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject this candidate? They will be removed from the review queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRejectReason('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => rejectMutation.mutate()}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Reject Candidate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

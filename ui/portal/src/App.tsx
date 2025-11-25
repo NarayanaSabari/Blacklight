@@ -68,44 +68,44 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/onboard/:token" element={<OnboardingPage />} />
 
-          {/* Protected Routes with Layout */}
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Routes>
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    {/* Unified Candidate Management (combines candidates, onboarding, invitations) */}
-                    <Route path="/candidate-management" element={<CandidateManagementPage />} />
-                    {/* Legacy routes - redirect to unified page with tab param */}
-                    <Route path="/candidates" element={<Navigate to="/candidate-management?tab=candidates" replace />} />
-                    <Route path="/onboard-candidates" element={<Navigate to="/candidate-management?tab=onboarding" replace />} />
-                    <Route path="/invitations" element={<Navigate to="/candidate-management?tab=invitations" replace />} />
-                    {/* Candidate detail routes */}
-                    <Route path="/candidates/new" element={<AddCandidatePage />} />
-                    <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
-                    <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
-                    <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
-                    <Route path="/candidates/:id" element={<CandidateDetailPage />} />
-                    <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
-                    <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
-                    <Route path="/jobs" element={<JobsPage />} />
-                    <Route path="/applications" element={<ApplicationsPage />} />
-                    <Route path="/interviews" element={<InterviewsPage />} />
-                    <Route path="/documents" element={<DocumentsPage />} />
-                    <Route path="/users" element={<UsersPage />} />
-                    <Route path="/users/roles" element={<RolesPage />} />
-                    <Route path="/manage-team" element={<ManageTeamPage />} />
-                    <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                  </Routes>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
+            {/* Protected Routes with Layout */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Routes>
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      {/* Unified Candidate Management (combines candidates, onboarding, invitations) */}
+                      <Route path="/candidate-management" element={<CandidateManagementPage />} />
+                      {/* Legacy routes - redirect to unified page with tab param */}
+                      <Route path="/candidates" element={<Navigate to="/candidate-management?tab=candidates" replace />} />
+                      <Route path="/onboard-candidates" element={<Navigate to="/candidate-management?tab=onboarding" replace />} />
+                      <Route path="/invitations" element={<Navigate to="/candidate-management?tab=invitations" replace />} />
+                      {/* Candidate detail routes */}
+                      <Route path="/candidates/new" element={<AddCandidatePage />} />
+                      <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
+                      <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
+                      <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
+                      <Route path="/candidates/:id" element={<CandidateDetailPage />} />
+                      <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
+                      <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
+                      <Route path="/jobs" element={<JobsPage />} />
+                      <Route path="/applications" element={<ApplicationsPage />} />
+                      <Route path="/interviews" element={<InterviewsPage />} />
+                      <Route path="/documents" element={<DocumentsPage />} />
+                      <Route path="/users" element={<UsersPage />} />
+                      <Route path="/users/roles" element={<RolesPage />} />
+                      <Route path="/manage-team" element={<ManageTeamPage />} />
+                      <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    </Routes>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
           </Routes>
           <Toaster />
         </PortalAuthProvider>
