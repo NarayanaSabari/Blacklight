@@ -475,20 +475,22 @@ class TeamManagementService:
     @staticmethod
     def get_available_managers(
         tenant_id: int,
-        exclude_user_id: Optional[int] = None
+        exclude_user_id: Optional[int] = None,
+        for_user_id: Optional[int] = None
     ) -> List[Dict]:
         """
         Get list of users who can be assigned as managers.
-        Typically includes MANAGER and HIRING_MANAGER roles.
-
+        Respects role hierarchy - only returns users whose role can manage the target user's role.
+        
         Args:
             tenant_id: Tenant ID
             exclude_user_id: Optional user ID to exclude (useful when assigning to self)
-
+            for_user_id: Optional target user ID to filter by role hierarchy
+            
         Returns:
             List of available manager dictionaries
         """
-        # Get all active users with MANAGER or HIRING_MANAGER roles
+        # Get all active users
         query = select(PortalUser).where(
             PortalUser.tenant_id == tenant_id,
             PortalUser.is_active == True
@@ -498,14 +500,32 @@ class TeamManagementService:
             query = query.where(PortalUser.id != exclude_user_id)
 
         all_users = list(db.session.scalars(query))
+        
+        # If for_user_id is provided, filter by role hierarchy
+        target_user = None
+        target_level = None
+        if for_user_id:
+            target_user = db.session.get(PortalUser, for_user_id)
+            if target_user:
+                target_level = TeamManagementService._get_user_role_level(target_user)
 
-        # Filter to users with appropriate roles
+        # Filter to users who can be managers
         available_managers = []
         for user in all_users:
             user_roles = [role.name for role in user.roles]
-            if 'MANAGER' in user_roles or 'HIRING_MANAGER' in user_roles:
-                user_dict = user.to_dict(include_roles=True)
-                available_managers.append(user_dict)
+            
+            # Must have MANAGER, HIRING_MANAGER, or TENANT_ADMIN role
+            if not any(role in ['MANAGER', 'HIRING_MANAGER', 'TENANT_ADMIN'] for role in user_roles):
+                continue
+            
+            # If target user specified and has system role, check hierarchy
+            if target_user and target_level is not None:
+                can_manage, _ = TeamManagementService._can_manage(user, target_user)
+                if not can_manage:
+                    continue  # Skip users who cannot manage the target
+            
+            user_dict = user.to_dict(include_roles=True)
+            available_managers.append(user_dict)
 
         logger.debug(f"Found {len(available_managers)} available managers in tenant {tenant_id}")
 

@@ -110,9 +110,11 @@ def get_managers_list():
 def get_available_managers():
     """
     Get list of users who can be assigned as managers.
+    Respects role hierarchy - only returns managers who can manage the target user.
     
     Query Parameters:
         exclude_user_id (optional): User ID to exclude from list
+        for_user_id (optional): Target user ID to filter by role hierarchy
     
     Returns: List of available managers
     Permissions: users.assign_manager
@@ -120,8 +122,13 @@ def get_available_managers():
     try:
         tenant_id = g.tenant_id
         exclude_user_id = request.args.get('exclude_user_id', type=int)
+        for_user_id = request.args.get('for_user_id', type=int)
         
-        managers = TeamManagementService.get_available_managers(tenant_id, exclude_user_id)
+        managers = TeamManagementService.get_available_managers(
+            tenant_id, 
+            exclude_user_id,
+            for_user_id
+        )
         
         return jsonify({
             'managers': managers,

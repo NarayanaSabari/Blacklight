@@ -90,7 +90,7 @@ export function ManageTeamPage() {
     data: availableManagersData,
   } = useQuery({
     queryKey: ['available-managers', selectedUser?.id],
-    queryFn: () => teamApi.getAvailableManagers(selectedUser?.id),
+    queryFn: () => teamApi.getAvailableManagers(selectedUser?.id, selectedUser?.id),
     enabled: assignDialogOpen && canAssignManager && !!selectedUser,
   });
 

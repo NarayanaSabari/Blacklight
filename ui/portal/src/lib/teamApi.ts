@@ -39,12 +39,17 @@ export const teamApi = {
 
   /**
    * Get list of users who can be assigned as managers
+   * Respects role hierarchy - only returns managers who can manage the target user
    * @param excludeUserId - Optional user ID to exclude from list
+   * @param forUserId - Optional target user ID to filter by role hierarchy
    */
-  getAvailableManagers: async (excludeUserId?: number): Promise<AvailableManagersResponse> => {
+  getAvailableManagers: async (excludeUserId?: number, forUserId?: number): Promise<AvailableManagersResponse> => {
     const params = new URLSearchParams();
     if (excludeUserId) {
       params.append('exclude_user_id', excludeUserId.toString());
+    }
+    if (forUserId) {
+      params.append('for_user_id', forUserId.toString());
     }
 
     const url = `/api/team/available-managers${params.toString() ? `?${params.toString()}` : ''}`;
