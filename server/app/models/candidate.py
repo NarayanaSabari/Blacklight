@@ -86,6 +86,10 @@ class Candidate(BaseModel):
     certifications = db.Column(ARRAY(String))  # ["AWS Certified", "Scrum Master"]
     languages = db.Column(ARRAY(String))  # ["English", "Spanish", "French"]
     
+    # Role Preferences (NEW)
+    preferred_roles = db.Column(ARRAY(String(100)))  # Manually entered preferred roles
+    # Example: ["Software Engineer", "Tech Lead", "Solutions Architect"]
+    
     # Structured Data (PostgreSQL JSONB columns)
     education = db.Column(JSONB)  # Array of education objects
     # Example: [
@@ -114,6 +118,17 @@ class Candidate(BaseModel):
     
     # Full parsed resume data (raw output from parser)
     parsed_resume_data = db.Column(JSONB)
+    
+    # AI-Suggested Roles (NEW)
+    suggested_roles = db.Column(JSONB)  # AI-generated role suggestions
+    # Example: {
+    #   "roles": [
+    #     {"role": "Senior Software Engineer", "score": 0.95, "reasoning": "Strong Python/React skills"},
+    #     {"role": "Tech Lead", "score": 0.88, "reasoning": "Leadership experience"}
+    #   ],
+    #   "generated_at": "2025-11-26T12:00:00Z",
+    #   "model_version": "gemini-1.5-flash"
+    # }
     
     # AI Matching Data
     embedding = db.Column(Vector(768))  # Google Gemini embeddings for semantic matching
@@ -169,6 +184,9 @@ class Candidate(BaseModel):
             'education': self.education,
             'work_experience': self.work_experience,
             'parsed_resume_data': self.parsed_resume_data,
+            # Role preferences (NEW)
+            'preferred_roles': self.preferred_roles if self.preferred_roles else [],
+            'suggested_roles': self.suggested_roles,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             # Onboarding fields
