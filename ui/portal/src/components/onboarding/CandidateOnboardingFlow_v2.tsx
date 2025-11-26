@@ -57,6 +57,10 @@ import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnb
 import { onboardingApi } from '@/lib/api/invitationApi';
 import type { InvitationWithRelations } from '@/types';
 import { toast } from 'sonner';
+import { TagInput } from '@/components/ui/tag-input';
+import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
+import { EducationEditor } from '@/components/candidates/EducationEditor';
+import { Label } from '@/components/ui/label';
 
 const personalInfoSchema = z.object({
   first_name: z.string().min(2, 'First name must be at least 2 characters'),
@@ -111,6 +115,9 @@ export function CandidateOnboardingFlow({
   const [originalParsedData, setOriginalParsedData] = useState<Record<string, unknown> | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [entryMethod, setEntryMethod] = useState<'upload' | 'manual'>('upload');
+  const [skillTags, setSkillTags] = useState<string[]>([]);
+  const [workExperience, setWorkExperience] = useState<any[]>([]);
+  const [education, setEducation] = useState<any[]>([]);
 
   const submitMutation = useSubmitOnboarding();
   const uploadMutation = useUploadOnboardingDocument();
@@ -208,6 +215,7 @@ export function CandidateOnboardingFlow({
       // Auto-fill professional form with parsed data
       if (parsedData.skills) {
         professionalForm.setValue('skills', parsedData.skills.join(', '));
+        setSkillTags(parsedData.skills);
       }
       if (parsedData.experience) {
         professionalForm.setValue('work_experience', parsedData.experience);
@@ -229,8 +237,16 @@ export function CandidateOnboardingFlow({
       if (parsedData.location && !personalForm.getValues('location')) {
         personalForm.setValue('location', parsedData.location);
       }
+
+      // Initialize structured work experience / education from original parsed data when available
+      if (originalParsedData && Array.isArray((originalParsedData as any).work_experience)) {
+        setWorkExperience((originalParsedData as any).work_experience as any[]);
+      }
+      if (originalParsedData && Array.isArray((originalParsedData as any).education)) {
+        setEducation((originalParsedData as any).education as any[]);
+      }
     }
-  }, [parsedData, currentStep, professionalForm, personalForm]);
+  }, [parsedData, originalParsedData, currentStep, professionalForm, personalForm]);
 
   const handleNextStep = async () => {
     if (currentStep === 1) {
@@ -291,10 +307,27 @@ export function CandidateOnboardingFlow({
         }
       }
 
-      // Submit onboarding data
-      const skills = professionalData.skills
-        ? professionalData.skills.split(',').map((s) => s.trim())
-        : undefined;
+      // Resolve skills: prefer structured tags, fallback to comma-separated text
+      const skills =
+        skillTags.length > 0
+          ? skillTags
+          : professionalData.skills
+          ? professionalData.skills.split(',').map((s) => s.trim())
+          : undefined;
+
+      // Merge structured data into parsed_resume_data so backend can keep rich structure
+      const mergedParsed: Record<string, unknown> = {
+        ...(originalParsedData || {}),
+      };
+      if (skills && skills.length > 0) {
+        mergedParsed.skills = skills;
+      }
+      if (workExperience && workExperience.length > 0) {
+        mergedParsed.work_experience = workExperience;
+      }
+      if (education && education.length > 0) {
+        mergedParsed.education = education;
+      }
 
       await submitMutation.mutateAsync({
         token,
@@ -306,7 +339,7 @@ export function CandidateOnboardingFlow({
           education: professionalData.education,
           work_experience: professionalData.work_experience,
           summary: professionalData.summary,
-          parsed_resume_data: originalParsedData || undefined,
+          parsed_resume_data: Object.keys(mergedParsed).length > 0 ? mergedParsed : undefined,
         },
       });
 
@@ -592,188 +625,126 @@ export function CandidateOnboardingFlow({
             </div>
           )}
 
-          {/* Step 3: Review & Edit Parsed Data or Manual Entry */}
+          {/* Step 3: Edit Professional Information (single edit view, no separate preview) */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div>
                 <h3 className="text-lg font-semibold mb-2">
-                  {parsedData ? 'Review & Edit Extracted Information' : 'Enter Professional Information'}
+                  Professional Information
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  {parsedData 
-                    ? 'Review the information extracted from your resume and make any necessary corrections.'
-                    : 'Please provide your professional information.'
-                  }
+                  We’ve pre-filled these fields where possible using your resume. Please review and
+                  update anything that’s missing or inaccurate.
                 </p>
               </div>
 
-              {parsedData && (
-                <>
-                  <Alert className="border-blue-600">
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                    <AlertTitle className="text-blue-600">AI Extracted Information</AlertTitle>
-                    <AlertDescription>
-                      The fields below have been pre-filled with information from your resume. Please verify accuracy and make any necessary edits.
-                    </AlertDescription>
-                  </Alert>
-
-                  {/* Display Parsed Skills */}
-                  {parsedData.skills && parsedData.skills.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Extracted Skills</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex flex-wrap gap-2">
-                          {parsedData.skills.map((skill, index) => (
-                            <Badge key={index} variant="secondary" className="text-sm">
-                              {skill}
-                            </Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Display Parsed Work Experience */}
-                  {parsedData.experience && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Extracted Work Experience</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="whitespace-pre-line text-sm">{parsedData.experience}</div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Display Parsed Education */}
-                  {parsedData.education && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Extracted Education</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="whitespace-pre-line text-sm">{parsedData.education}</div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </>
-              )}
-
               <Form {...professionalForm}>
-                <form className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField
-                      control={professionalForm.control}
-                      name="position"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Desired Position</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Software Engineer" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={professionalForm.control}
-                      name="experience_years"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Years of Experience</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              min={0} 
-                              max={50} 
-                              {...field}
-                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                <form className="space-y-8">
+                  {/* Position & Experience – mirrors top of professional section on candidate detail page */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Role & Experience</h4>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={professionalForm.control}
+                        name="position"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Desired Position</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Software Engineer" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={professionalForm.control}
+                        name="experience_years"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Total Experience (years)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={50}
+                                {...field}
+                                onChange={(e) =>
+                                  field.onChange(e.target.value ? parseInt(e.target.value) : undefined)
+                                }
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Skills – structured chips, like candidate detail page */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Skills</h4>
+                    <div className="space-y-2">
+                      <Label>Skills</Label>
+                      <TagInput
+                        value={skillTags}
+                        onChange={setSkillTags}
+                        placeholder="Add a skill (e.g., React, Python)..."
+                      />
+                      <p className="text-xs text-slate-500">
+                        Press Enter to add a skill. Click X to remove.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Work Experience – structured editor like candidate detail page */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Work Experience</h4>
+                    <WorkExperienceEditor
+                      value={workExperience}
+                      onChange={setWorkExperience}
                     />
                   </div>
 
                   <Separator />
 
-                  <FormField
-                    control={professionalForm.control}
-                    name="skills"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Skills</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="JavaScript, React, Node.js, Python, AWS, Docker..."
-                            rows={3}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>Separate multiple skills with commas</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Education – structured editor like candidate detail page */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Education</h4>
+                    <EducationEditor
+                      value={education}
+                      onChange={setEducation}
+                    />
+                  </div>
 
-                  <FormField
-                    control={professionalForm.control}
-                    name="work_experience"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Work Experience</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Senior Software Engineer at Tech Corp (2020-2023)&#10;• Led development of microservices&#10;• Managed team of 5 engineers"
-                            rows={6}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>Include job titles, companies, dates, and key responsibilities</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <Separator />
 
-                  <FormField
-                    control={professionalForm.control}
-                    name="education"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Education</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Bachelor of Science in Computer Science&#10;University of California, Berkeley&#10;2014-2018"
-                            rows={4}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={professionalForm.control}
-                    name="summary"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Professional Summary</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Brief summary of your professional background, key achievements, and career goals..."
-                            rows={4}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>At least 50 characters</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  {/* Professional Summary – aligns with Professional Summary card */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Professional Summary</h4>
+                    <FormField
+                      control={professionalForm.control}
+                      name="summary"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Summary</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Brief summary of your professional background, key achievements, and career goals..."
+                              rows={4}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>At least 50 characters</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                 </form>
               </Form>
             </div>

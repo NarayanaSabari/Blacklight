@@ -481,6 +481,85 @@ class InvitationService:
         invitation.submitted_at = datetime.utcnow()
         invitation.updated_at = datetime.utcnow()
         
+        # Auto-create a Candidate record in pending_review so email submissions
+        # behave like resume uploads (visible in Review Submissions + All Candidates)
+        if not invitation.candidate_id:
+            data = invitation_data or {}
+            first_name = data.get('first_name') or invitation.first_name or ''
+            last_name = data.get('last_name') or invitation.last_name or ''
+
+            # Optional parsed resume data (structured) from the onboarding flow
+            parsed_resume = data.get('parsed_resume_data') or {}
+
+            # Basic fields
+            full_name = data.get('full_name') or f"{first_name} {last_name}".strip()
+            position = data.get('position') or data.get('current_job_title') or data.get('current_title')
+            experience_years = data.get('experience_years') or data.get('years_of_experience') or data.get('total_experience_years')
+            summary = data.get('summary') or data.get('professional_summary')
+
+            # Skills and simple arrays
+            skills = data.get('skills') or parsed_resume.get('skills') or []
+            if isinstance(skills, str):
+                # Just in case skills were sent as comma-separated string
+                skills = [s.strip() for s in skills.split(',') if s.strip()]
+
+            # Simple education/work_experience as text fallbacks
+            education_text = data.get('education')
+            work_exp_text = data.get('work_experience')
+
+            education_data = None
+            if parsed_resume.get('education') and isinstance(parsed_resume.get('education'), list):
+                education_data = parsed_resume['education']
+            elif education_text and isinstance(education_text, str) and education_text.strip():
+                education_data = [{
+                    'degree': 'Not specified',
+                    'field_of_study': None,
+                    'institution': 'Not specified',
+                    'graduation_year': None,
+                    'description': education_text.strip(),
+                }]
+
+            work_exp_data = None
+            if parsed_resume.get('work_experience') and isinstance(parsed_resume.get('work_experience'), list):
+                work_exp_data = parsed_resume['work_experience']
+            elif work_exp_text and isinstance(work_exp_text, str) and work_exp_text.strip():
+                work_exp_data = [{
+                    'title': 'Not specified',
+                    'company': 'Not specified',
+                    'location': None,
+                    'start_date': None,
+                    'end_date': None,
+                    'is_current': False,
+                    'description': work_exp_text.strip(),
+                }]
+
+            candidate = Candidate(
+                tenant_id=invitation.tenant_id,
+                first_name=first_name,
+                last_name=last_name,
+                email=invitation.email,
+                phone=data.get('phone'),
+                status='pending_review',
+                source='email_invitation',
+                full_name=full_name,
+                location=data.get('location') or parsed_resume.get('location'),
+                linkedin_url=data.get('linkedin_url') or parsed_resume.get('linkedin_url'),
+                portfolio_url=data.get('portfolio_url') or parsed_resume.get('portfolio_url'),
+                current_title=position or parsed_resume.get('current_title'),
+                total_experience_years=experience_years or parsed_resume.get('total_experience_years'),
+                professional_summary=summary or parsed_resume.get('professional_summary'),
+                skills=skills,
+                education=education_data,
+                work_experience=work_exp_data,
+                parsed_resume_data=parsed_resume or None,
+            )
+
+            db.session.add(candidate)
+            db.session.flush()  # populate candidate.id
+
+            invitation.candidate_id = candidate.id
+            logger.info(f"Created candidate {candidate.id} from submitted invitation {invitation.id}")
+        
         # Log the action
         InvitationAuditLog.log_action(
             invitation_id=invitation.id,
@@ -611,7 +690,7 @@ class InvitationService:
             data.update(edited_data)
             logger.info(f"Merged HR edits for invitation {invitation_id}: {list(edited_data.keys())}")
         
-        # Create candidate record
+        # Create or reuse candidate record
         # Build full_name from parts if not provided
         full_name = data.get('full_name')
         if not full_name:
@@ -736,41 +815,50 @@ class InvitationService:
             else:
                 work_exp_data = []
 
-        candidate = Candidate(
-            tenant_id=invitation.tenant_id,
-            first_name=data.get('first_name') or invitation.first_name or '',
-            last_name=data.get('last_name') or invitation.last_name or '',
-            email=invitation.email,
-            phone=data.get('phone'),
-            status='NEW',
-            source='self_onboarding',
-            onboarding_status='PENDING_ASSIGNMENT',
-            
-            # Professional details - use smart getter
-            full_name=full_name,
-            location=get_field('location'),
-            linkedin_url=get_field('linkedin_url'),
-            portfolio_url=get_field('portfolio_url'),
-            current_title=position or get_field('current_title'),
-            total_experience_years=experience_years or get_field('total_experience_years'),
-            professional_summary=summary or get_field('professional_summary'),
-            
-            # Arrays - ensure always lists, prefer parsed data
-            skills=ensure_list(get_field('skills', default=[])),
-            certifications=ensure_list(get_field('certifications', default=[])),
-            languages=ensure_list(get_field('languages', default=[])),
-            preferred_locations=ensure_list(get_field('preferred_locations', default=[])),
-            
-            # JSONB structured data - use parsed or fallback to structured text
-            education=education_data,
-            work_experience=work_exp_data,
-            
-            # Store full parsed data for reference
-            parsed_resume_data=parsed_resume if parsed_resume else None,
-        )
+        # Create candidate record
+        # For email invitations, we want the same review flow as async resume uploads:
+        #   - status='pending_review' so it appears in the Review Submissions tab
+        #   - source='email_invitation' to distinguish origin
+        # Prefer the candidate created at submission time, if any
+        candidate = None
+        if invitation.candidate_id:
+            candidate = db.session.get(Candidate, invitation.candidate_id)
+            if candidate:
+                logger.info(f"Using existing candidate {candidate.id} for approved invitation {invitation.id}")
         
-        db.session.add(candidate)
-        db.session.flush()  # Get candidate.id
+        # If no existing candidate (legacy or backfilled invitations), create one now
+        if not candidate:
+            candidate = Candidate(
+                tenant_id=invitation.tenant_id,
+                first_name=data.get('first_name') or invitation.first_name or '',
+                last_name=data.get('last_name') or invitation.last_name or '',
+                email=invitation.email,
+                phone=data.get('phone'),
+                status='pending_review',
+                source='email_invitation',
+            )
+            db.session.add(candidate)
+            db.session.flush()
+            invitation.candidate_id = candidate.id
+            logger.info(f"Created candidate {candidate.id} while approving invitation {invitation.id}")
+        
+        # Update candidate details from parsed/form data
+        candidate.full_name = full_name
+        candidate.location = get_field('location')
+        candidate.linkedin_url = get_field('linkedin_url')
+        candidate.portfolio_url = get_field('portfolio_url')
+        candidate.current_title = position or get_field('current_title')
+        candidate.total_experience_years = experience_years or get_field('total_experience_years')
+        candidate.professional_summary = summary or get_field('professional_summary')
+        
+        candidate.skills = ensure_list(get_field('skills', default=[]))
+        candidate.certifications = ensure_list(get_field('certifications', default=[]))
+        candidate.languages = ensure_list(get_field('languages', default=[]))
+        candidate.preferred_locations = ensure_list(get_field('preferred_locations', default=[]))
+        
+        candidate.education = education_data
+        candidate.work_experience = work_exp_data
+        candidate.parsed_resume_data = parsed_resume if parsed_resume else candidate.parsed_resume_data
         
         # Move documents from invitation to candidate
         documents = db.session.execute(

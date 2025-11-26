@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 @inngest_client.create_function(
     fn_id="parse-resume-async",
     trigger=inngest.TriggerEvent(event="candidate/parse-resume"),
-    retries=3,
+    # Disable automatic retries to avoid multiple executions per upload while debugging
+    retries=0,
     name="Parse Resume Async"
 )
 async def parse_resume_workflow(ctx: inngest.Context) -> dict:
@@ -50,6 +51,20 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
         if not candidate:
             logger.error(f"[PARSE-RESUME] Candidate {candidate_id} not found")
             return {"status": "error", "message": "Candidate not found"}
+        
+        # Idempotency guard: if candidate is already parsed & in/after pending_review, skip work
+        if getattr(candidate, "resume_parsed_at", None) is not None and candidate.status in [
+            "pending_review",
+            "onboarded",
+            "ready_for_assignment",
+        ]:
+            logger.info(f"[PARSE-RESUME] Candidate {candidate_id} already parsed; skipping re-processing")
+            return {
+                "status": "success",
+                "candidate_id": candidate_id,
+                "has_data": bool(getattr(candidate, "parsed_resume_data", None)),
+                "skipped": True,
+            }
         
         if not candidate.resume_file_path:
             logger.error(f"[PARSE-RESUME] No resume file for candidate {candidate_id}")

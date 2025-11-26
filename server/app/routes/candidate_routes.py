@@ -280,10 +280,15 @@ def get_pending_review():
     try:
         tenant_id = g.tenant_id
         
-        from sqlalchemy import select
+        from sqlalchemy import select, or_
+        # Include both 'pending_review' and 'processing' so uploads are visible
+        # even if the async parser hasn't finished or failed.
         stmt = select(Candidate).where(
             Candidate.tenant_id == tenant_id,
-            Candidate.status == 'pending_review'
+            or_(
+                Candidate.status == 'pending_review',
+                Candidate.status == 'processing',
+            ),
         ).order_by(Candidate.created_at.desc())
         
         candidates = list(db.session.scalars(stmt))
@@ -435,10 +440,10 @@ def approve_candidate(candidate_id: int):
 # ==================== Resume Upload Endpoints ====================
 
 @candidate_bp.route('/upload', methods=['POST'])
-# @require_portal_auth
-# @with_tenant_context
-# @require_permission('candidates.create')
-# @require_permission('candidates.upload_resume')
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.create')
+@require_permission('candidates.upload_resume')
 def upload_and_create():
     """
     Upload resume and trigger async parsing (fast response)
@@ -454,8 +459,16 @@ def upload_and_create():
     request_id = str(uuid.uuid4())[:8]
     
     try:
-        # tenant_id = g.tenant_id
-        tenant_id = 2 # Hardcoded for testing
+        # Guard against duplicate handler invocations within a single HTTP request
+        # (can happen if the route is registered multiple times or middleware re-calls it)
+        if getattr(g, "resume_upload_handled", False):
+            logger.warning(f"[UPLOAD-{request_id}] Duplicate /upload call in same request; returning cached response")
+            cached = getattr(g, "resume_upload_response", None)
+            if cached is not None:
+                return jsonify(cached), 200
+        
+        # Use tenant from portal auth / tenant middleware
+        tenant_id = g.tenant_id
         
         logger.info(f"[UPLOAD-{request_id}] Starting async resume upload for tenant {tenant_id}")
         
@@ -541,7 +554,13 @@ def upload_and_create():
             }
         )
         
-        return jsonify(response.model_dump()), 200
+        # Cache response on request context so any duplicate invocations
+        # for the same HTTP request can return the same payload without
+        # creating additional candidates.
+        g.resume_upload_handled = True
+        g.resume_upload_response = response.model_dump()
+        
+        return jsonify(g.resume_upload_response), 200
     
     except Exception as e:
         logger.error(f"[UPLOAD-{request_id}] Error uploading resume: {e}", exc_info=True)
