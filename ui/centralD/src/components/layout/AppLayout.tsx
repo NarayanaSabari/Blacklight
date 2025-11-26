@@ -3,7 +3,7 @@
  */
 
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Building2, Users, CreditCard, Menu, Mail } from 'lucide-react';
+import { Building2, Users, CreditCard, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserProfileMenu } from '@/components/layout/UserProfileMenu';
 import { useState } from 'react';
@@ -76,7 +76,7 @@ export function AppLayout() {
             <Menu className="h-6 w-6" />
           </Button>
           <div className="flex-1" />
-          
+
           {/* User Profile Menu in top-right */}
           <UserProfileMenu />
         </header>

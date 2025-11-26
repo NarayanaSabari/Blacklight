@@ -60,7 +60,6 @@ export function ResetPasswordDialog({
   open,
   onOpenChange,
   user,
-  tenantId,
 }: ResetPasswordDialogProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
