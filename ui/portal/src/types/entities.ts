@@ -338,6 +338,7 @@ export interface Role {
   created_at: string;
   updated_at: string;
   permissions?: Permission[];
+  user_count?: number; // Number of users assigned to this role
 }
 
 export interface Permission {

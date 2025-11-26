@@ -10,8 +10,11 @@ const BASE_URL = '/api/roles';
 /**
  * Get all roles for current tenant
  */
-export async function fetchRoles(includePermissions: boolean = false): Promise<RoleListResponse> {
-  const params = includePermissions ? { include_permissions: 'true' } : {};
+export async function fetchRoles(includePermissions: boolean = false, includeUserCounts: boolean = true): Promise<RoleListResponse> {
+  const params: Record<string, string> = {};
+  if (includePermissions) params.include_permissions = 'true';
+  if (includeUserCounts) params.include_user_counts = 'true';
+
   const response = await apiClient.get<RoleListResponse>(BASE_URL, { params });
   return response.data;
 }

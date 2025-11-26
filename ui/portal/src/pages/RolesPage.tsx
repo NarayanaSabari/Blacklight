@@ -42,6 +42,7 @@ interface Role {
   is_active: boolean;
   tenant_id: number | null;
   permissions: Permission[];
+  user_count?: number;
 }
 
 interface RoleFormData {
@@ -54,7 +55,7 @@ interface RoleFormData {
 import { apiRequest } from '@/lib/api-client';
 
 const fetchRoles = async (_tenantId: number): Promise<Role[]> => {
-  const data = await apiRequest.get<{ roles: Role[] }>(`/api/roles?include_permissions=true`);
+  const data = await apiRequest.get<{ roles: Role[] }>(`/api/roles?include_permissions=true&include_user_counts=true`);
   return data.roles;
 };
 
@@ -498,8 +499,8 @@ export function RolesPage() {
                 }
               >
                 {createRoleMutation.isPending ||
-                updateRoleMutation.isPending ||
-                updateRolePermissionsMutation.isPending ? (
+                  updateRoleMutation.isPending ||
+                  updateRolePermissionsMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {editingRole ? 'Saving...' : 'Creating...'}
@@ -515,100 +516,90 @@ export function RolesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Roles Table */}
       <div className="space-y-4">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-card border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Roles</p>
-                <p className="text-2xl font-bold">{roles?.length || 0}</p>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <PlusCircle className="h-6 w-6 text-primary" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-card border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">System Roles</p>
-                <p className="text-2xl font-bold">
-                  {roles?.filter((r) => r.is_system_role).length || 0}
-                </p>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <Badge className="h-6 w-6 text-blue-500" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-card border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Custom Roles</p>
-                <p className="text-2xl font-bold">
-                  {roles?.filter((r) => !r.is_system_role).length || 0}
-                </p>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                <Edit className="h-6 w-6 text-green-500" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Roles Cards Grid */}
-        <div className="grid grid-cols-1 gap-4">
-          {roles?.map((role) => (
-            <div
-              key={role.id}
-              className="bg-card border rounded-lg p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-semibold">{role.display_name}</h3>
-                    <Badge variant={role.is_system_role ? 'secondary' : 'default'}>
-                      {role.is_system_role ? 'System' : 'Custom'}
-                    </Badge>
-                    <Badge variant={role.is_active ? 'default' : 'destructive'}>
-                      {role.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <code className="px-2 py-1 bg-muted rounded text-xs font-mono">
-                      {role.name}
-                    </code>
-                    <span>•</span>
-                    <span>{role.permissions?.length || 0} permissions</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{role.description}</p>
-                </div>
-                <div className="flex gap-2 ml-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openEditForm(role)}
-                    disabled={role.is_system_role}
-                    title={role.is_system_role ? 'System roles cannot be edited' : 'Edit role'}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => deleteRoleMutation.mutate(role.id)}
-                    disabled={role.is_system_role || deleteRoleMutation.isPending}
-                    title={role.is_system_role ? 'System roles cannot be deleted' : 'Delete role'}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="rounded-md border">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="px-6 py-3 text-left text-sm font-medium">Role Name</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Type</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Users</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Permissions</th>
+                <th className="px-6 py-3 text-left text-sm font-medium">Status</th>
+                <th className="px-6 py-3 text-right text-sm font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles && roles.length > 0 ? (
+                roles.map((role) => (
+                  <tr key={role.id} className="border-b last:border-0 hover:bg-muted/30">
+                    <td className="px-6 py-4">
+                      <div>
+                        <div className="font-medium">{role.display_name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          <code className="text-xs">{role.name}</code>
+                        </div>
+                        {role.description && (
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {role.description}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge variant={role.is_system_role ? 'secondary' : 'default'}>
+                        {role.is_system_role ? 'System' : 'Custom'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge variant="outline">
+                        {role.user_count ?? 0} {role.user_count === 1 ? 'user' : 'users'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-muted-foreground">
+                        {role.permissions?.length || 0} permissions
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <Badge variant={role.is_active ? 'default' : 'destructive'}>
+                        {role.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditForm(role)}
+                          disabled={role.is_system_role}
+                          title={role.is_system_role ? 'System roles cannot be edited' : 'Edit role'}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteRoleMutation.mutate(role.id)}
+                          disabled={role.is_system_role || deleteRoleMutation.isPending}
+                          title={role.is_system_role ? 'System roles cannot be deleted' : 'Delete role'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    No roles found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
