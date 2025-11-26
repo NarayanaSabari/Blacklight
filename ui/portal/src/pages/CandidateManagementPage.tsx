@@ -13,14 +13,10 @@ import {
   UserPlus,
   ClipboardList,
   Mail,
-  FileText,
   Users,
-  CheckCircle2,
-  Inbox
 } from 'lucide-react';
 import { invitationApi } from '@/lib/api/invitationApi';
 import { onboardingApi } from '@/lib/onboardingApi';
-import { Skeleton } from '@/components/ui/skeleton';
 import { CandidatesPage } from './CandidatesPage';
 import { OnboardCandidatesPage } from './OnboardCandidatesPage';
 import InvitationsPage from './invitations/InvitationsPage';
@@ -35,13 +31,13 @@ export function CandidateManagementPage() {
   const [activeSection, setActiveSection] = useState<SectionType>(tab as SectionType);
 
   // Fetch real-time stats
-  const { data: submittedInvitations, isLoading: loadingInvitations } = useQuery({
+  const { data: submittedInvitations } = useQuery({
     queryKey: ['submitted-invitations-count'],
     queryFn: () => invitationApi.getSubmittedInvitations({ page: 1, per_page: 1 }),
     refetchInterval: 30000,
   });
 
-  const { data: statsData, isLoading: loadingStats } = useQuery({
+  const { data: statsData } = useQuery({
     queryKey: ['onboarding-stats'],
     queryFn: () => onboardingApi.getOnboardingStats(),
     refetchInterval: 30000,
@@ -62,13 +58,6 @@ export function CandidateManagementPage() {
   // Calculate stats
   const needsReviewCount = submittedInvitations?.total || 0;
   const readyToAssignCount = statsData?.pending_assignment || 0;
-  const activePipelineCount = (
-    (statsData?.assigned || 0) +
-    (statsData?.pending_onboarding || 0) +
-    (statsData?.onboarded || 0)
-  );
-
-  const isLoadingStats = loadingInvitations || loadingStats;
 
   // Sidebar navigation items
   const navItems = [

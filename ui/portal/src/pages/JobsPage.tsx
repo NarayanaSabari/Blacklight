@@ -27,7 +27,6 @@ import {
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { MatchCard } from '@/components/matches/MatchCard';
-import type { Candidate } from '@/types';
 
 export function JobsPage() {
   const navigate = useNavigate();
@@ -44,7 +43,7 @@ export function JobsPage() {
   const candidates = candidatesData?.candidates || [];
   
   // Filter candidates by search
-  const filteredCandidates = candidates.filter((candidate: Candidate) => {
+  const filteredCandidates = candidates.filter((candidate) => {
     const searchLower = searchQuery.toLowerCase();
     const fullName = `${candidate.first_name} ${candidate.last_name}`.toLowerCase();
     const email = candidate.email?.toLowerCase() || '';
@@ -72,7 +71,7 @@ export function JobsPage() {
 
   const matches = matchesData?.matches || [];
   const totalMatches = matchesData?.total_matches || 0;
-  const selectedCandidate = candidates.find((c: Candidate) => c.id === selectedCandidateId);
+  const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId);
 
   const handleCandidateSelect = (candidateId: number) => {
     setSelectedCandidateId(candidateId);
@@ -131,7 +130,7 @@ export function JobsPage() {
                   </div>
                 ) : (
                   <div className="space-y-1 p-2">
-                    {filteredCandidates.map((candidate: Candidate) => (
+                    {filteredCandidates.map((candidate) => (
                       <button
                         key={candidate.id}
                         onClick={() => handleCandidateSelect(candidate.id)}
@@ -186,7 +185,7 @@ export function JobsPage() {
                         Job Matches for {selectedCandidate?.first_name} {selectedCandidate?.last_name}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {selectedCandidate?.current_position || 'No position'} • {selectedCandidate?.email}
+                        {(selectedCandidate as any)?.current_position || 'No position'} • {selectedCandidate?.email}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

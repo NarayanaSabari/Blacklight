@@ -51,6 +51,18 @@ import {
 } from '@/hooks/useInvitations';
 import type { InvitationStatus } from '@/types';
 
+interface InvitationSubmissionData {
+  phone?: string;
+  location?: string;
+  summary?: string;
+  skills?: string[];
+  experience_years?: number | null;
+  position?: string;
+  work_experience?: string;
+  education?: string;
+  notes?: string;
+}
+
 interface InvitationDetailsProps {
   invitationId: number;
   onClose?: () => void;
@@ -106,6 +118,8 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
   const canResend = ['sent', 'opened', 'in_progress', 'expired', 'cancelled'].includes(invitation.status);
   const canCancel = ['sent', 'pending_review', 'submitted'].includes(invitation.status);
   const canReview = invitation.status === 'pending_review' || invitation.status === 'submitted';
+
+  const invitationData = (invitation.invitation_data || undefined) as InvitationSubmissionData | undefined;
 
   const handleApprove = async () => {
     await approveMutation.mutateAsync({
@@ -172,17 +186,17 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
                     }
                   />
                   <InfoItem label="Email" value={invitation.email} />
-                  {invitation.invitation_data?.phone && (
-                    <InfoItem label="Phone" value={invitation.invitation_data.phone} />
+                  {invitationData?.phone && (
+                    <InfoItem label="Phone" value={invitationData.phone} />
                   )}
-                  {invitation.invitation_data?.location && (
-                    <InfoItem label="Location" value={invitation.invitation_data.location} />
+                  {invitationData?.location && (
+                    <InfoItem label="Location" value={invitationData.location} />
                   )}
                 </div>
               </div>
 
               {/* Submitted Data */}
-              {invitation.invitation_data && invitation.status === 'submitted' && (
+              {invitationData && invitation.status === 'submitted' && (
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <FileText className="h-4 w-4" />
@@ -190,37 +204,37 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
                   </div>
                   <Separator className="my-2" />
                   <div className="space-y-3">
-                    {invitation.invitation_data.summary && (
+                    {invitationData.summary && (
                       <div>
                         <Label className="text-xs text-muted-foreground">Professional Summary</Label>
-                        <p className="text-sm whitespace-pre-wrap">{invitation.invitation_data.summary}</p>
+                        <p className="text-sm whitespace-pre-wrap">{invitationData.summary}</p>
                       </div>
                     )}
-                    {invitation.invitation_data.skills && invitation.invitation_data.skills.length > 0 && (
+                    {invitationData.skills && invitationData.skills.length > 0 && (
                       <div>
                         <Label className="text-xs text-muted-foreground">Skills</Label>
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {invitation.invitation_data.skills.slice(0, 10).map((skill: string, idx: number) => (
+                          {invitationData.skills.slice(0, 10).map((skill: string, idx: number) => (
                             <Badge key={idx} variant="secondary" className="text-xs">
                               {skill}
                             </Badge>
                           ))}
-                          {invitation.invitation_data.skills.length > 10 && (
+                          {invitationData.skills.length > 10 && (
                             <Badge variant="outline" className="text-xs">
-                              +{invitation.invitation_data.skills.length - 10} more
+                              +{invitationData.skills.length - 10} more
                             </Badge>
                           )}
                         </div>
                       </div>
                     )}
-                    {invitation.invitation_data.experience_years !== null && invitation.invitation_data.experience_years !== undefined && (
+                    {invitationData.experience_years !== null && invitationData.experience_years !== undefined && (
                       <InfoItem 
                         label="Years of Experience" 
-                        value={String(invitation.invitation_data.experience_years)} 
+                        value={String(invitationData.experience_years)} 
                       />
                     )}
-                    {invitation.invitation_data.position && (
-                      <InfoItem label="Position Applied" value={invitation.invitation_data.position} />
+                    {invitationData.position && (
+                      <InfoItem label="Position Applied" value={invitationData.position} />
                     )}
                   </div>
                 </div>
@@ -260,9 +274,9 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
             </div>
 
             {/* Work Experience & Education */}
-            {invitation.invitation_data && invitation.status === 'submitted' && (
+            {invitationData && invitation.status === 'submitted' && (
               <div className="space-y-4">
-                {invitation.invitation_data.work_experience && (
+                {invitationData.work_experience && (
                   <div>
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <FileText className="h-4 w-4" />
@@ -270,18 +284,18 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
                     </div>
                     <Separator className="my-2" />
                     <p className="text-sm whitespace-pre-wrap max-h-48 overflow-y-auto">
-                      {invitation.invitation_data.work_experience}
+                      {invitationData.work_experience}
                     </p>
                   </div>
                 )}
-                {invitation.invitation_data.education && (
+                {invitationData.education && (
                   <div>
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <FileText className="h-4 w-4" />
                       Education
                     </div>
                     <Separator className="my-2" />
-                    <p className="text-sm whitespace-pre-wrap">{invitation.invitation_data.education}</p>
+                    <p className="text-sm whitespace-pre-wrap">{invitationData.education}</p>
                   </div>
                 )}
               </div>

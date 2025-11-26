@@ -152,7 +152,8 @@ export function CandidateForm({
       // Clean up empty strings to null/undefined where appropriate for numbers
       const dataToValidate = {
         ...formData,
-        total_experience_years: formData.total_experience_years === '' ? null : formData.total_experience_years,
+        // Zod schema typically expects number | null for numeric fields
+        total_experience_years: formData.total_experience_years ?? null,
       };
 
       // For creation, we might need to ensure required fields are present
@@ -164,9 +165,9 @@ export function CandidateForm({
     } catch (error) {
       if (error instanceof ZodError) {
         const newErrors: Record<string, string> = {};
-        error.errors.forEach((err) => {
-          const path = err.path.join('.');
-          newErrors[path] = err.message;
+        error.issues.forEach((issue) => {
+          const path = issue.path.join('.');
+          newErrors[path] = issue.message;
         });
         setErrors(newErrors);
         toast.error('Please fix the validation errors');

@@ -10,7 +10,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -44,7 +43,21 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { invitationApi } from '@/lib/api/invitationApi';
-import type { InvitationWithRelations } from '@/types';
+
+interface SubmissionData {
+  phone?: string;
+  location?: string;
+  experience_years?: number;
+  position?: string;
+  linkedin_url?: string;
+  github_url?: string;
+  portfolio_url?: string;
+  summary?: string;
+  skills?: string[];
+  work_experience?: string;
+  education?: string;
+  parsed_resume_data?: Record<string, unknown>;
+}
 
 export default function InvitationReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -158,7 +171,7 @@ export default function InvitationReviewPage() {
     );
   }
 
-  const submissionData = invitation.invitation_data;
+  const submissionData = (invitation.invitation_data || undefined) as SubmissionData | undefined;
 
   return (
     <div className="space-y-6 p-6">

@@ -62,8 +62,9 @@ export function useUploadOnboardingDocument() {
       documentType: string;
     }) => onboardingApi.uploadDocument(token, file, documentType),
     onSuccess: (data) => {
+      const fileName = data.document?.file_name ?? 'Document';
       toast.success('Document uploaded successfully', {
-        description: `${data.file_name} uploaded`,
+        description: `${fileName} uploaded`,
       });
     },
     onError: (error: Error) => {

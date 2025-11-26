@@ -6,7 +6,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -41,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Users, Plus, Search, Loader2, MoreVertical, Pencil, Trash2, Eye, TrendingUp, UserCheck, Clock, UserPlus } from 'lucide-react';
+import { Users, Search, MoreVertical, Pencil, Trash2, Eye, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { candidateApi } from '@/lib/candidateApi';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
@@ -73,13 +72,6 @@ export function CandidatesPage() {
   const [candidateToDelete, setCandidateToDelete] = useState<number | null>(null);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [candidateToAssign, setCandidateToAssign] = useState<CandidateListItem | null>(null);
-
-  // Fetch stats
-  const { data: stats } = useQuery({
-    queryKey: ['candidate-stats'],
-    queryFn: () => candidateApi.getStats(),
-    staleTime: 0, // Always refetch to ensure fresh data
-  });
 
   // Fetch candidates
   const { data: candidatesData, isLoading } = useQuery({
@@ -123,11 +115,6 @@ export function CandidatesPage() {
       await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
     },
   });
-
-  const handleDelete = (id: number) => {
-    setCandidateToDelete(id);
-    setDeleteDialogOpen(true);
-  };
 
   const confirmDelete = () => {
     if (candidateToDelete) {

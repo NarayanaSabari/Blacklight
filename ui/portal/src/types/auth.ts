@@ -2,7 +2,7 @@
  * Portal Authentication Types
  */
 
-import { Role } from './entities'; // Import Role type
+import type { Role } from './entities'; // Import Role type
 
 export interface PortalUser {
   id: number;

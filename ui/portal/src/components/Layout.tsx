@@ -10,7 +10,6 @@ import {
   Bell,
   ChevronDown,
   LogOut,
-  Menu,
   Users,
   Briefcase,
   BarChart3,

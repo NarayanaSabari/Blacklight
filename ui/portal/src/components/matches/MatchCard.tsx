@@ -96,7 +96,7 @@ const ScoreBar = ({ label, value, icon: Icon }: { label: string; value: number; 
   );
 };
 
-export function MatchCard({ match, candidateId, onViewDetails, onApply, showActions = true }: MatchCardProps) {
+export function MatchCard({ match, onViewDetails, onApply, showActions = true }: MatchCardProps) {
   const job = match.job || match.job_posting;
   if (!job) return null;
 

@@ -37,7 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { jobPostingApi } from '@/lib/jobPostingApi';
-import type { JobPosting, JobMatch } from '@/types';
+import type { JobMatch } from '@/types';
 
 export function JobDetailPage() {
   const { jobId, candidateId } = useParams<{ jobId: string; candidateId?: string }>();
@@ -75,8 +75,9 @@ export function JobDetailPage() {
   };
 
   const handleViewSource = () => {
-    if (job?.job_url) {
-      window.open(job.job_url, '_blank', 'noopener,noreferrer');
+    const jobUrl = (job as any)?.job_url as string | undefined;
+    if (jobUrl) {
+      window.open(jobUrl, '_blank', 'noopener,noreferrer');
     } else {
       toast.error('Job source URL not available');
     }
@@ -149,7 +150,7 @@ export function JobDetailPage() {
           Back to {candidateIdNum ? 'Matches' : 'Jobs'}
         </Button>
         <div className="flex gap-2">
-          {job?.job_url && (
+          {(job as any)?.job_url && (
             <Button variant="default" size="sm" onClick={handleViewSource}>
               <Globe className="h-4 w-4 mr-2" />
               View on {job.source || 'Source'}
@@ -373,13 +374,18 @@ export function JobDetailPage() {
 
           {/* Action Buttons */}
           <div className="flex gap-4 pt-4">
-            {job.job_url && (
+            {(job as any)?.job_url && (
               <Button size="lg" onClick={handleViewSource} className="flex-1">
                 <Globe className="h-4 w-4 mr-2" />
                 View on {job.source || 'Source'}
               </Button>
             )}
-            <Button size="lg" onClick={handleApply} className="flex-1" variant={job.job_url ? "outline" : "default"}>
+            <Button
+              size="lg"
+              onClick={handleApply}
+              className="flex-1"
+              variant={(job as any)?.job_url ? 'outline' : 'default'}
+            >
               <ExternalLink className="h-4 w-4 mr-2" />
               Apply Now
             </Button>

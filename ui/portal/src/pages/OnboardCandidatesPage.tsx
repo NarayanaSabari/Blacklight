@@ -48,8 +48,6 @@ import {
   AlertCircle,
   Users,
   UserPlus,
-  UserCheck,
-  Clock,
   CheckCircle2,
   XCircle,
   MoreVertical,
@@ -68,7 +66,7 @@ import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { teamApi } from '@/lib/teamApi';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ReviewModal } from '@/components/candidates/ReviewModal'; // Added for async resume review
-import type { OnboardingStatus, CandidateOnboardingInfo, InvitationWithRelations, Candidate } from '@/types'; // Modified import
+import type { OnboardingStatus, CandidateOnboardingInfo, Candidate } from '@/types'; // Modified import
 
 const ONBOARDING_STATUS_COLORS: Record<OnboardingStatus, string> = {
   PENDING_ASSIGNMENT: 'bg-gray-100 text-gray-800',
@@ -112,7 +110,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
   // Fetch onboarding stats
   const {
     data: statsData,
-    isLoading: isLoadingStats,
   } = useQuery({
     queryKey: ['onboarding-stats'],
     queryFn: () => onboardingApi.getOnboardingStats(),
@@ -123,7 +120,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
   const {
     data: submittedInvitationsData,
     isLoading: isLoadingSubmittedInvitations,
-    error: submittedInvitationsError,
   } = useQuery({
     queryKey: ['submitted-invitations', page],
     queryFn: () => invitationApi.getSubmittedInvitations({ page, per_page: 20 }),
@@ -230,36 +226,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
     },
   });
 
-  // Approve invitation mutation
-  const approveInvitationMutation = useMutation({
-    mutationFn: (invitationId: number) => invitationApi.approve(invitationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['submitted-invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-      toast.success('Invitation approved and candidate created');
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to approve invitation');
-    },
-  });
-
-  // Reject invitation mutation
-  const rejectInvitationMutation = useMutation({
-    mutationFn: (data: { invitationId: number; rejectionReason: string }) =>
-      invitationApi.reject(data.invitationId, { rejection_reason: data.rejectionReason }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['submitted-invitations'] });
-      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-      toast.success('Invitation rejected');
-      setRejectDialogOpen(false);
-      setSelectedCandidate(null);
-      setRejectionReason('');
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to reject invitation');
-    },
-  });
-
   // Handle assign candidate
   const handleAssign = (candidate: CandidateOnboardingInfo) => {
     setSelectedCandidate(candidate);
@@ -307,30 +273,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
       toast.error('Please provide a rejection reason');
       return;
     }
-    // Check if selectedCandidate is an invitation or a candidate
-    if ('email' in selectedCandidate && !('onboarding_status' in selectedCandidate)) { // Assuming invitations have email but not onboarding_status
-      rejectInvitationMutation.mutate({
-        invitationId: selectedCandidate.id,
-        rejectionReason: rejectionReason.trim(),
-      });
-    } else {
-      rejectMutation.mutate({
-        candidate_id: selectedCandidate.id,
-        rejection_reason: rejectionReason.trim(),
-      });
-    }
-  };
-
-  // Handle approve invitation
-  const handleApproveInvitation = (invitationId: number) => {
-    approveInvitationMutation.mutate(invitationId);
-  };
-
-  // Handle reject invitation
-  const handleRejectInvitation = (invitationId: number) => {
-    setSelectedCandidate({ id: invitationId } as CandidateOnboardingInfo); // Use selectedCandidate state for dialog
-    setRejectionReason(''); // Clear any previous rejection reason
-    setRejectDialogOpen(true);
+    rejectMutation.mutate({
+      candidate_id: selectedCandidate.id,
+      rejection_reason: rejectionReason.trim(),
+    });
   };
 
   // Handle view candidate
@@ -722,9 +668,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                             ) : '—'}
                           </TableCell>
                           <TableCell>
-                            {candidate.recruiter ? (
+                            {'recruiter' in candidate && (candidate as CandidateOnboardingInfo).recruiter ? (
                               <span className="text-sm">
-                                {candidate.recruiter.first_name} {candidate.recruiter.last_name}
+                                {(candidate as CandidateOnboardingInfo).recruiter!.first_name}{' '}
+                                {(candidate as CandidateOnboardingInfo).recruiter!.last_name}
                               </span>
                             ) : (
                               '—'
@@ -747,10 +694,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-                                {getActionButtons(candidate).length > 0 && (
+                                {getActionButtons(candidate as CandidateOnboardingInfo).length > 0 && (
                                   <>
                                     <DropdownMenuSeparator />
-                                    {getActionButtons(candidate)}
+                                    {getActionButtons(candidate as CandidateOnboardingInfo)}
                                   </>
                                 )}
                               </DropdownMenuContent>
@@ -843,9 +790,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                             ) : '—'}
                           </TableCell>
                           <TableCell>
-                            {candidate.recruiter ? (
+                            {'recruiter' in candidate && (candidate as CandidateOnboardingInfo).recruiter ? (
                               <span className="text-sm">
-                                {candidate.recruiter.first_name} {candidate.recruiter.last_name}
+                                {(candidate as CandidateOnboardingInfo).recruiter!.first_name}{' '}
+                                {(candidate as CandidateOnboardingInfo).recruiter!.last_name}
                               </span>
                             ) : (
                               '—'
@@ -868,10 +816,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
-                                {getActionButtons(candidate).length > 0 && (
+                                {getActionButtons(candidate as CandidateOnboardingInfo).length > 0 && (
                                   <>
                                     <DropdownMenuSeparator />
-                                    {getActionButtons(candidate)}
+                                    {getActionButtons(candidate as CandidateOnboardingInfo)}
                                   </>
                                 )}
                               </DropdownMenuContent>
@@ -1143,20 +1091,18 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
       </Dialog>
 
       {/* Review Modal for Async Resume Uploads */}
-      {
-        selectedResumeCandidate && (
-          <ReviewModal
-            candidate={selectedResumeCandidate}
-            open={reviewModalOpen}
-            onOpenChange={setReviewModalOpen}
-            onSuccess={() => {
-              queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
-              queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-              setSelectedResumeCandidate(null);
-            }}
-          />
-        )
-      }
+      {selectedResumeCandidate && (
+        <ReviewModal
+          candidate={selectedResumeCandidate as any}
+          open={reviewModalOpen}
+          onOpenChange={setReviewModalOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
+            queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+            setSelectedResumeCandidate(null);
+          }}
+        />
+      )}
     </div >
   );
 }

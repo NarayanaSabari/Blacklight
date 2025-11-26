@@ -13,6 +13,7 @@ interface PortalAuthContextType {
   tenantSlug: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  accessToken: string | null;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   error: string | null;
@@ -24,6 +25,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
   const [user, setUser] = useState<PortalUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   // Derived state from user
   const isAuthenticated = user !== null;
@@ -44,12 +46,14 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
 
       if (!token || !storedUser) {
         setIsLoading(false);
+        setAccessToken(null);
         return;
       }
 
       // Parse stored user
       const parsedUser = JSON.parse(storedUser) as PortalUser;
       setUser(parsedUser);
+      setAccessToken(token);
       
       // Optionally validate token with backend
       // For now, we'll just trust the stored token until it expires
@@ -59,6 +63,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
       localStorage.removeItem('portal_access_token');
       localStorage.removeItem('portal_refresh_token');
       localStorage.removeItem('portal_user');
+      setAccessToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +87,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
       localStorage.setItem('portal_user', JSON.stringify(userData));
 
       setUser(userData);
+      setAccessToken(access_token);
       
     } catch (err) {
       const errorMessage = getErrorMessage(err);
@@ -108,6 +114,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
       localStorage.removeItem('portal_user');
       setUser(null);
       setError(null);
+      setAccessToken(null);
       setIsLoading(false);
     }
   };
@@ -120,6 +127,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
         tenantSlug,
         isAuthenticated,
         isLoading,
+        accessToken,
         login,
         logout,
         error,

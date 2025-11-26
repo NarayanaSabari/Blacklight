@@ -10,7 +10,6 @@ import type {
   InvitationCreateRequest,
   InvitationUpdateRequest,
   InvitationListParams,
-  InvitationReviewRequest,
   BulkInvitationRequest,
 } from '@/types';
 import { AxiosError } from 'axios';
@@ -172,7 +171,7 @@ export function useApproveInvitation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data?: InvitationReviewRequest }) =>
+    mutationFn: ({ id, data }: { id: number; data?: { notes?: string; edited_data?: Record<string, any> } }) =>
       invitationApi.approve(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: invitationKeys.detail(variables.id) });
@@ -194,7 +193,7 @@ export function useRejectInvitation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: InvitationReviewRequest }) =>
+    mutationFn: ({ id, data }: { id: number; data: { rejection_reason: string; notes?: string } }) =>
       invitationApi.reject(id, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: invitationKeys.detail(variables.id) });

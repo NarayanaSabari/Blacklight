@@ -109,7 +109,8 @@ export function CandidateDetailPage() {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  // We don't currently persist the reject reason, but keep setter for future use
+  const [, setRejectReason] = useState('');
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -140,7 +141,7 @@ export function CandidateDetailPage() {
   });
 
   // Get current assignment
-  const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'PENDING');
+  const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'ACTIVE');
 
   // Fetch top job matches
   const { data: matchesData } = useQuery({
@@ -213,7 +214,7 @@ export function CandidateDetailPage() {
   // Update Preferred Roles Mutation
   const updatePreferredRolesMutation = useMutation({
     mutationFn: (roles: string[]) =>
-      candidateApi.updateCandidate(Number(id), { preferred_roles: roles }),
+      candidateApi.updateCandidate(Number(id), { preferred_roles: roles } as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
       toast.success('Preferred roles updated');
@@ -234,7 +235,7 @@ export function CandidateDetailPage() {
       setIsGeneratingRoles(false);
 
       // Manually update cache to show results immediately
-      queryClient.setQueryData(['candidate', id], (oldData: Candidate | undefined) => {
+      queryClient.setQueryData(['candidate', id], (oldData: CandidateType | undefined) => {
         if (!oldData) return oldData;
         return {
           ...oldData,
@@ -390,7 +391,8 @@ export function CandidateDetailPage() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: (data: CandidateUpdateInput) => candidateApi.updateCandidate(Number(id), data),
+    mutationFn: (data: CandidateUpdateInput) =>
+      candidateApi.updateCandidate(Number(id), data as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
       toast.success('Candidate updated successfully');
@@ -413,14 +415,12 @@ export function CandidateDetailPage() {
     if (!result.success) {
       const errors: Record<string, string> = {};
 
-      // Defensive check for result.error
-      if (result.error && result.error.errors) {
-        result.error.errors.forEach((err) => {
-          if (err.path[0]) {
-            errors[err.path[0].toString()] = err.message;
-          }
-        });
-      }
+      // Map Zod issues to a simple field -> message map
+      result.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          errors[issue.path[0].toString()] = issue.message;
+        }
+      });
 
       setValidationErrors(errors);
       toast.error('Please fix validation errors before saving');
@@ -858,7 +858,14 @@ export function CandidateDetailPage() {
               <CardContent>
                 {isEditMode ? (
                   <WorkExperienceEditor
-                    value={formData?.work_experience || []}
+                    value={(formData?.work_experience || []).map((exp) => ({
+                      ...exp,
+                      location: exp.location ?? undefined,
+                      start_date: exp.start_date ?? undefined,
+                      end_date: exp.end_date ?? undefined,
+                      description: exp.description ?? '',
+                      duration_months: exp.duration_months ?? undefined,
+                    }))}
                     onChange={(exp) => updateField('work_experience', exp)}
                   />
                 ) : (
@@ -918,7 +925,12 @@ export function CandidateDetailPage() {
               <CardContent>
                 {isEditMode ? (
                   <EducationEditor
-                    value={formData?.education || []}
+                    value={(formData?.education || []).map((edu) => ({
+                      ...edu,
+                      field_of_study: edu.field_of_study ?? undefined,
+                      graduation_year: edu.graduation_year ?? undefined,
+                      gpa: edu.gpa ?? undefined,
+                    }))}
                     onChange={(edu) => updateField('education', edu)}
                   />
                 ) : (
@@ -1420,23 +1432,29 @@ export function CandidateDetailPage() {
                 <Separator />
                 <div className="flex justify-between items-start">
                   <span className="text-slate-600">Assigned By</span>
-                  <span className="text-slate-900">{currentAssignment.assigned_by?.full_name}</span>
+                  <span className="text-slate-900">
+                    {currentAssignment.assigned_by
+                      ? `${currentAssignment.assigned_by.first_name} ${currentAssignment.assigned_by.last_name}`
+                      : 'N/A'}
+                  </span>
                 </div>
                 <div className="flex justify-between items-start">
                   <span className="text-slate-600">Date</span>
-                  <span className="text-slate-900">{new Date(currentAssignment.assigned_at).toLocaleDateString()}</span>
+                  <span className="text-slate-900">
+                    {new Date(currentAssignment.created_at).toLocaleDateString()}
+                  </span>
                 </div>
-                {currentAssignment.reason && (
+                {currentAssignment.assignment_reason && (
                   <>
                     <Separator />
                     <div>
                       <span className="text-slate-600 block mb-1">Reason:</span>
-                      <p className="text-slate-900">{currentAssignment.reason}</p>
+                      <p className="text-slate-900">{currentAssignment.assignment_reason}</p>
                     </div>
                   </>
                 )}
                 <Badge
-                  className={`mt-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${currentAssignment.status === 'PENDING' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'
+                  className={`mt-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${currentAssignment.status === 'ACTIVE' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'
                     }`}
                 >
                   {currentAssignment.status}
@@ -1518,10 +1536,9 @@ export function CandidateDetailPage() {
       {showAssignmentDialog && (
         <CandidateAssignmentDialog
           open={showAssignmentDialog}
-          onClose={() => setShowAssignmentDialog(false)}
+          onOpenChange={setShowAssignmentDialog}
           candidateId={Number(id)}
           candidateName={candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-          currentAssignment={currentAssignment}
         />
       )}
 

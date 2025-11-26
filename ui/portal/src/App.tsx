@@ -6,7 +6,6 @@ import { Toaster } from '@/components/ui/sonner';
 import { Layout } from '@/components/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { CandidatesPage } from '@/pages/CandidatesPage';
 import { AddCandidatePage } from '@/pages/AddCandidatePage';
 import { EditCandidatePage } from '@/pages/EditCandidatePage';
 import { CandidateDetailPage } from '@/pages/CandidateDetailPage';

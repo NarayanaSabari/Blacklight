@@ -47,13 +47,11 @@ import {
 import { toast } from 'sonner';
 import { teamApi } from '@/lib/teamApi';
 import { usePermissions } from '@/hooks/usePermissions';
-import { usePortalAuth } from '@/contexts/PortalAuthContext';
-import type { TeamMember, UserBasicInfo, Role } from '@/types';
+import type { TeamMember, UserBasicInfo } from '@/types';
 
 export function ManageTeamPage() {
   const queryClient = useQueryClient();
   const { hasPermission } = usePermissions();
-  const { user } = usePortalAuth();
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TeamMember | null>(null);

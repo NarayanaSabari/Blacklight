@@ -40,13 +40,7 @@ import {
   Paperclip,
   Eye,
   Loader2,
-  Sparkles,
-  Edit3,
-  Upload,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Label } from '@/components/ui/label';
 import { DocumentUpload, type UploadedFile } from '@/components/documents/DocumentUpload';
 import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnboarding';
 import type { InvitationWithRelations } from '@/types';

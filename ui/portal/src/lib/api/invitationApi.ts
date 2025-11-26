@@ -11,7 +11,6 @@ import type {
   InvitationListParams,
   InvitationListResponse,
   InvitationStatsResponse,
-  InvitationReviewRequest,
   OnboardingSubmissionRequest,
   OnboardingSubmissionResponse,
   DocumentUploadResponse,
