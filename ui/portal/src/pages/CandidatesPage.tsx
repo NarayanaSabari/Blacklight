@@ -152,245 +152,229 @@ export function CandidatesPage() {
       </div>
 
 
-      {/* Main Content */}
-      <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-black">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle>Candidate List</CardTitle>
-              <CardDescription>
-                {candidatesData?.total || 0} total candidates
-              </CardDescription>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="relative flex-1 md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search candidates..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="pending_review">Pending Review</SelectItem>
-                  <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="screening">Screening</SelectItem>
-                  <SelectItem value="interviewed">Interviewed</SelectItem>
-                  <SelectItem value="offered">Offered</SelectItem>
-                  <SelectItem value="hired">Hired</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="withdrawn">Withdrawn</SelectItem>
-                  <SelectItem value="onboarded">Onboarded</SelectItem>
-                  <SelectItem value="ready_for_assignment">Ready for Assignment</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      {/* Search and Filters */}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search candidates..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : candidatesData?.candidates.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Users className="h-12 w-12 text-slate-400 mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">
-                No candidates found
-              </h3>
-              <p className="text-slate-600 mb-4 max-w-sm">
-                {searchQuery || statusFilter !== 'all'
-                  ? 'Try adjusting your filters'
-                  : 'Start building your talent pipeline by adding candidates'}
-              </p>
-              <Button className="gap-2" onClick={() => navigate('/candidates/new')}>
-                <Plus className="h-4 w-4" />
-                Add Your First Candidate
-              </Button>
-            </div>
-          ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Skills</TableHead>
-                    <TableHead>Experience</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Added</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {candidatesData?.candidates.map((candidate: CandidateListItem) => (
-                    <TableRow key={candidate.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium text-slate-900">
-                            {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-                          </div>
-                          <div className="text-sm text-slate-600">{candidate.email}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">{candidate.current_title || '-'}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">{candidate.location || '-'}</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {candidate.skills.slice(0, 3).map((skill, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {skill}
-                            </Badge>
-                          ))}
-                          {candidate.skills.length > 3 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{candidate.skills.length - 3}
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {candidate.total_experience_years
-                            ? `${candidate.total_experience_years} yrs`
-                            : '-'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={STATUS_COLORS[candidate.status]}>
-                          {candidate.status}
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full md:w-48">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="processing">Processing</SelectItem>
+            <SelectItem value="pending_review">Pending Review</SelectItem>
+            <SelectItem value="new">New</SelectItem>
+            <SelectItem value="screening">Screening</SelectItem>
+            <SelectItem value="interviewed">Interviewed</SelectItem>
+            <SelectItem value="offered">Offered</SelectItem>
+            <SelectItem value="hired">Hired</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="withdrawn">Withdrawn</SelectItem>
+            <SelectItem value="onboarded">Onboarded</SelectItem>
+            <SelectItem value="ready_for_assignment">Ready for Assignment</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="space-y-2">
+          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
+          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
+          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
+        </div>
+      ) : candidatesData?.candidates.length === 0 ? (
+        <div className="text-center py-12 text-slate-500">
+          <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+          <p className="text-lg font-medium">No candidates found</p>
+          <p className="text-sm mt-1">
+            {searchQuery || statusFilter !== 'all'
+              ? 'Try adjusting your search or filters'
+              : 'No candidates in the system'}
+          </p>
+        </div>
+      ) : (
+        <>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Location</TableHead>
+                <TableHead>Skills</TableHead>
+                <TableHead>Experience</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Added</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {candidatesData?.candidates.map((candidate: CandidateListItem) => (
+                <TableRow key={candidate.id}>
+                  <TableCell>
+                    <div>
+                      <div className="font-medium text-slate-900">
+                        {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
+                      </div>
+                      <div className="text-sm text-slate-600">{candidate.email}</div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">{candidate.current_title || '-'}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">{candidate.location || '-'}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-xs">
+                      {candidate.skills.slice(0, 3).map((skill, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {skill}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm text-slate-600">
-                          {formatDate(candidate.created_at)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
+                      ))}
+                      {candidate.skills.length > 3 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{candidate.skills.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {candidate.total_experience_years
+                        ? `${candidate.total_experience_years} yrs`
+                        : '-'}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={STATUS_COLORS[candidate.status]}>
+                      {candidate.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm text-slate-600">
+                      {formatDate(candidate.created_at)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onClick={() => navigate(`/candidates/${candidate.id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="gap-2"
+                          onClick={() => {
+                            setCandidateToAssign(candidate);
+                            setAssignDialogOpen(true);
+                          }}
+                        >
+                          <UserPlus className="h-4 w-4" />
+                          Assign
+                        </DropdownMenuItem>
+
+                        {/* Show Review & Approve for pending_review status */}
+                        {candidate.status === 'pending_review' && (
+                          <>
                             <DropdownMenuItem
-                              className="gap-2"
-                              onClick={() => navigate(`/candidates/${candidate.id}`)}
-                            >
-                              <Eye className="h-4 w-4" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="gap-2"
+                              className="gap-2 text-blue-600"
                               onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
                             >
-                              <Pencil className="h-4 w-4" />
-                              Edit
+                              <Eye className="h-4 w-4" />
+                              Review & Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              className="gap-2"
-                              onClick={() => {
-                                setCandidateToAssign(candidate);
-                                setAssignDialogOpen(true);
+                              className="gap-2 text-green-600"
+                              onClick={async () => {
+                                try {
+                                  await candidateApi.approveCandidate(candidate.id);
+                                  toast.success('Candidate approved! Job matching in progress...');
+                                  await queryClient.refetchQueries({ queryKey: ['candidates'] });
+                                  await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
+                                } catch (error: any) {
+                                  toast.error(error.message || 'Failed to approve candidate');
+                                }
                               }}
                             >
-                              <UserPlus className="h-4 w-4" />
-                              Assign
+                              <UserCheck className="h-4 w-4" />
+                              Approve
                             </DropdownMenuItem>
+                          </>
+                        )}
 
-                            {/* Show Review & Approve for pending_review status */}
-                            {candidate.status === 'pending_review' && (
-                              <>
-                                <DropdownMenuItem
-                                  className="gap-2 text-blue-600"
-                                  onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  Review & Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="gap-2 text-green-600"
-                                  onClick={async () => {
-                                    try {
-                                      await candidateApi.approveCandidate(candidate.id);
-                                      toast.success('Candidate approved! Job matching in progress...');
-                                      await queryClient.refetchQueries({ queryKey: ['candidates'] });
-                                      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
-                                    } catch (error: any) {
-                                      toast.error(error.message || 'Failed to approve candidate');
-                                    }
-                                  }}
-                                >
-                                  <UserCheck className="h-4 w-4" />
-                                  Approve
-                                </DropdownMenuItem>
-                              </>
-                            )}
+                        <DropdownMenuItem
+                          className="gap-2 text-destructive"
+                          onClick={() => handleDelete(candidate.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
-                            <DropdownMenuItem
-                              className="gap-2 text-destructive"
-                              onClick={() => handleDelete(candidate.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {/* Pagination */}
-              {candidatesData && candidatesData.pages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                  <div className="text-sm text-slate-600">
-                    Page {candidatesData.page} of {candidatesData.pages}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={page === candidatesData.pages}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
+          {/* Pagination */}
+          {candidatesData && candidatesData.pages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-slate-600">
+                Page {candidatesData.page} of {candidatesData.pages}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={page === candidatesData.pages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </>
+      )}
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      < AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -409,21 +393,23 @@ export function CandidatesPage() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </AlertDialog >
 
       {/* Candidate Assignment Dialog */}
-      {candidateToAssign && (
-        <CandidateAssignmentDialog
-          candidateId={candidateToAssign.id}
-          candidateName={candidateToAssign.full_name || `${candidateToAssign.first_name} ${candidateToAssign.last_name}`}
-          open={assignDialogOpen}
-          onOpenChange={setAssignDialogOpen}
-          onSuccess={() => {
-            toast.success('Candidate assigned successfully!');
-            setCandidateToAssign(null);
-          }}
-        />
-      )}
-    </div>
+      {
+        candidateToAssign && (
+          <CandidateAssignmentDialog
+            candidateId={candidateToAssign.id}
+            candidateName={candidateToAssign.full_name || `${candidateToAssign.first_name} ${candidateToAssign.last_name}`}
+            open={assignDialogOpen}
+            onOpenChange={setAssignDialogOpen}
+            onSuccess={() => {
+              toast.success('Candidate assigned successfully!');
+              setCandidateToAssign(null);
+            }}
+          />
+        )
+      }
+    </div >
   );
 }
