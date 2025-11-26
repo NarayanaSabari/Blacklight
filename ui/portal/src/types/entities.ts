@@ -97,12 +97,23 @@ export interface Candidate {
   resume_url: string | null;
   portfolio_url: string | null;
   status: 'NEW' | 'SCREENING' | 'INTERVIEWING' | 'OFFERED' | 'HIRED' | 'REJECTED' | 'WITHDRAWN';
-  source: 'DIRECT' | 'REFERRAL' | 'LINKEDIN' | 'INDEED' | 'CAREER_SITE' | 'OTHER';
+  source: 'DIRECT' | '  REFERRAL' | 'LINKEDIN' | 'INDEED' | 'CAREER_SITE' | 'OTHER';
   notes: string | null;
   rating: number | null;
   added_by_id: number;
   created_at: string;
   updated_at: string;
+  //  Role Preferences (NEW)
+  preferred_roles?: string[];
+  suggested_roles?: {
+    roles: Array<{
+      role: string;
+      score: number;
+      reasoning: string;
+    }>;
+    generated_at: string;
+    model_version: string;
+  };
   // Relations
   added_by?: PortalUserBasic;
   applications_count?: number;
