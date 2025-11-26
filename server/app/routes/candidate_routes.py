@@ -740,3 +740,144 @@ def health_check():
         'service': 'candidate',
         'message': 'Candidate service is running'
     }), 200
+"""
+Add these two new endpoints to candidate_routes.py at the end of the file
+"""
+
+# ==================== Role Preferences Endpoints ====================
+
+@candidate_bp.route('/<int:candidate_id>/preferred-roles', methods=['PUT'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.edit')
+def update_preferred_roles(candidate_id: int):
+    """
+    Update candidate's preferred roles.
+    
+    Request Body:
+        {
+            "preferred_roles": ["Software Engineer", "Tech Lead", "Solutions Architect"]
+        }
+    
+    Returns: Updated candidate
+    Permissions: candidates.edit
+    """
+    try:
+        tenant_id = g.tenant_id
+        data = request.get_json()
+        
+        if not data or 'preferred_roles' not in data:
+            return error_response("preferred_roles is required", 400)
+        
+        preferred_roles = data['preferred_roles']
+        
+        # Validate that it's a list
+        if not isinstance(preferred_roles, list):
+            return error_response("preferred_roles must be an array", 400)
+        
+        # Limit to 10 roles max
+        if len(preferred_roles) > 10:
+            return error_response("Maximum 10 preferred roles allowed", 400)
+        
+        # Get candidate
+        from app.models.candidate import Candidate
+        candidate = db.session.get(Candidate, candidate_id)
+        
+        if not candidate or candidate.tenant_id != tenant_id:
+            return error_response("Candidate not found", 404)
+        
+        # Update preferred roles
+        candidate.preferred_roles = preferred_roles
+        db.session.commit()
+        
+        logger.info(f"Updated preferred roles for candidate {candidate_id}: {len(preferred_roles)} roles")
+        
+        return jsonify({
+            'message': 'Preferred roles updated successfully',
+            'candidate': candidate.to_dict()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating preferred roles: {str(e)}", exc_info=True)
+        return error_response(f"Failed to update preferred roles: {str(e)}", 500)
+
+
+@candidate_bp.route('/<int:candidate_id>/suggest-roles', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.edit')
+def generate_role_suggestions(candidate_id: int):
+    """
+    Generate AI-powered role suggestions for candidate.
+    
+    Uses Gemini AI to analyze candidate profile and suggest top 5 roles.
+    
+    Returns: 
+        {
+            "message": "...",
+            "suggested_roles": {
+                "roles": [...],
+                "generated_at": "...",
+                "model_version": "..."
+            }
+        }
+    
+    Permissions: candidates.edit
+    """
+    try:
+        tenant_id = g.tenant_id
+        
+        # Get candidate
+        from app.models.candidate import Candidate
+        candidate = db.session.get(Candidate, candidate_id)
+        
+        if not candidate or candidate.tenant_id != tenant_id:
+            return error_response("Candidate not found", 404)
+        
+        # Validate candidate has sufficient data
+        if not candidate.skills and not candidate.work_experience and not candidate.current_title:
+            return error_response(
+                "Candidate needs more profile data (skills, experience, or title) to generate suggestions",
+                400
+            )
+        
+        # Generate suggestions using AI service
+        from app.services.role_suggestion_service import get_role_suggestion_service
+        import asyncio
+        
+        role_service = get_role_suggestion_service()
+        
+        logger.info(f"Generating role suggestions for candidate {candidate_id}...")
+        
+        # Run async function in sync context
+        suggestions = asyncio.run(role_service.generate_suggestions(candidate))
+        
+        # Save to database
+        candidate.suggested_roles = suggestions
+        db.session.commit()
+        
+        logger.info(f"Generated {len(suggestions.get('roles', []))} role suggestions for candidate {candidate_id}")
+        
+        return jsonify({
+            'message': f"Successfully generated {len(suggestions.get('roles', []))} role suggestions",
+            'suggested_roles': suggestions
+        }), 200
+        
+    except ValueError as e:
+        # Configuration errors
+        logger.error(f"Configuration error: {str(e)}")
+        return error_response(f"Configuration error: {str(e)}", 500)
+        
+    except Exception as e:
+        # AI generation or other errors
+        error_msg = str(e)
+        logger.error(f"Error generating role suggestions: {error_msg}", exc_info=True)
+        
+        # Check if it's a timeout that exceeded retries
+        if 'timeout' in error_msg.lower() or 'deadline' in error_msg.lower():
+            return error_response(
+                "AI service timed out after multiple retries. Please try again later.",
+                503
+            )
+        
+        return error_response(f"Failed to generate role suggestions: {error_msg}", 500)
