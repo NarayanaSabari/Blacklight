@@ -285,6 +285,32 @@ export function RolesPage() {
     return acc;
   }, {} as Record<string, Permission[]>);
 
+  // Role hierarchy for sorting (System Roles)
+  const ROLE_ORDER: Record<string, number> = {
+    'TENANT_ADMIN': 1,
+    'HIRING_MANAGER': 2,
+    'MANAGER': 3,
+    'RECRUITER': 4,
+  };
+
+  // Sort roles by hierarchy: System roles first (by hierarchy), then custom roles (alphabetically)
+  const sortedRoles = roles?.slice().sort((a, b) => {
+    // Both system roles - sort by hierarchy
+    if (a.is_system_role && b.is_system_role) {
+      const orderA = ROLE_ORDER[a.name] || 999;
+      const orderB = ROLE_ORDER[b.name] || 999;
+      return orderA - orderB;
+    }
+
+    // System roles always come before custom roles
+    if (a.is_system_role && !b.is_system_role) return -1;
+    if (!a.is_system_role && b.is_system_role) return 1;
+
+    // Both custom roles - sort alphabetically by display_name
+    return a.display_name.localeCompare(b.display_name);
+  });
+
+
   return (
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
@@ -531,8 +557,8 @@ export function RolesPage() {
               </tr>
             </thead>
             <tbody>
-              {roles && roles.length > 0 ? (
-                roles.map((role) => (
+              {sortedRoles && sortedRoles.length > 0 ? (
+                sortedRoles.map((role) => (
                   <tr key={role.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-6 py-4">
                       <div>

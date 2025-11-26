@@ -10,9 +10,84 @@ from app.services import AuditLogService
 
 logger = logging.getLogger(__name__)
 
+# Role Hierarchy for Manager Assignment (System Roles Only)
+# Higher level can manage lower levels (skip-level allowed)
+ROLE_HIERARCHY = {
+    'TENANT_ADMIN': 1,     # Can manage: HIRING_MANAGER, MANAGER, RECRUITER
+    'HIRING_MANAGER': 2,   # Can manage: MANAGER, RECRUITER  
+    'MANAGER': 3,          # Can manage: RECRUITER only
+    'RECRUITER': 4,        # Cannot manage anyone
+}
+
 
 class TeamManagementService:
     """Service for team hierarchy and manager assignment operations."""
+    
+    @staticmethod
+    def _get_user_role_level(user: PortalUser) -> Optional[int]:
+        """
+        Get the hierarchy level of a user's system role.
+        
+        Args:
+            user: PortalUser instance
+            
+        Returns:
+            Hierarchy level (lower number = higher authority) or None if no system role
+        """
+        # Users should have only one role
+        if not user.roles:
+            return None
+        
+        # Get the first (and should be only) role
+        role = user.roles[0]
+        
+        # Only check hierarchy for system roles
+        if not role.is_system_role:
+            return None
+        
+        return ROLE_HIERARCHY.get(role.name)
+    
+    @staticmethod
+    def _can_manage(manager: PortalUser, subordinate: PortalUser) -> tuple[bool, str]:
+        """
+        Check if manager's role allows them to manage subordinate's role.
+        
+        Hierarchy Rules (System Roles Only):
+        - TENANT_ADMIN (1) can manage: HIRING_MANAGER (2), MANAGER (3), RECRUITER (4)
+        - HIRING_MANAGER (2) can manage: MANAGER (3), RECRUITER (4)
+        - MANAGER (3) can manage: RECRUITER (4) only
+        - RECRUITER (4) cannot manage anyone
+        
+        Args:
+            manager: Proposed manager user
+            subordinate: User to be managed
+            
+        Returns:
+            Tuple of (can_manage: bool, error_message: str)
+        """
+        manager_level = TeamManagementService._get_user_role_level(manager)
+        subordinate_level = TeamManagementService._get_user_role_level(subordinate)
+        
+        # If either user doesn't have a system role, allow assignment
+        # (custom roles don't have hierarchy restrictions)
+        if manager_level is None or subordinate_level is None:
+            return (True, "")
+        
+        # Manager must have a lower level number (higher authority) than subordinate
+        if manager_level >= subordinate_level:
+            manager_role_name = manager.roles[0].name if manager.roles else "Unknown"
+            subordinate_role_name = subordinate.roles[0].name if subordinate.roles else "Unknown"
+            
+            if manager_level == subordinate_level:
+                # Same level - peers cannot manage peers
+                error_msg = f"{manager_role_name} cannot manage another {subordinate_role_name} (peers cannot manage each other)"
+            else:
+                # Lower authority trying to manage higher
+                error_msg = f"{manager_role_name} cannot manage {subordinate_role_name} (insufficient authority in role hierarchy)"
+            
+            return (False, error_msg)
+        
+        return (True, "")
 
     @staticmethod
     def assign_manager_to_user(
@@ -75,6 +150,12 @@ class TeamManagementService:
         # Prevent circular hierarchy
         if TeamManagementService._would_create_cycle(user_id, manager_id):
             raise ValueError("This assignment would create a circular hierarchy")
+        
+        # Validate role hierarchy (System Roles Only)
+        # Ensures manager's role has authority to manage user's role
+        can_manage, error_message = TeamManagementService._can_manage(manager, user)
+        if not can_manage:
+            raise ValueError(error_message)
 
         # Store old manager for audit log
         old_manager_id = user.manager_id
