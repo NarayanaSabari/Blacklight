@@ -151,53 +151,6 @@ export function CandidatesPage() {
         <p className="text-slate-600 mt-1">Manage and track your candidate pipeline</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-black text-slate-700 uppercase tracking-wide text-xs">
-              <Users className="h-4 w-4" />
-              Total Candidates
-            </CardDescription>
-            <CardTitle className="text-4xl font-black">
-              {stats?.total_candidates || 0}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-black text-slate-700 uppercase tracking-wide text-xs">
-              <Clock className="h-4 w-4" />
-              Screening
-            </CardDescription>
-            <CardTitle className="text-4xl font-black">
-              {stats?.by_status.screening || 0}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-black text-slate-700 uppercase tracking-wide text-xs">
-              <UserCheck className="h-4 w-4" />
-              Hired
-            </CardDescription>
-            <CardTitle className="text-4xl font-black">
-              {stats?.by_status.hired || 0}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 font-black text-slate-700 uppercase tracking-wide text-xs">
-              <TrendingUp className="h-4 w-4" />
-              Recent Uploads
-            </CardDescription>
-            <CardTitle className="text-4xl font-black">
-              {stats?.recent_uploads || 0}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
 
       {/* Main Content */}
       <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
