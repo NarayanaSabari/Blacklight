@@ -84,7 +84,7 @@ const ScoreBar = ({ label, value, icon: Icon }: { label: string; value: number; 
           <Icon className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-muted-foreground">{label}</span>
         </div>
-        <span className="font-medium">{value.toFixed(0)}%</span>
+        <span className="font-medium">{Math.round(value ?? 0)}%</span>
       </div>
       <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
         <div
@@ -141,7 +141,7 @@ export function MatchCard({ match, candidateId, onViewDetails, onApply, showActi
             >
               {gradeConfig.label}
             </Badge>
-            <span className="text-2xl font-bold">{match.match_score.toFixed(0)}%</span>
+            <span className="text-2xl font-bold">{Math.round(match.match_score ?? 0)}%</span>
           </div>
         </div>
       </CardHeader>

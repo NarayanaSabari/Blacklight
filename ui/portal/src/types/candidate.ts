@@ -68,6 +68,16 @@ export interface Candidate {
   skills: string[];
   certifications: string[];
   languages: string[];
+  preferred_roles?: string[];
+  suggested_roles?: {
+    roles: Array<{
+      role: string;
+      score: number;
+      reasoning: string;
+    }>;
+    generated_at: string;
+    model_version: string;
+  };
 
   // JSONB data
   education: Education[];

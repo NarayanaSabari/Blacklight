@@ -432,7 +432,7 @@ class CandidateService:
             'total_experience_years', 'notice_period', 'expected_salary',
             'professional_summary', 'status', 'source',
             'skills', 'certifications', 'languages', 'preferred_locations',
-            'education', 'work_experience',
+            'education', 'work_experience', 'preferred_roles', 'suggested_roles',
         ]
         
         for field in allowed_fields:

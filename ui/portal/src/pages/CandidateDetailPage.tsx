@@ -1016,11 +1016,17 @@ export function CandidateDetailPage() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-bold text-sm truncate text-slate-900">
-                          {match.job_posting?.title}
+                        <h4
+                          title={match.job?.title ?? match.job_posting?.title}
+                          className="font-bold text-sm truncate text-slate-900"
+                        >
+                          {match.job?.title ?? match.job_posting?.title ?? 'Untitled job'}
                         </h4>
-                        <p className="text-xs text-slate-600 truncate">
-                          {match.job_posting?.company}
+                        <p
+                          title={match.job?.company ?? match.job_posting?.company}
+                          className="text-xs text-slate-600 truncate"
+                        >
+                          {match.job?.company ?? match.job_posting?.company ?? 'Unknown company'}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -1035,7 +1041,7 @@ export function CandidateDetailPage() {
                           {match.match_grade}
                         </Badge>
                         <span className="text-xs font-bold text-slate-900">
-                          {match.match_score.toFixed(0)}%
+                          {Math.round(match.match_score ?? 0)}%
                         </span>
                       </div>
                     </div>
