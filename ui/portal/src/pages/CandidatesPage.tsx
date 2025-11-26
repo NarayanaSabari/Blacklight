@@ -210,56 +210,24 @@ export function CandidatesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Skills</TableHead>
-                <TableHead>Experience</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {candidatesData?.candidates.map((candidate: CandidateListItem) => (
                 <TableRow key={candidate.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium text-slate-900">
-                        {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
-                      </div>
-                      <div className="text-sm text-slate-600">{candidate.email}</div>
-                    </div>
+                  <TableCell className="font-medium">
+                    {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm">{candidate.current_title || '-'}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">{candidate.location || '-'}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1 max-w-xs">
-                      {candidate.skills.slice(0, 3).map((skill, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {skill}
-                        </Badge>
-                      ))}
-                      {candidate.skills.length > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{candidate.skills.length - 3}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {candidate.total_experience_years
-                        ? `${candidate.total_experience_years} yrs`
-                        : '-'}
-                    </div>
-                  </TableCell>
+                  <TableCell>{candidate.email}</TableCell>
+                  <TableCell>{candidate.phone || '—'}</TableCell>
                   <TableCell>
                     <Badge className={STATUS_COLORS[candidate.status]}>
-                      {candidate.status}
+                      {candidate.status.replace(/_/g, ' ')}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -267,73 +235,37 @@ export function CandidatesPage() {
                       {formatDate(candidate.created_at)}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="icon">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="gap-2"
-                          onClick={() => navigate(`/candidates/${candidate.id}`)}
-                        >
-                          <Eye className="h-4 w-4" />
+                        <DropdownMenuItem onClick={() => navigate(`/candidates/${candidate.id}`)}>
+                          <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="gap-2"
-                          onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                        >
-                          <Pencil className="h-4 w-4" />
+                        <DropdownMenuItem onClick={() => {
+                          setCandidateToAssign(candidate);
+                          setAssignDialogOpen(true);
+                        }}>
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Assign
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/candidates/${candidate.id}/edit`)}>
+                          <Pencil className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          className="gap-2"
+                          className="text-red-600"
                           onClick={() => {
-                            setCandidateToAssign(candidate);
-                            setAssignDialogOpen(true);
+                            setCandidateToDelete(candidate.id);
+                            setDeleteDialogOpen(true);
                           }}
                         >
-                          <UserPlus className="h-4 w-4" />
-                          Assign
-                        </DropdownMenuItem>
-
-                        {/* Show Review & Approve for pending_review status */}
-                        {candidate.status === 'pending_review' && (
-                          <>
-                            <DropdownMenuItem
-                              className="gap-2 text-blue-600"
-                              onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                            >
-                              <Eye className="h-4 w-4" />
-                              Review & Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="gap-2 text-green-600"
-                              onClick={async () => {
-                                try {
-                                  await candidateApi.approveCandidate(candidate.id);
-                                  toast.success('Candidate approved! Job matching in progress...');
-                                  await queryClient.refetchQueries({ queryKey: ['candidates'] });
-                                  await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
-                                } catch (error: any) {
-                                  toast.error(error.message || 'Failed to approve candidate');
-                                }
-                              }}
-                            >
-                              <UserCheck className="h-4 w-4" />
-                              Approve
-                            </DropdownMenuItem>
-                          </>
-                        )}
-
-                        <DropdownMenuItem
-                          className="gap-2 text-destructive"
-                          onClick={() => handleDelete(candidate.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 mr-2" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
