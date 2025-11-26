@@ -79,13 +79,18 @@ const ONBOARDING_STATUS_COLORS: Record<OnboardingStatus, string> = {
   REJECTED: 'bg-red-100 text-red-800',
 };
 
-type TabValue = 'pending-review' | 'pending-assignment' | 'pending-onboarding' | 'all'; // Modified type
+type TabValue = 'all-candidates' | 'review-submissions' | 'ready-to-assign' | 'email-invitations';
 
-export function OnboardCandidatesPage() {
+interface OnboardCandidatesPageProps {
+  defaultTab?: TabValue;
+  hideTabNavigation?: boolean;
+}
+
+export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }: OnboardCandidatesPageProps = {}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { hasPermission } = usePermissions();
-  const [activeTab, setActiveTab] = useState<TabValue>('pending-assignment');
+  const [activeTab, setActiveTab] = useState<TabValue>(defaultTab || 'all-candidates');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
 
@@ -122,7 +127,7 @@ export function OnboardCandidatesPage() {
   } = useQuery({
     queryKey: ['submitted-invitations', page],
     queryFn: () => invitationApi.getSubmittedInvitations({ page, per_page: 20 }),
-    enabled: canViewCandidates && activeTab === 'pending-review',
+    enabled: canViewCandidates && activeTab === 'review-submissions',
   });
 
   // Fetch candidates with status='pending_review' (async resume uploads)
@@ -132,40 +137,28 @@ export function OnboardCandidatesPage() {
   } = useQuery({
     queryKey: ['candidates-pending-review', page],
     queryFn: () => candidateApi.getPendingReview(),
-    enabled: canViewCandidates && activeTab === 'pending-review',
+    enabled: canViewCandidates && activeTab === 'review-submissions',
   });
 
-  // Fetch candidates based on active tab
-  const getCandidatesQueryKey = () => {
-    if (activeTab === 'pending-review') { // Added
-      return ['submitted-invitations', page];
-    } else if (activeTab === 'pending-assignment') {
-      return ['pending-candidates', 'PENDING_ASSIGNMENT', page];
-    } else if (activeTab === 'pending-onboarding') {
-      return ['pending-candidates', 'ASSIGNED,PENDING_ONBOARDING', page];
-    }
-    return ['pending-candidates', 'all', page];
-  };
+  // Fetch all candidates (for all-candidates tab)
+  const { data: allCandidatesData, isLoading: isLoadingAllCandidates } = useQuery({
+    queryKey: ['all-candidates', page, searchQuery],
+    queryFn: () => candidateApi.listCandidates({ page, per_page: 20, search: searchQuery || undefined }),
+    enabled: canViewCandidates && activeTab === 'all-candidates',
+  });
 
-  const getCandidatesQueryFn = () => {
-    if (activeTab === 'pending-review') { // Added
-      return () => invitationApi.getSubmittedInvitations({ page, per_page: 20 });
-    } else if (activeTab === 'pending-assignment') {
-      return () => onboardingApi.getPendingCandidates({ page, per_page: 20, status: 'PENDING_ASSIGNMENT' });
-    } else if (activeTab === 'pending-onboarding') {
-      return () => onboardingApi.getPendingCandidates({ page, per_page: 20, status: 'ASSIGNED,PENDING_ONBOARDING' });
-    }
-    return () => onboardingApi.getPendingCandidates({ page, per_page: 20 });
-  };
+  // Fetch ready-to-assign candidates
+  const { data: readyToAssignData, isLoading: isLoadingReadyToAssign } = useQuery({
+    queryKey: ['ready-to-assign', page],
+    queryFn: () => onboardingApi.getPendingCandidates({ page, per_page: 20, status: 'PENDING_ASSIGNMENT' }),
+    enabled: canViewCandidates && activeTab === 'ready-to-assign',
+  });
 
-  const {
-    data: candidatesData,
-    isLoading: isLoadingCandidates,
-    error: candidatesError,
-  } = useQuery({
-    queryKey: getCandidatesQueryKey(),
-    queryFn: getCandidatesQueryFn(),
-    enabled: canViewCandidates && activeTab !== 'pending-review', // Modified enabled
+  // Fetch email invitations
+  const { data: emailInvitationsData, isLoading: isLoadingEmailInvitations } = useQuery({
+    queryKey: ['email-invitations', page],
+    queryFn: () => invitationApi.list({ page, per_page: 20 }),
+    enabled: canViewCandidates && activeTab === 'email-invitations',
   });
 
   // Fetch available users for assignment
@@ -345,18 +338,24 @@ export function OnboardCandidatesPage() {
     navigate(`/candidates/${candidateId}`);
   };
 
-  // Filter candidates by search query (only for non-pending-review tabs)
-  const filteredCandidates = activeTab !== 'pending-review'
-    ? (candidatesData?.candidates.filter((candidate) => {
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        candidate.first_name.toLowerCase().includes(query) ||
-        candidate.last_name.toLowerCase().includes(query) ||
-        candidate.email.toLowerCase().includes(query)
-      );
-    }) || [])
-    : [];
+  // Filter candidates by search query based on active tab
+  const filteredCandidates = (() => {
+    if (activeTab === 'review-submissions') return [];
+    if (activeTab === 'email-invitations') return [];
+
+    const candidates = activeTab === 'ready-to-assign'
+      ? (readyToAssignData?.candidates || [])
+      : (allCandidatesData?.candidates || []);
+
+    if (!searchQuery) return candidates;
+
+    const query = searchQuery.toLowerCase();
+    return candidates.filter((candidate) => (
+      candidate.first_name.toLowerCase().includes(query) ||
+      candidate.last_name.toLowerCase().includes(query) ||
+      candidate.email?.toLowerCase().includes(query)
+    ));
+  })();
 
   // Format date
   const formatDate = (dateString: string | null) => {
@@ -453,10 +452,10 @@ export function OnboardCandidatesPage() {
             <div>
               <CardTitle>Candidate Pipeline</CardTitle>
               <CardDescription className="mt-1.5">
-                {activeTab === 'pending-review' && 'Review submitted applications and approve qualified candidates'}
-                {activeTab === 'pending-assignment' && 'Assign approved candidates to recruiters or managers'}
-                {activeTab === 'pending-onboarding' && 'Monitor candidates in the onboarding process'}
-                {activeTab === 'all' && 'View all candidates across all stages'}
+                {activeTab === 'all-candidates' && 'View all candidates across all statuses'}
+                {activeTab === 'review-submissions' && 'Review submitted applications and approve qualified candidates'}
+                {activeTab === 'ready-to-assign' && 'Assign approved candidates to recruiters or managers'}
+                {activeTab === 'email-invitations' && 'Manage and track email invitations sent to candidates'}
               </CardDescription>
             </div>
           </div>
@@ -467,35 +466,37 @@ export function OnboardCandidatesPage() {
             setPage(1);
             setSearchQuery('');
           }}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="pending-review" className="gap-2">
-                <Mail className="h-3.5 w-3.5" />
-                Review Submissions
-                {stats.pending_review > 0 && (
-                  <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100">
-                    {stats.pending_review}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="pending-assignment" className="gap-2">
-                <UserPlus className="h-3.5 w-3.5" />
-                Ready to Assign
-                {stats.pending_assignment > 0 && (
-                  <Badge variant="secondary" className="ml-1">{stats.pending_assignment}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="pending-onboarding" className="gap-2">
-                <Clock className="h-3.5 w-3.5" />
-                In Progress
-                {stats.pending_onboarding > 0 && (
-                  <Badge variant="secondary" className="ml-1">{stats.pending_onboarding}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="all" className="gap-2">
-                <Users className="h-3.5 w-3.5" />
-                All ({stats.total})
-              </TabsTrigger>
-            </TabsList>
+            {!hideTabNavigation && (
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="all-candidates" className="gap-2">
+                  <Users className="h-3.5 w-3.5" />
+                  All Candidates
+                  {stats.total > 0 && (
+                    <Badge variant="secondary" className="ml-1">{stats.total}</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="review-submissions" className="gap-2">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Review Submissions
+                  {stats.pending_review > 0 && (
+                    <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700 hover:bg-amber-100">
+                      {stats.pending_review}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="ready-to-assign" className="gap-2">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Ready to Assign
+                  {stats.pending_assignment > 0 && (
+                    <Badge variant="secondary" className="ml-1">{stats.pending_assignment}</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="email-invitations" className="gap-2">
+                  <Mail className="h-3.5 w-3.5" />
+                  Email Invitations
+                </TabsTrigger>
+              </TabsList>
+            )}
 
             {/* Search and Filters */}
             <div className="flex flex-col md:flex-row gap-4 mt-6 mb-4">
@@ -514,16 +515,20 @@ export function OnboardCandidatesPage() {
                 variant="outline"
                 size="icon"
                 onClick={() => {
-                  queryClient.invalidateQueries({ queryKey: getCandidatesQueryKey() });
+                  queryClient.invalidateQueries({ queryKey: ['submitted-invitations'] });
+                  queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
+                  queryClient.invalidateQueries({ queryKey: ['all-candidates'] });
+                  queryClient.invalidateQueries({ queryKey: ['ready-to-assign'] });
+                  queryClient.invalidateQueries({ queryKey: ['email-invitations'] });
                   queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
                 }}
-                disabled={isLoadingCandidates}
+                disabled={isLoadingSubmittedInvitations || isLoadingPendingReviewCandidates || isLoadingAllCandidates || isLoadingReadyToAssign || isLoadingEmailInvitations}
               >
-                <RefreshCw className={`h-4 w-4 ${isLoadingCandidates ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${(isLoadingSubmittedInvitations || isLoadingPendingReviewCandidates || isLoadingAllCandidates || isLoadingReadyToAssign || isLoadingEmailInvitations) ? 'animate-spin' : ''}`} />
               </Button>
             </div>
 
-            <TabsContent value="pending-review" className="mt-0">
+            <TabsContent value="review-submissions" className="mt-0">
               {/* Pending Review Table */}
               {isLoadingPendingReviewCandidates || isLoadingSubmittedInvitations ? (
                 <div className="space-y-3">
@@ -675,20 +680,13 @@ export function OnboardCandidatesPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="pending-assignment" className="mt-0">
-              {isLoadingCandidates ? (
+            <TabsContent value="ready-to-assign" className="mt-0">
+              {isLoadingReadyToAssign ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                 </div>
-              ) : candidatesError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to load candidates. Please try again.
-                  </AlertDescription>
-                </Alert>
               ) : filteredCandidates.length > 0 ? (
                 <>
                   <Table>
@@ -712,14 +710,16 @@ export function OnboardCandidatesPage() {
                           <TableCell>{candidate.email}</TableCell>
                           <TableCell>{candidate.phone || '—'}</TableCell>
                           <TableCell>
-                            <Badge
-                              className={
-                                ONBOARDING_STATUS_COLORS[candidate.onboarding_status] ||
-                                'bg-gray-100 text-gray-800'
-                              }
-                            >
-                              {candidate.onboarding_status.replace(/_/g, ' ')}
-                            </Badge>
+                            {'onboarding_status' in candidate && candidate.onboarding_status ? (
+                              <Badge
+                                className={
+                                  ONBOARDING_STATUS_COLORS[candidate.onboarding_status] ||
+                                  'bg-gray-100 text-gray-800'
+                                }
+                              >
+                                {candidate.onboarding_status.replace(/_/g, ' ')}
+                              </Badge>
+                            ) : '—'}
                           </TableCell>
                           <TableCell>
                             {candidate.recruiter ? (
@@ -762,10 +762,10 @@ export function OnboardCandidatesPage() {
                   </Table>
 
                   {/* Pagination */}
-                  {candidatesData && candidatesData.total_pages > 1 && (
+                  {readyToAssignData && readyToAssignData.total_pages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-slate-600">
-                        Page {candidatesData.page} of {candidatesData.total_pages}
+                        Page {readyToAssignData.page} of {readyToAssignData.total_pages}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -780,7 +780,7 @@ export function OnboardCandidatesPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setPage((p) => p + 1)}
-                          disabled={page === candidatesData.total_pages}
+                          disabled={page === readyToAssignData.total_pages}
                         >
                           Next
                         </Button>
@@ -801,20 +801,13 @@ export function OnboardCandidatesPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="pending-onboarding" className="mt-0">
-              {isLoadingCandidates ? (
+            <TabsContent value="all-candidates" className="mt-0">
+              {isLoadingAllCandidates ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                 </div>
-              ) : candidatesError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to load candidates. Please try again.
-                  </AlertDescription>
-                </Alert>
               ) : filteredCandidates.length > 0 ? (
                 <>
                   <Table>
@@ -838,14 +831,16 @@ export function OnboardCandidatesPage() {
                           <TableCell>{candidate.email}</TableCell>
                           <TableCell>{candidate.phone || '—'}</TableCell>
                           <TableCell>
-                            <Badge
-                              className={
-                                ONBOARDING_STATUS_COLORS[candidate.onboarding_status] ||
-                                'bg-gray-100 text-gray-800'
-                              }
-                            >
-                              {candidate.onboarding_status.replace(/_/g, ' ')}
-                            </Badge>
+                            {'onboarding_status' in candidate && candidate.onboarding_status ? (
+                              <Badge
+                                className={
+                                  ONBOARDING_STATUS_COLORS[candidate.onboarding_status] ||
+                                  'bg-gray-100 text-gray-800'
+                                }
+                              >
+                                {candidate.onboarding_status.replace(/_/g, ' ')}
+                              </Badge>
+                            ) : '—'}
                           </TableCell>
                           <TableCell>
                             {candidate.recruiter ? (
@@ -888,10 +883,10 @@ export function OnboardCandidatesPage() {
                   </Table>
 
                   {/* Pagination */}
-                  {candidatesData && candidatesData.total_pages > 1 && (
+                  {allCandidatesData && allCandidatesData.pages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-slate-600">
-                        Page {candidatesData.page} of {candidatesData.total_pages}
+                        Page {allCandidatesData.page} of {allCandidatesData.pages}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -906,7 +901,7 @@ export function OnboardCandidatesPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setPage((p) => p + 1)}
-                          disabled={page === candidatesData.total_pages}
+                          disabled={page === allCandidatesData.pages}
                         >
                           Next
                         </Button>
@@ -927,86 +922,53 @@ export function OnboardCandidatesPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="all" className="mt-0">
-              {isLoadingCandidates ? (
+            <TabsContent value="email-invitations" className="mt-0">
+              {isLoadingEmailInvitations ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                 </div>
-              ) : candidatesError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to load candidates. Please try again.
-                  </AlertDescription>
-                </Alert>
-              ) : filteredCandidates.length > 0 ? (
+              ) : emailInvitationsData?.items && emailInvitationsData.items.length > 0 ? (
                 <>
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Assigned To</TableHead>
-                        <TableHead>Date</TableHead>
+                        <TableHead>Sent Date</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredCandidates.map((candidate) => (
-                        <TableRow key={candidate.id}>
+                      {emailInvitationsData.items.map((invitation) => (
+                        <TableRow key={invitation.id}>
                           <TableCell className="font-medium">
-                            {candidate.first_name} {candidate.last_name}
+                            {invitation.first_name} {invitation.last_name}
                           </TableCell>
-                          <TableCell>{candidate.email}</TableCell>
-                          <TableCell>{candidate.phone || '—'}</TableCell>
+                          <TableCell>{invitation.email}</TableCell>
                           <TableCell>
-                            <Badge
-                              className={
-                                ONBOARDING_STATUS_COLORS[candidate.onboarding_status] ||
-                                'bg-gray-100 text-gray-800'
-                              }
-                            >
-                              {candidate.onboarding_status.replace(/_/g, ' ')}
+                            <Badge variant="outline">
+                              {invitation.status.replace(/_/g, ' ')}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            {candidate.recruiter ? (
-                              <span className="text-sm">
-                                {candidate.recruiter.first_name} {candidate.recruiter.last_name}
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm text-slate-600">
-                              {formatDate(candidate.created_at)}
-                            </div>
+                          <TableCell className="text-sm text-slate-600">
+                            {new Date(invitation.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
                           </TableCell>
                           <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleViewCandidate(candidate.id)}>
-                                  <Eye className="h-4 w-4 mr-2" />
-                                  View Details
-                                </DropdownMenuItem>
-                                {getActionButtons(candidate).length > 0 && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    {getActionButtons(candidate)}
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/invitations/${invitation.id}`)}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1014,10 +976,10 @@ export function OnboardCandidatesPage() {
                   </Table>
 
                   {/* Pagination */}
-                  {candidatesData && candidatesData.total_pages > 1 && (
+                  {emailInvitationsData && emailInvitationsData.pages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-slate-600">
-                        Page {candidatesData.page} of {candidatesData.total_pages}
+                        Page {emailInvitationsData.page} of {emailInvitationsData.pages}
                       </div>
                       <div className="flex gap-2">
                         <Button
@@ -1032,7 +994,7 @@ export function OnboardCandidatesPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setPage((p) => p + 1)}
-                          disabled={page === candidatesData.total_pages}
+                          disabled={page === emailInvitationsData.pages}
                         >
                           Next
                         </Button>
@@ -1042,12 +1004,10 @@ export function OnboardCandidatesPage() {
                 </>
               ) : (
                 <div className="text-center py-12 text-slate-500">
-                  <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p className="text-lg font-medium">No candidates found</p>
+                  <Mail className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+                  <p className="text-lg font-medium">No email invitations</p>
                   <p className="text-sm mt-1">
-                    {searchQuery
-                      ? 'Try adjusting your search'
-                      : 'No candidates in this stage'}
+                    Email invitations sent to candidates will appear here
                   </p>
                 </div>
               )}
@@ -1183,18 +1143,20 @@ export function OnboardCandidatesPage() {
       </Dialog>
 
       {/* Review Modal for Async Resume Uploads */}
-      {selectedResumeCandidate && (
-        <ReviewModal
-          candidate={selectedResumeCandidate}
-          open={reviewModalOpen}
-          onOpenChange={setReviewModalOpen}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
-            queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-            setSelectedResumeCandidate(null);
-          }}
-        />
-      )}
-    </div>
+      {
+        selectedResumeCandidate && (
+          <ReviewModal
+            candidate={selectedResumeCandidate}
+            open={reviewModalOpen}
+            onOpenChange={setReviewModalOpen}
+            onSuccess={() => {
+              queryClient.invalidateQueries({ queryKey: ['candidates-pending-review'] });
+              queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+              setSelectedResumeCandidate(null);
+            }}
+          />
+        )
+      }
+    </div >
   );
 }

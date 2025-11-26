@@ -85,6 +85,7 @@ class CandidateUpdateSchema(BaseModel):
     languages: Optional[List[str]] = None
     education: Optional[List[Dict[str, Any]]] = None
     work_experience: Optional[List[Dict[str, Any]]] = None
+    preferred_roles: Optional[List[str]] = None
     status: Optional[str] = Field(None, max_length=50)
     source: Optional[str] = Field(None, max_length=100)
     
@@ -184,11 +185,13 @@ class CandidateResponseSchema(BaseModel):
     skills: Optional[List[str]] = Field(default_factory=list)
     certifications: Optional[List[str]] = Field(default_factory=list)
     languages: Optional[List[str]] = Field(default_factory=list)
+    preferred_roles: Optional[List[str]] = Field(default_factory=list)
     
     # JSONB data
     education: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     work_experience: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     parsed_resume_data: Optional[Dict[str, Any]] = None
+    suggested_roles: Optional[Dict[str, Any]] = None
     
     # Metadata
     status: str
@@ -198,7 +201,7 @@ class CandidateResponseSchema(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
-    @field_validator('preferred_locations', 'skills', 'certifications', 'languages', 'education', 'work_experience', mode='before')
+    @field_validator('preferred_locations', 'skills', 'certifications', 'languages', 'preferred_roles', 'education', 'work_experience', mode='before')
     @classmethod
     def convert_none_to_empty_list(cls, v):
         """Convert None to empty list for array fields"""

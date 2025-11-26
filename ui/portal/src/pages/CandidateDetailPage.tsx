@@ -41,6 +41,7 @@ import {
   TrendingUp,
   CheckCircle2,
   XCircle,
+  Star,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -197,6 +198,69 @@ export function CandidateDetailPage() {
       toast.error(`Failed to reject: ${error.message}`);
     },
   });
+
+  // Role Preferences State
+  const [preferredRoles, setPreferredRoles] = useState<string[]>([]);
+  const [isGeneratingRoles, setIsGeneratingRoles] = useState(false);
+
+  // Initialize preferred roles from candidate data
+  useEffect(() => {
+    if (candidate?.preferred_roles) {
+      setPreferredRoles(candidate.preferred_roles);
+    }
+  }, [candidate?.preferred_roles]);
+
+  // Update Preferred Roles Mutation
+  const updatePreferredRolesMutation = useMutation({
+    mutationFn: (roles: string[]) =>
+      candidateApi.updateCandidate(Number(id), { preferred_roles: roles }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+      toast.success('Preferred roles updated');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update preferred roles: ${error.message}`);
+    },
+  });
+
+  // Generate AI Role Suggestions Mutation
+  const generateRoleSuggestionsMutation = useMutation({
+    mutationFn: async () => {
+      setIsGeneratingRoles(true);
+      const response = await candidateApi.generateRoleSuggestions(Number(id));
+      return response;
+    },
+    onSuccess: (data) => {
+      setIsGeneratingRoles(false);
+
+      // Manually update cache to show results immediately
+      queryClient.setQueryData(['candidate', id], (oldData: Candidate | undefined) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          suggested_roles: data.suggested_roles
+        };
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['candidate', id] });
+      toast.success('AI role suggestions generated!');
+    },
+    onError: (error: Error) => {
+      setIsGeneratingRoles(false);
+      toast.error(`Failed to generate suggestions: ${error.message}`);
+    },
+  });
+
+  // Handle preferred roles update
+  const handleUpdatePreferredRoles = (roles: string[]) => {
+    if (roles.length > 10) {
+      toast.error('Maximum 10 preferred roles allowed');
+      return;
+    }
+    setPreferredRoles(roles);
+    updatePreferredRolesMutation.mutate(roles);
+  };
+
 
   const handleDelete = () => {
     deleteMutation.mutate();
@@ -1208,7 +1272,124 @@ export function CandidateDetailPage() {
             </Card>
           ) : null}
 
+          {/* Preferred Roles */}
+          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Star className="h-5 w-5 text-purple-600" />
+                Preferred Roles
+              </CardTitle>
+              <CardDescription>
+                Manually specify desired job roles (max 10)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <TagInput
+                  value={preferredRoles}
+                  onChange={handleUpdatePreferredRoles}
+                  placeholder="Add preferred role (e.g., Software Engineer)..."
+                  disabled={updatePreferredRolesMutation.isPending}
+                />
+                <p className="text-xs text-slate-500">
+                  {preferredRoles.length}/10 roles • Press Enter to add, click X to remove
+                </p>
+                {updatePreferredRolesMutation.isPending && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Saving...</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI-Suggested Roles */}
+          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-blue-50 to-purple-50">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="h-5 w-5 text-purple-600" />
+                    AI-Suggested Roles
+                  </CardTitle>
+                  <CardDescription>
+                    AI-generated role recommendations based on profile
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => generateRoleSuggestionsMutation.mutate()}
+                  disabled={isGeneratingRoles || !candidate}
+                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                >
+                  {isGeneratingRoles ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {candidate?.suggested_roles ? (
+                <div className="space-y-3">
+                  {candidate.suggested_roles.roles.slice(0, 5).map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className="p-4 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2 flex-1">
+                          <Badge
+                            className="bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold"
+                          >
+                            #{index + 1}
+                          </Badge>
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-900">{suggestion.role}</h4>
+                            <p className="text-xs text-slate-600 mt-1">{suggestion.reasoning}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <Badge
+                            className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${suggestion.score >= 0.8
+                              ? 'bg-green-500 text-white'
+                              : suggestion.score >= 0.6
+                                ? 'bg-yellow-500 text-white'
+                                : 'bg-slate-500 text-white'
+                              }`}
+                          >
+                            {(suggestion.score * 100).toFixed(0)}%
+                          </Badge>
+                          <span className="text-xs text-slate-500">match</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="text-xs text-slate-500 text-center pt-2">
+                    Generated {new Date(candidate.suggested_roles.generated_at).toLocaleString()} • {candidate.suggested_roles.model_version}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  <Sparkles className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                  <p className="text-sm font-medium">No AI suggestions yet</p>
+                  <p className="text-xs mt-1">Click "Generate" to get role recommendations</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Current Assignment */}
+
           {currentAssignment && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-blue-50">
               <CardHeader>

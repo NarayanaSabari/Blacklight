@@ -146,5 +146,12 @@ export const candidateApi = {
   approveCandidate: async (id: number): Promise<Candidate> => {
     return apiRequest.post<Candidate>(`/api/candidates/${id}/approve`);
   },
+
+  /**
+   * Generate AI role suggestions
+   */
+  generateRoleSuggestions: async (id: number): Promise<any> => {
+    return apiRequest.post<any>(`/api/candidates/${id}/suggest-roles`);
+  },
 };
 

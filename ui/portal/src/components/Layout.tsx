@@ -75,7 +75,7 @@ const navigation: NavItem[] = [
     label: 'Documents',
     icon: FolderOpen,
     href: '/documents',
-    roles: ['TENANT_ADMIN','HIRING_MANAGER', 'MANAGER'],
+    roles: ['TENANT_ADMIN', 'HIRING_MANAGER', 'MANAGER'],
   },
   {
     id: 'jobs',
@@ -103,14 +103,14 @@ const navigation: NavItem[] = [
     label: 'Team Members',
     icon: UserCog,
     href: '/users',
-    roles: ['TENANT_ADMIN','HIRING_MANAGER', 'MANAGER'],
+    roles: ['TENANT_ADMIN', 'HIRING_MANAGER', 'MANAGER'],
   },
   {
     id: 'manage-team',
     label: 'Manage Team',
     icon: Network,
     href: '/manage-team',
-    roles: ['TENANT_ADMIN','HIRING_MANAGER', 'MANAGER'],
+    roles: ['TENANT_ADMIN', 'HIRING_MANAGER', 'MANAGER'],
   },
   {
     id: 'settings',
@@ -124,7 +124,7 @@ const navigation: NavItem[] = [
 export function Layout({ children }: LayoutProps) {
   const { user, tenantName, logout } = usePortalAuth();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);  // Changed to false by default
 
   if (!user) {
     return null;
@@ -156,86 +156,80 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="h-screen bg-slate-50 overflow-hidden">
-      <div className="flex h-full">
-        {/* Sidebar */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-16'} transition-all duration-300 bg-white border-r border-slate-200 flex flex-col flex-shrink-0`}>
-          {/* Logo */}
-          <div className="p-4 border-b border-slate-200 flex-shrink-0">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Building2 className="h-8 w-8 text-primary" />
-              </div>
-              {sidebarOpen && (
-                <div className="ml-3 min-w-0">
-                  <h1 className="text-lg font-semibold text-slate-900 truncate">Portal</h1>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-sm text-slate-600 truncate">{tenantName}</span>
-                    {user.tenant?.status && (
-                      <Badge className={`text-xs flex-shrink-0 ${getStatusBadgeColor(user.tenant.status)}`}>
-                        {user.tenant.status}
-                      </Badge>
-                    )}
-                  </div>
+      <div className="flex h-full relative">
+        {/* Sidebar - Fixed width for collapsed state, overlay when expanded */}
+        <div
+          className="fixed left-0 top-0 h-full z-50"
+          onMouseEnter={() => setSidebarOpen(true)}
+          onMouseLeave={() => setSidebarOpen(false)}
+        >
+          <div className={`${sidebarOpen ? 'w-64' : 'w-16'} h-full transition-all duration-300 bg-white border-r border-slate-200 flex flex-col shadow-lg`}>
+            {/* Logo */}
+            <div className="p-4 border-b border-slate-200 flex-shrink-0">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <Building2 className="h-8 w-8 text-primary" />
                 </div>
-              )}
+                {sidebarOpen && (
+                  <div className="ml-3 min-w-0">
+                    <h1 className="text-lg font-semibold text-slate-900 truncate">Portal</h1>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm text-slate-600 truncate">{tenantName}</span>
+                      {user.tenant?.status && (
+                        <Badge className={`text-xs flex-shrink-0 ${getStatusBadgeColor(user.tenant.status)}`}>
+                          {user.tenant.status}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            {filteredNavigation.map((item) => (
-              <Link
-                key={item.id}
-                to={item.href}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  location.pathname === item.href
+            {/* Navigation */}
+            <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+              {filteredNavigation.map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.href}
+                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${location.pathname === item.href
                     ? 'bg-primary text-primary-foreground'
                     : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {sidebarOpen && (
-                  <>
-                    <span className="ml-3 truncate">{item.label}</span>
-                    {item.badge && (
-                      <Badge className="ml-auto text-xs flex-shrink-0">
-                        {item.badge}
-                      </Badge>
-                    )}
-                  </>
-                )}
-              </Link>
-            ))}
-          </nav>
+                    }`}
+                  title={!sidebarOpen ? item.label : undefined}
+                >
+                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  {sidebarOpen && (
+                    <>
+                      <span className="ml-3 truncate">{item.label}</span>
+                      {item.badge && (
+                        <Badge className="ml-auto text-xs flex-shrink-0">
+                          {item.badge}
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </Link>
+              ))}
+            </nav>
 
-          {/* Sidebar Toggle */}
-          <div className="p-4 border-t border-slate-200 flex-shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="w-full justify-center"
-              title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
+            {/* User info at bottom (optional) */}
+            {sidebarOpen && (
+              <div className="p-4 border-t border-slate-200 flex-shrink-0">
+                <div className="text-xs text-slate-500 text-center">
+                  Hover to keep open
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Main Content - Properly sized to account for collapsed sidebar */}
+        <div className="fixed left-16 right-0 top-0 bottom-0 flex flex-col overflow-hidden">
           {/* Header */}
           <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 min-w-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSidebarOpen(!sidebarOpen)}
-                  className="lg:hidden"
-                >
-                  <Menu className="h-5 w-5" />
-                </Button>
                 <h2 className="text-xl font-semibold text-slate-900 truncate">
                   {getCurrentPageTitle()}
                 </h2>
@@ -296,7 +290,7 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Main Content Area */}
           <main className="flex-1 overflow-auto bg-slate-50">
-            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+            <div className="p-4 sm:p-6 lg:p-8 w-full">
               {children}
             </div>
           </main>

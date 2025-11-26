@@ -26,12 +26,12 @@ import { OnboardCandidatesPage } from './OnboardCandidatesPage';
 import InvitationsPage from './invitations/InvitationsPage';
 import { cn } from '@/lib/utils';
 
-type SectionType = 'onboarding' | 'invitations' | 'candidates';
+type SectionType = 'all-candidates' | 'review-submissions' | 'ready-to-assign' | 'email-invitations';
 
 export function CandidateManagementPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') || 'onboarding';
+  const tab = searchParams.get('tab') || 'all-candidates';
   const [activeSection, setActiveSection] = useState<SectionType>(tab as SectionType);
 
   // Fetch real-time stats
@@ -73,7 +73,13 @@ export function CandidateManagementPage() {
   // Sidebar navigation items
   const navItems = [
     {
-      id: 'onboarding' as SectionType,
+      id: 'all-candidates' as SectionType,
+      label: 'All Candidates',
+      icon: Users,
+      description: 'View all candidates',
+    },
+    {
+      id: 'review-submissions' as SectionType,
       label: 'Review Submissions',
       icon: ClipboardList,
       badge: needsReviewCount,
@@ -81,16 +87,17 @@ export function CandidateManagementPage() {
       description: 'Review and approve candidates',
     },
     {
-      id: 'invitations' as SectionType,
+      id: 'ready-to-assign' as SectionType,
+      label: 'Ready to Assign',
+      icon: UserPlus,
+      badge: readyToAssignCount,
+      description: 'Assign candidates to recruiters',
+    },
+    {
+      id: 'email-invitations' as SectionType,
       label: 'Email Invitations',
       icon: Mail,
       description: 'Track and manage invites',
-    },
-    {
-      id: 'candidates' as SectionType,
-      label: 'All Candidates',
-      icon: FileText,
-      description: 'Complete database',
     },
   ];
 
@@ -99,12 +106,12 @@ export function CandidateManagementPage() {
       {/* Page Header */}
       <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 min-w-0 flex-1">
             <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
               <Users className="h-8 w-8" />
             </div>
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900">HR Candidate Management</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 truncate">HR Candidate Management</h1>
               <p className="text-lg text-slate-600 mt-1">
                 Manage recruitment workflow and candidate pipeline
               </p>
@@ -113,7 +120,7 @@ export function CandidateManagementPage() {
 
           <Button
             onClick={() => navigate('/candidates/new')}
-            className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+            className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex-shrink-0"
           >
             <UserPlus className="h-4 w-4" />
             Add Candidate
@@ -176,9 +183,10 @@ export function CandidateManagementPage() {
         <main className="space-y-6">
           {/* Dynamic Content Area */}
           <div>
-            {activeSection === 'onboarding' && <OnboardCandidatesPage />}
-            {activeSection === 'invitations' && <InvitationsPage />}
-            {activeSection === 'candidates' && <CandidatesPage />}
+            {activeSection === 'all-candidates' && <CandidatesPage />}
+            {activeSection === 'review-submissions' && <OnboardCandidatesPage defaultTab="review-submissions" hideTabNavigation={true} />}
+            {activeSection === 'ready-to-assign' && <OnboardCandidatesPage defaultTab="ready-to-assign" hideTabNavigation={true} />}
+            {activeSection === 'email-invitations' && <InvitationsPage />}
           </div>
         </main>
       </div>
