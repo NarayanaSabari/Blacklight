@@ -239,6 +239,7 @@ def get_roles():
     Query Parameters:
         include_inactive (bool): Include inactive roles
         include_permissions (bool): Include permission details
+        include_user_counts (bool): Include user count for each role (default: true)
         
     Returns:
         200: List of roles
@@ -254,25 +255,47 @@ def get_roles():
         
         include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
         include_permissions = request.args.get('include_permissions', 'false').lower() == 'true'
+        include_user_counts = request.args.get('include_user_counts', 'true').lower() == 'true'
         
-        roles = RoleService.get_all_roles(
-            include_inactive=include_inactive,
-            tenant_id=tenant_id
-        )
-        
-        if include_permissions:
-            response_roles = [RoleWithPermissions.model_validate(r) for r in roles]
+        if include_user_counts:
+            # Use new method that includes user counts
+            roles_data = RoleService.get_all_roles_with_counts(
+                include_inactive=include_inactive,
+                tenant_id=tenant_id
+            )
+            
+            # If permissions requested, fetch and add them
+            if include_permissions:
+                for role_data in roles_data:
+                    role = RoleService.get_role_by_id(role_data['id'])
+                    role_data['permissions'] = [p.to_dict() for p in role.permissions]
+            
+            return jsonify({
+                'roles': roles_data,
+                'total': len(roles_data),
+                'page': 1,
+                'per_page': len(roles_data)
+            }), 200
         else:
-            response_roles = [RoleResponse.model_validate(r) for r in roles]
-        
-        response = RoleListResponse(
-            roles=response_roles,
-            total=len(roles),
-            page=1,
-            per_page=len(roles)
-        )
-        
-        return jsonify(response.model_dump()), 200
+            # Original behavior without user counts
+            roles = RoleService.get_all_roles(
+                include_inactive=include_inactive,
+                tenant_id=tenant_id
+            )
+            
+            if include_permissions:
+                response_roles = [RoleWithPermissions.model_validate(r) for r in roles]
+            else:
+                response_roles = [RoleResponse.model_validate(r) for r in roles]
+            
+            response = RoleListResponse(
+                roles=response_roles,
+                total=len(roles),
+                page=1,
+                per_page=len(roles)
+            )
+            
+            return jsonify(response.model_dump()), 200
     except Exception as e:
         return jsonify({'error': 'Failed to fetch roles', 'message': str(e)}), 500
 

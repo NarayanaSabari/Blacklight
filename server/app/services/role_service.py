@@ -50,6 +50,37 @@ class RoleService:
         return query.order_by(Role.is_system_role.desc(), Role.name).all()
     
     @staticmethod
+    def get_all_roles_with_counts(
+        include_inactive: bool = False,
+        tenant_id: Optional[int] = None,
+        system_only: bool = False
+    ) -> List[Dict]:
+        """
+        Get all roles with user counts.
+        
+        Args:
+            include_inactive: Include inactive roles
+            tenant_id: Filter by tenant (includes system roles + tenant's custom roles)
+            system_only: Only return system roles
+            
+        Returns:
+            List of role dictionaries with user_count field
+        """
+        roles = RoleService.get_all_roles(
+            include_inactive=include_inactive,
+            tenant_id=tenant_id,
+            system_only=system_only
+        )
+        
+        result = []
+        for role in roles:
+            role_dict = role.to_dict(include_permissions=False)
+            role_dict['user_count'] = len(role.portal_users)
+            result.append(role_dict)
+        
+        return result
+    
+    @staticmethod
     def get_role_by_id(role_id: int) -> Optional[Role]:
         """Get role by ID."""
         return db.session.get(Role, role_id)

@@ -113,7 +113,41 @@ def seed_roles_and_permissions():
         # Reports
         {"name": "reports.view", "display_name": "View Reports", "category": "reports", "description": "Access reports and analytics dashboards"},
         {"name": "reports.export", "display_name": "Export Reports", "category": "reports", "description": "Export report data and analytics"},
-        {"name": "reports.advanced", "display_name": "Advanced Reports", "category": "reports", "description": "Access advanced analytics and custom reports"}
+        {"name": "reports.advanced", "display_name": "Advanced Reports", "category": "reports", "description": "Access advanced analytics and custom reports"},
+        
+        # Documents
+        {"name": "documents.view", "display_name": "View Documents", "category": "documents", "description": "View candidate resumes and uploaded documents"},
+        {"name": "documents.upload", "display_name": "Upload Documents", "category": "documents", "description": "Upload candidate resumes and documents"},
+        {"name": "documents.download", "display_name": "Download Documents", "category": "documents", "description": "Download candidate documents"},
+        {"name": "documents.delete", "display_name": "Delete Documents", "category": "documents", "description": "Remove candidate documents from the system"},
+        
+        # Invitations
+        {"name": "invitations.view", "display_name": "View Invitations", "category": "invitations", "description": "View sent candidate invitations"},
+        {"name": "invitations.send", "display_name": "Send Invitations", "category": "invitations", "description": "Send onboarding invitations to candidates via email"},
+        {"name": "invitations.resend", "display_name": "Resend Invitations", "category": "invitations", "description": "Resend invitations to candidates"},
+        {"name": "invitations.cancel", "display_name": "Cancel Invitations", "category": "invitations", "description": "Cancel pending candidate invitations"},
+        {"name": "invitations.manage", "display_name": "Manage Invitations", "category": "invitations", "description": "Full invitation management access"},
+        
+        # Onboarding
+        {"name": "onboarding.view", "display_name": "View Onboarding", "category": "onboarding", "description": "View candidate onboarding status and submissions"},
+        {"name": "onboarding.manage", "display_name": "Manage Onboarding", "category": "onboarding", "description": "Manage onboarding workflow and candidate progression"},
+        {"name": "onboarding.review_submissions", "display_name": "Review Submissions", "category": "onboarding", "description": "Review candidate onboarding submissions"},
+        {"name": "onboarding.approve", "display_name": "Approve Onboarding", "category": "onboarding", "description": "Approve candidates after onboarding review"},
+        
+        # Candidate Assignments
+        {"name": "assignments.view", "display_name": "View Assignments", "category": "assignments", "description": "View candidate assignment history and current assignments"},
+        {"name": "assignments.create", "display_name": "Create Assignments", "category": "assignments", "description": "Assign candidates to recruiters or managers"},
+        {"name": "assignments.remove", "display_name": "Remove Assignments", "category": "assignments", "description": "Remove candidate assignments"},
+        {"name": "assignments.manage", "display_name": "Manage Assignments", "category": "assignments", "description": "Full candidate assignment management"},
+        
+        # Job Matching (AI)
+        {"name": "job_matches.view", "display_name": "View Job Matches", "category": "job_matches", "description": "View AI-generated job matches for candidates"},
+        {"name": "job_matches.generate", "display_name": "Generate Matches", "category": "job_matches", "description": "Trigger AI job matching for candidates"},
+        {"name": "job_matches.export", "display_name": "Export Matches", "category": "job_matches", "description": "Export job match results"},
+        
+        # Audit Logs
+        {"name": "audit.view", "display_name": "View Audit Logs", "category": "audit", "description": "View system audit logs and activity history"},
+        {"name": "audit.export", "display_name": "Export Audit Logs", "category": "audit", "description": "Export audit logs for compliance"}
     ]
 
     created_roles = {}
@@ -169,6 +203,12 @@ def seed_roles_and_permissions():
             'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.delete', 'interviews.feedback',
             # Client communication
             'clients.view', 'clients.create', 'clients.edit', 'clients.delete', 'clients.communicate',
+            # Document management
+            'documents.view', 'documents.upload', 'documents.download',
+            # Invitation management
+            'invitations.view', 'invitations.send', 'invitations.resend',
+            # Job matching
+            'job_matches.view',
             # Reporting
             'reports.view', 'reports.export'
         ]
@@ -180,6 +220,7 @@ def seed_roles_and_permissions():
             else:
                 print(f"    ⏭️  RECRUITER already has {perm_name}")
 
+
     # HIRING_MANAGER (HR role - candidate onboarding and team management)
     hiring_manager_role = created_roles.get("HIRING_MANAGER")
     if hiring_manager_role:
@@ -190,6 +231,16 @@ def seed_roles_and_permissions():
             'candidates.view_history', 'candidates.upload_resume',
             # User/team management
             'users.view', 'users.create', 'users.assign_manager', 'users.view_team',
+            # Document management
+            'documents.view', 'documents.upload', 'documents.download', 'documents.delete',
+            # Invitation management
+            'invitations.view', 'invitations.send', 'invitations.resend', 'invitations.cancel', 'invitations.manage',
+            # Onboarding management
+            'onboarding.view', 'onboarding.manage', 'onboarding.review_submissions', 'onboarding.approve',
+            # Assignment management
+            'assignments.view', 'assignments.create', 'assignments.remove', 'assignments.manage',
+            # Job matching
+            'job_matches.view', 'job_matches.generate',
             # Other permissions
             'jobs.view', 'interviews.view', 'interviews.feedback',
             'clients.view', 'reports.view'
@@ -201,6 +252,7 @@ def seed_roles_and_permissions():
                 print(f"    ✅ Assigned {perm_name} to HIRING_MANAGER")
             else:
                 print(f"    ⏭️  HIRING_MANAGER already has {perm_name}")
+
 
     # MANAGER (team manager - assigns candidates to recruiters)
     manager_role = created_roles.get("MANAGER")
@@ -214,6 +266,12 @@ def seed_roles_and_permissions():
             'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.feedback',
             # User and team management
             'clients.view', 'users.view', 'users.edit', 'users.reset_password', 'users.view_team',
+            # Document management
+            'documents.view', 'documents.download',
+            # Assignment management
+            'assignments.view', 'assignments.create', 'assignments.remove',
+            # Job matching
+            'job_matches.view',
             # Reporting
             'reports.view', 'reports.export'
         ]
@@ -224,6 +282,7 @@ def seed_roles_and_permissions():
                 print(f"    ✅ Assigned {perm_name} to MANAGER")
             else:
                 print(f"    ⏭️  MANAGER already has {perm_name}")
+
 
     db.session.commit()
     print("\n✅ System roles and permissions seeded successfully!")
