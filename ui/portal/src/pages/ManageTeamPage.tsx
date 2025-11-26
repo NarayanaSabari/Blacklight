@@ -428,9 +428,7 @@ export function ManageTeamPage() {
                 </Alert>
               ) : hierarchyData && hierarchyData.top_level_users.length > 0 ? (
                 <div className="space-y-1">
-                  {hierarchyData.top_level_users
-                    .filter((member) => user && member.email !== user.email)
-                    .map((member) => renderTeamMember(member))}
+                  {hierarchyData.top_level_users.map((member) => renderTeamMember(member))}
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">
