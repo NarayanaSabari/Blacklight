@@ -485,6 +485,99 @@ def submit_invitation():
         return error_response("Internal server error", 500)
 
 
+@bp.route("/public/suggest-roles", methods=["POST"])
+@limiter.limit("5/minute")
+def suggest_roles_from_invitation_data():
+    """
+    Generate AI role suggestions from invitation data (before candidate creation).
+    
+    POST /api/invitations/public/suggest-roles
+    Body: {
+        token: str,
+        skills: List[str],
+        work_experience: List[dict],
+        current_title: str,
+        experience_years: int
+    }
+    
+    Returns: {
+        message: str,
+        suggested_roles: {
+            roles: [...],
+            generated_at: str,
+            model_version: str
+        }
+    }
+    """
+    try:
+        # Get request data
+        data = request.get_json()
+        token = data.get('token')
+        
+        if not token:
+            return error_response("token is required", 400)
+        
+        # Get invitation
+        invitation = InvitationService.get_by_token(token)
+        
+        if not invitation:
+            return error_response("Invalid invitation token", 404)
+        
+        # Build temporary candidate-like object for role suggestion service
+        # Use a simple class to hold the data
+        class TempCandidate:
+            def __init__(self, invitation_data, form_data):
+                self.id = None  # Temporary candidate has no real ID
+                self.full_name = f"{invitation_data.first_name} {invitation_data.last_name}".strip() if invitation_data.first_name else "Candidate"
+                self.first_name = invitation_data.first_name
+                self.last_name = invitation_data.last_name
+                self.current_title = form_data.get('current_title')
+                self.total_experience_years = form_data.get('experience_years')
+                self.location = None
+                
+                # Skills - ensure it's a list
+                self.skills = form_data.get('skills', [])
+                if not isinstance(self.skills, list):
+                    self.skills = []
+                
+                # Work experience - ensure it's a list of dicts
+                work_exp = form_data.get('work_experience', [])
+                if isinstance(work_exp, list):
+                    self.work_experience = work_exp
+                else:
+                    self.work_experience = []
+                
+                # Education - ensure it's a list of dicts  
+                education = form_data.get('education', [])
+                if isinstance(education, list):
+                    self.education = education
+                else:
+                    self.education = []
+                
+                self.certifications = []
+        
+        temp_candidate = TempCandidate(invitation, data)
+        
+        # Debug: Log what we're sending to AI
+        print(f"[DEBUG] TempCandidate data: skills={len(temp_candidate.skills)}, work_exp={len(temp_candidate.work_experience)}, edu={len(temp_candidate.education)}")
+        
+        # Generate suggestions using role suggestion service
+        from app.services.role_suggestion_service import get_role_suggestion_service
+        import asyncio
+        
+        role_service = get_role_suggestion_service()
+        suggestions = asyncio.run(role_service.generate_suggestions(temp_candidate))
+        
+        return jsonify({
+            'message': 'Role suggestions generated successfully',
+            'suggested_roles': suggestions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error generating role suggestions: {str(e)}", exc_info=True)
+        return error_response(f"Failed to generate suggestions: {str(e)}", 500)
+
+
 @bp.route("/public/documents", methods=["POST"])
 @limiter.limit("10/minute")
 def upload_document_public():

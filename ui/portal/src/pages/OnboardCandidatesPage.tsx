@@ -406,7 +406,7 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-hidden max-w-full min-w-0">
           <Tabs value={activeTab} onValueChange={(value) => {
             setActiveTab(value as TabValue);
             setPage(1);
@@ -486,7 +486,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                 <>
                   {/* Combine candidates and invitations */}
                   {(() => {
-                    const candidates = pendingReviewCandidatesData?.candidates || [];
+                    const allCandidates = pendingReviewCandidatesData?.candidates || [];
+                    // Filter out candidates created from email invitations to avoid duplicates
+                    // These candidates will be shown in the "Email Invitation" section instead
+                    const candidates = allCandidates.filter(c => c.source !== 'email_invitation');
                     const invitations = submittedInvitationsData?.items || [];
                     const hasPendingReviews = candidates.length > 0 || invitations.length > 0;
 
@@ -527,7 +530,7 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {/* Resume Upload Candidates */}
+                              {/* Resume Upload Candidates (without invitation_id) */}
                               {candidates.map((candidate) => (
                                 <TableRow key={`candidate-${candidate.id}`}>
                                   <TableCell>
@@ -568,7 +571,7 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                                 </TableRow>
                               ))}
 
-                              {/* Email Invitations */}
+                              {/* Email Invitations (candidates from email invitations) */}
                               {invitations.map((invitation) => (
                                 <TableRow key={`invitation-${invitation.id}`}>
                                   <TableCell>
@@ -639,8 +642,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Phone</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Assigned To</TableHead>
                         <TableHead>Date</TableHead>
@@ -653,8 +654,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                           <TableCell className="font-medium">
                             {candidate.first_name} {candidate.last_name}
                           </TableCell>
-                          <TableCell>{candidate.email}</TableCell>
-                          <TableCell>{candidate.phone || '—'}</TableCell>
                           <TableCell>
                             {'onboarding_status' in candidate && candidate.onboarding_status ? (
                               <Badge

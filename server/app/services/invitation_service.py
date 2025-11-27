@@ -503,6 +503,19 @@ class InvitationService:
                 # Just in case skills were sent as comma-separated string
                 skills = [s.strip() for s in skills.split(',') if s.strip()]
 
+            # Extract preferred roles
+            preferred_roles = data.get('preferred_roles') or parsed_resume.get('preferred_roles') or []
+            if isinstance(preferred_roles, str):
+                # Handle comma-separated string
+                preferred_roles = [r.strip() for r in preferred_roles.split(',') if r.strip()]
+            elif not isinstance(preferred_roles, list):
+                preferred_roles = []
+            
+            # Validate max 10 roles
+            if len(preferred_roles) > 10:
+                logger.warning(f"Preferred roles truncated from {len(preferred_roles)} to 10")
+                preferred_roles = preferred_roles[:10]
+
             # Simple education/work_experience as text fallbacks
             education_text = data.get('education')
             work_exp_text = data.get('work_experience')
@@ -549,6 +562,7 @@ class InvitationService:
                 total_experience_years=experience_years or parsed_resume.get('total_experience_years'),
                 professional_summary=summary or parsed_resume.get('professional_summary'),
                 skills=skills,
+                preferred_roles=preferred_roles,
                 education=education_data,
                 work_experience=work_exp_data,
                 parsed_resume_data=parsed_resume or None,
@@ -856,6 +870,13 @@ class InvitationService:
         candidate.languages = ensure_list(get_field('languages', default=[]))
         candidate.preferred_locations = ensure_list(get_field('preferred_locations', default=[]))
         
+        # Extract preferred roles (max 10)
+        preferred_roles = ensure_list(get_field('preferred_roles', default=[]))
+        if len(preferred_roles) > 10:
+            logger.warning(f"Preferred roles truncated from {len(preferred_roles)} to 10")
+            preferred_roles = preferred_roles[:10]
+        candidate.preferred_roles = preferred_roles
+        
         candidate.education = education_data
         candidate.work_experience = work_exp_data
         candidate.parsed_resume_data = parsed_resume if parsed_resume else candidate.parsed_resume_data
@@ -877,9 +898,6 @@ class InvitationService:
         invitation.reviewed_at = datetime.utcnow()
         invitation.review_notes = notes
         invitation.updated_at = datetime.utcnow()
-        
-        # Link invitation to candidate
-        candidate.invitation_id = invitation.id
         
         # Log the action
         InvitationAuditLog.log_action(

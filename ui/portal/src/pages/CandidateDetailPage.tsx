@@ -156,7 +156,7 @@ export function CandidateDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
       toast.success('Candidate deleted successfully');
-      navigate('/candidates');
+      navigate('/candidate-management?tab=all-candidates');
     },
     onError: (error: Error) => {
       toast.error(`Failed to delete candidate: ${error.message}`);
@@ -476,7 +476,7 @@ export function CandidateDetailPage() {
         <Button
           variant="outline"
           className="mt-4"
-          onClick={() => navigate('/candidates')}
+          onClick={() => navigate('/candidate-management?tab=all-candidates')}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Candidates
@@ -555,7 +555,7 @@ export function CandidateDetailPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate('/candidates')}
+              onClick={() => navigate('/candidate-management?tab=all-candidates')}
               className="mb-3 -ml-2"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -1357,52 +1357,57 @@ export function CandidateDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {candidate?.suggested_roles ? (
-                <div className="space-y-3">
-                  {candidate.suggested_roles.roles.slice(0, 5).map((suggestion, index) => (
-                    <div
-                      key={index}
-                      className="p-4 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-2"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-2 flex-1">
-                          <Badge
-                            className="bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold"
-                          >
-                            #{index + 1}
-                          </Badge>
-                          <div>
-                            <h4 className="font-bold text-sm text-slate-900">{suggestion.role}</h4>
-                            <p className="text-xs text-slate-600 mt-1">{suggestion.reasoning}</p>
+              {(() => {
+                // Check both locations for suggested_roles
+                const suggestedRoles = candidate?.suggested_roles || (candidate?.parsed_resume_data as any)?.suggested_roles;
+
+                return suggestedRoles ? (
+                  <div className="space-y-3">
+                    {suggestedRoles.roles.slice(0, 5).map((suggestion: any, index: number) => (
+                      <div
+                        key={index}
+                        className="p-4 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2 flex-1">
+                            <Badge
+                              className="bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold"
+                            >
+                              #{index + 1}
+                            </Badge>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-900">{suggestion.role}</h4>
+                              <p className="text-xs text-slate-600 mt-1">{suggestion.reasoning}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <Badge
+                              className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${suggestion.score >= 0.8
+                                  ? 'bg-green-500 text-white'
+                                  : suggestion.score >= 0.6
+                                    ? 'bg-yellow-500 text-white'
+                                    : 'bg-slate-500 text-white'
+                                }`}
+                            >
+                              {(suggestion.score * 100).toFixed(0)}%
+                            </Badge>
+                            <span className="text-xs text-slate-500">match</span>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                          <Badge
-                            className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${suggestion.score >= 0.8
-                              ? 'bg-green-500 text-white'
-                              : suggestion.score >= 0.6
-                                ? 'bg-yellow-500 text-white'
-                                : 'bg-slate-500 text-white'
-                              }`}
-                          >
-                            {(suggestion.score * 100).toFixed(0)}%
-                          </Badge>
-                          <span className="text-xs text-slate-500">match</span>
-                        </div>
                       </div>
+                    ))}
+                    <div className="text-xs text-slate-500 text-center pt-2">
+                      Generated {new Date(suggestedRoles.generated_at).toLocaleString()} • {suggestedRoles.model_version}
                     </div>
-                  ))}
-                  <div className="text-xs text-slate-500 text-center pt-2">
-                    Generated {new Date(candidate.suggested_roles.generated_at).toLocaleString()} • {candidate.suggested_roles.model_version}
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-slate-500">
-                  <Sparkles className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                  <p className="text-sm font-medium">No AI suggestions yet</p>
-                  <p className="text-xs mt-1">Click "Generate" to get role recommendations</p>
-                </div>
-              )}
+                ) : (
+                  <div className="text-center py-8 text-slate-500">
+                    <Sparkles className="h-8 w-8 mx-auto mb-2 text-slate-300" />
+                    <p className="text-sm font-medium">No AI suggestions yet</p>
+                    <p className="text-xs mt-1">Click "Generate" to get role recommendations</p>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
 

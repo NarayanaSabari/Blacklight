@@ -31,7 +31,7 @@ export const invitationApi = {
    */
   list: (params?: InvitationListParams): Promise<InvitationListResponse> => {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.page) queryParams.append('page', String(params.page));
     if (params?.per_page) queryParams.append('per_page', String(params.per_page));
     if (params?.status) queryParams.append('status', params.status);
@@ -39,7 +39,7 @@ export const invitationApi = {
     if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
     if (params?.sort_order) queryParams.append('sort_order', params.sort_order);
 
-    const url = queryParams.toString() 
+    const url = queryParams.toString()
       ? `${INVITATION_BASE}?${queryParams.toString()}`
       : INVITATION_BASE;
 
@@ -138,18 +138,17 @@ export const invitationApi = {
    */
   getSubmittedInvitations: (params?: InvitationListParams): Promise<InvitationListResponse> => {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.page) queryParams.append('page', String(params.page));
     if (params?.per_page) queryParams.append('per_page', String(params.per_page));
     // Always filter by status=submitted for this endpoint
-    queryParams.append('status', 'submitted'); 
+    queryParams.append('status', 'submitted');
     if (params?.search) queryParams.append('search', params.search);
     if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
     if (params?.sort_order) queryParams.append('sort_order', params.sort_order);
 
-    const url = `${INVITATION_BASE}${
-      queryParams.toString() ? `?${queryParams.toString()}` : ''
-    }`;
+    const url = `${INVITATION_BASE}${queryParams.toString() ? `?${queryParams.toString()}` : ''
+      }`;
 
     return apiRequest.get<InvitationListResponse>(url);
   },
@@ -209,6 +208,41 @@ export const onboardingApi = {
     return apiRequest.postForm<any>(
       '/api/public/invitations/parse-resume',
       formData
+    );
+  },
+
+  /**
+   * Generate AI role suggestions from invitation data
+   */
+  generateRoleSuggestions: (
+    token: string,
+    data: {
+      skills?: string[];
+      work_experience?: any[];
+      current_title?: string;
+      experience_years?: number;
+    }
+  ): Promise<{
+    message: string;
+    suggested_roles: {
+      roles: Array<{ role: string; score: number; reasoning: string }>;
+      generated_at: string;
+      model_version: string;
+    };
+  }> => {
+    return apiRequest.post<{
+      message: string;
+      suggested_roles: {
+        roles: Array<{ role: string; score: number; reasoning: string }>;
+        generated_at: string;
+        model_version: string;
+      };
+    }>(
+      `${INVITATION_BASE}/public/suggest-roles`,
+      {
+        token,
+        ...data,
+      }
     );
   },
 };

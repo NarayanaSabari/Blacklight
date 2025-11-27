@@ -86,6 +86,11 @@ class RoleSuggestionService:
             # Generate suggestions
             result: RoleSuggestionsResponse = structured_llm.invoke([HumanMessage(content=prompt)])
             
+            # Handle None result (API or parsing failure)
+            if result is None:
+                print(f"[ERROR] Gemini API returned None - structured output parsing may have failed")
+                raise ValueError("AI model failed to generate valid structured output. Please try again.")
+            
             print(f"[DEBUG] Generated {len(result.roles)} role suggestions")
             
             # Convert to dict and add metadata

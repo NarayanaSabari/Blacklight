@@ -118,6 +118,13 @@ export function CandidateOnboardingFlow({
   const [skillTags, setSkillTags] = useState<string[]>([]);
   const [workExperience, setWorkExperience] = useState<any[]>([]);
   const [education, setEducation] = useState<any[]>([]);
+  const [preferredRoles, setPreferredRoles] = useState<string[]>([]);
+  const [suggestedRoles, setSuggestedRoles] = useState<{
+    roles: Array<{ role: string; score: number; reasoning: string }>;
+    generated_at: string;
+    model_version: string;
+  } | null>(null);
+  const [isGeneratingRoles, setIsGeneratingRoles] = useState(false);
 
   const submitMutation = useSubmitOnboarding();
   const uploadMutation = useUploadOnboardingDocument();
@@ -161,27 +168,27 @@ export function CandidateOnboardingFlow({
   // Parse resume when file is uploaded
   const handleResumeUpload = async (files: UploadedFile[]) => {
     setResumeFiles(files);
-    
+
     if (files.length > 0 && files[0].file) {
       setIsParsing(true);
       try {
         const data = await onboardingApi.parseResume(token, files[0].file);
-        
+
         if (data.status === 'success' && data.parsed_data) {
           // Store ORIGINAL structured data for submission
           const apiData = data.parsed_data;
           setOriginalParsedData(apiData);
-          
+
           // Format work experience as string FOR DISPLAY ONLY
-          const workExpText = apiData.work_experience?.map((exp: Record<string, unknown>) => 
+          const workExpText = apiData.work_experience?.map((exp: Record<string, unknown>) =>
             `${exp.title} at ${exp.company} (${exp.start_date || ''} - ${exp.end_date || exp.is_current ? 'Present' : ''})\n${exp.description || ''}`
           ).join('\n\n') || '';
-          
+
           // Format education as string FOR DISPLAY ONLY
-          const educationText = apiData.education?.map((edu: Record<string, unknown>) => 
+          const educationText = apiData.education?.map((edu: Record<string, unknown>) =>
             `${edu.degree}${edu.field_of_study ? ' in ' + edu.field_of_study : ''}\n${edu.institution}\n${edu.graduation_year || ''}`
           ).join('\n\n') || '';
-          
+
           const transformedData: ParsedResumeData = {
             name: apiData.full_name || undefined,
             email: apiData.email || undefined,
@@ -193,7 +200,7 @@ export function CandidateOnboardingFlow({
             summary: apiData.professional_summary || undefined,
             total_experience_years: apiData.total_experience_years || undefined,
           };
-          
+
           setParsedData(transformedData);
           toast.success('Resume parsed successfully! Please review the extracted information.');
         } else {
@@ -229,7 +236,7 @@ export function CandidateOnboardingFlow({
       if (parsedData.total_experience_years) {
         professionalForm.setValue('experience_years', parsedData.total_experience_years);
       }
-      
+
       // Update personal info if needed
       if (parsedData.phone && !personalForm.getValues('phone')) {
         personalForm.setValue('phone', parsedData.phone);
@@ -244,6 +251,10 @@ export function CandidateOnboardingFlow({
       }
       if (originalParsedData && Array.isArray((originalParsedData as any).education)) {
         setEducation((originalParsedData as any).education as any[]);
+      }
+      // Initialize preferred roles from parsed data if available
+      if (originalParsedData?.preferred_roles && Array.isArray(originalParsedData.preferred_roles)) {
+        setPreferredRoles(originalParsedData.preferred_roles as string[]);
       }
     }
   }, [parsedData, originalParsedData, currentStep, professionalForm, personalForm]);
@@ -276,6 +287,35 @@ export function CandidateOnboardingFlow({
 
   const handlePrevStep = () => {
     setCurrentStep((prev) => Math.max(prev - 1, 1));
+  };
+
+  const handleGenerateRoleSuggestions = async () => {
+    // Check if we have enough data
+    const hasSkills = skillTags.length > 0;
+    const hasExperience = workExperience.length > 0;
+    const hasTitle = professionalForm.getValues('position');
+
+    if (!hasSkills && !hasExperience && !hasTitle) {
+      toast.error('Please add skills, work experience, or job title to generate suggestions');
+      return;
+    }
+
+    setIsGeneratingRoles(true);
+    try {
+      const response = await onboardingApi.generateRoleSuggestions(token, {
+        skills: skillTags,
+        work_experience: workExperience,
+        current_title: professionalForm.getValues('position'),
+        experience_years: professionalForm.getValues('experience_years'),
+      });
+
+      setSuggestedRoles(response.suggested_roles);
+      toast.success('AI role suggestions generated!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate suggestions');
+    } finally {
+      setIsGeneratingRoles(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -312,8 +352,8 @@ export function CandidateOnboardingFlow({
         skillTags.length > 0
           ? skillTags
           : professionalData.skills
-          ? professionalData.skills.split(',').map((s) => s.trim())
-          : undefined;
+            ? professionalData.skills.split(',').map((s) => s.trim())
+            : undefined;
 
       // Merge structured data into parsed_resume_data so backend can keep rich structure
       const mergedParsed: Record<string, unknown> = {
@@ -328,6 +368,14 @@ export function CandidateOnboardingFlow({
       if (education && education.length > 0) {
         mergedParsed.education = education;
       }
+      if (preferredRoles && preferredRoles.length > 0) {
+        mergedParsed.preferred_roles = preferredRoles;
+      }
+      // Include AI suggestions if generated
+      if (suggestedRoles) {
+        mergedParsed.suggested_roles = suggestedRoles;
+      }
+
 
       await submitMutation.mutateAsync({
         token,
@@ -336,6 +384,7 @@ export function CandidateOnboardingFlow({
           position: professionalData.position,
           experience_years: professionalData.experience_years,
           skills,
+          preferred_roles: preferredRoles,
           education: professionalData.education,
           work_experience: professionalData.work_experience,
           summary: professionalData.summary,
@@ -379,18 +428,16 @@ export function CandidateOnboardingFlow({
               return (
                 <div
                   key={step.number}
-                  className={`flex flex-col items-center gap-2 ${
-                    isActive ? 'text-primary' : isCompleted ? 'text-green-600' : 'text-muted-foreground'
-                  }`}
+                  className={`flex flex-col items-center gap-2 ${isActive ? 'text-primary' : isCompleted ? 'text-green-600' : 'text-muted-foreground'
+                    }`}
                 >
                   <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 ${
-                      isActive
-                        ? 'border-primary bg-primary/10'
-                        : isCompleted
+                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 ${isActive
+                      ? 'border-primary bg-primary/10'
+                      : isCompleted
                         ? 'border-green-600 bg-green-50'
                         : 'border-muted'
-                    }`}
+                      }`}
                   >
                     {isCompleted ? (
                       <CheckCircle2 className="h-5 w-5" />
@@ -679,6 +726,109 @@ export function CandidateOnboardingFlow({
                         )}
                       />
                     </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Preferred Roles */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Preferred Roles</h4>
+                    <div className="space-y-2">
+                      <Label>Preferred Job Roles</Label>
+                      <TagInput
+                        value={preferredRoles}
+                        onChange={(roles) => {
+                          if (roles.length > 10) {
+                            toast.error('Maximum 10 preferred roles allowed');
+                            return;
+                          }
+                          setPreferredRoles(roles);
+                        }}
+                        placeholder="Add preferred role (e.g., Software Engineer)..."
+                      />
+                      <p className="text-xs text-slate-500">
+                        {preferredRoles.length}/10 roles • Press Enter to add, click X to remove
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* AI-Suggested Roles */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-purple-600" />
+                          AI-Suggested Roles
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Get AI-powered role recommendations based on your profile
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateRoleSuggestions}
+                        disabled={isGeneratingRoles || (!skillTags.length && !workExperience.length && !professionalForm.getValues('position'))}
+                        className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        {isGeneratingRoles ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Generate
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {suggestedRoles ? (
+                      <div className="space-y-2">
+                        {suggestedRoles.roles.slice(0, 5).map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2 flex-1">
+                                <Badge className="bg-purple-600 text-white border-2 border-black font-bold">
+                                  #{index + 1}
+                                </Badge>
+                                <div>
+                                  <h5 className="font-bold text-sm text-slate-900">{suggestion.role}</h5>
+                                  <p className="text-xs text-slate-600 mt-1">{suggestion.reasoning}</p>
+                                </div>
+                              </div>
+                              <Badge
+                                className={`font-bold border-2 border-black ${suggestion.score >= 0.8
+                                    ? 'bg-green-500 text-white'
+                                    : suggestion.score >= 0.6
+                                      ? 'bg-yellow-500 text-white'
+                                      : 'bg-slate-500 text-white'
+                                  }`}
+                              >
+                                {(suggestion.score * 100).toFixed(0)}%
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-xs text-slate-500 text-center">
+                          Generated {new Date(suggestedRoles.generated_at).toLocaleString()}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 text-slate-500 border-2 border-dashed border-slate-300 rounded">
+                        <Sparkles className="h-6 w-6 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm font-medium">No AI suggestions yet</p>
+                        <p className="text-xs mt-1">Click "Generate" to get role recommendations</p>
+                      </div>
+                    )}
                   </div>
 
                   <Separator />

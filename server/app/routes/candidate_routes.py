@@ -404,6 +404,22 @@ def approve_candidate(candidate_id: int):
         # Update status to 'onboarded'
         candidate.status = 'onboarded'
         candidate.onboarding_status = 'PENDING_ASSIGNMENT'  # For assignment workflow
+        
+        # Also update associated invitation status if exists
+        from app.models.candidate_invitation import CandidateInvitation
+        from sqlalchemy import select as sql_select
+        invitation_stmt = sql_select(CandidateInvitation).where(
+            CandidateInvitation.candidate_id == candidate_id,
+            CandidateInvitation.tenant_id == tenant_id
+        )
+        invitation = db.session.scalar(invitation_stmt)
+        
+        if invitation and invitation.status == 'submitted':
+            invitation.status = 'approved'
+            invitation.reviewed_by_id = g.user_id
+            invitation.reviewed_at = datetime.utcnow()
+            logger.info(f"Updated invitation {invitation.id} status to 'approved' for candidate {candidate_id}")
+        
         db.session.commit()
         
         logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: onboarded")

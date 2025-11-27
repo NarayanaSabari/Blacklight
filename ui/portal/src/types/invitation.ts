@@ -3,7 +3,7 @@
  * Matches backend schemas from server/app/schemas/
  */
 
-export type InvitationStatus = 
+export type InvitationStatus =
   | 'sent'
   | 'pending_review'
   | 'approved'
@@ -14,7 +14,7 @@ export type InvitationStatus =
   | 'opened' // Added
   | 'in_progress'; // Added
 
-export type OnboardingType = 
+export type OnboardingType =
   | 'email_invitation'
   | 'self_signup'
   | 'import';
@@ -167,6 +167,7 @@ export interface OnboardingSubmissionRequest {
   position?: string;
   experience_years?: number;
   skills?: string[];
+  preferred_roles?: string[];
   education?: string;
   work_experience?: string;
   summary?: string;

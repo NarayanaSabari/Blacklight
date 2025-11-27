@@ -63,6 +63,7 @@ class InvitationSubmitSchema(BaseModel):
     experience_years: Optional[int] = Field(None, ge=0, le=70)
     years_of_experience: Optional[int] = Field(None, ge=0, le=70)
     skills: Optional[List[str]] = Field(None, description="List of skills")
+    preferred_roles: Optional[List[str]] = Field(None, description="List of preferred job roles (max 10)")
     education: Optional[str] = Field(None, description="Education details")
     work_experience: Optional[str] = Field(None, description="Work experience details")
     summary: Optional[str] = Field(None, description="Professional summary")
@@ -93,6 +94,14 @@ class InvitationSubmitSchema(BaseModel):
         if v and len(v) > 50:
             raise ValueError('Maximum 50 skills allowed')
         return v
+    
+    @field_validator('preferred_roles')
+    @classmethod
+    def validate_preferred_roles(cls, v):
+        if v and len(v) > 10:
+            raise ValueError('Maximum 10 preferred roles allowed')
+        return v
+
     
     class Config:
         json_schema_extra = {
