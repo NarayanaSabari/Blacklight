@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
+import tempfile
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 
@@ -112,16 +113,36 @@ class FileStorageService:
             # Use default credentials (e.g., from GOOGLE_APPLICATION_CREDENTIALS env var)
             self.gcs_client = storage.Client(project=settings.gcs_project_id or None)
         
-        # Get bucket
+        # Get bucket and verify connection
         try:
             self.bucket = self.gcs_client.bucket(self.bucket_name)
-            if not self.bucket.exists():
-                logger.warning(f"GCS bucket {self.bucket_name} does not exist")
+            
+            # Verify bucket exists and is accessible
+            if self.bucket.exists():
+                logger.info(f"GCS connection successful - bucket '{self.bucket_name}' is accessible")
+                logger.info({
+                    "message": "GCS connection successful",
+                    "bucket": self.bucket_name,
+                    "project_id": settings.gcs_project_id or "default",
+                    "storage_backend": "gcs"
+                })
+            else:
+                logger.error(f"GCS connection failed - bucket '{self.bucket_name}' does not exist")
+                logger.error({
+                    "message": "GCS connection failed",
+                    "reason": "Bucket does not exist",
+                    "bucket": self.bucket_name
+                })
+                raise ValueError(f"GCS bucket '{self.bucket_name}' does not exist")
+                
         except Exception as e:
-            logger.error(f"Failed to initialize GCS bucket: {e}")
+            logger.error(f"GCS connection failed - unable to access bucket '{self.bucket_name}': {e}")
+            logger.error({
+                "message": "GCS connection failed",
+                "reason": str(e),
+                "bucket": self.bucket_name
+            })
             raise
-        
-        logger.info(f"Initialized GCS storage with bucket: {self.bucket_name}")
     
     def _get_file_key(
         self,
@@ -133,11 +154,12 @@ class FileStorageService:
     ) -> str:
         """
         Generate storage key/path for a file.
-        Format: tenants/{tenant_id}/{document_type}/{entity_id}/{filename}
+        Format: tenants/{tenant_id}/candidates/{candidate_id}/{document_type}/{filename}
+             or tenants/{tenant_id}/invitations/{invitation_id}/{document_type}/{filename}
         
         Args:
             tenant_id: Tenant ID for isolation
-            document_type: Type of document (resume, id_proof, etc.)
+            document_type: Type of document (resume, id_proof, work_authorization, certificate, other)
             filename: Secure filename
             candidate_id: Optional candidate ID
             invitation_id: Optional invitation ID
@@ -145,16 +167,16 @@ class FileStorageService:
         Returns:
             Storage key/path string
         """
-        # Determine entity folder
+        # Determine entity folder - candidate or invitation based
         if candidate_id:
-            entity_folder = f"candidates/{candidate_id}"
+            entity_path = f"candidates/{candidate_id}"
         elif invitation_id:
-            entity_folder = f"invitations/{invitation_id}"
+            entity_path = f"invitations/{invitation_id}"
         else:
-            entity_folder = "temp"
+            entity_path = "temp"
         
-        # Build key: tenants/{tenant_id}/{document_type}/{entity}/{filename}
-        return f"tenants/{tenant_id}/{document_type}/{entity_folder}/{filename}"
+        # Build key: tenants/{tenant_id}/{entity_path}/{document_type}/{filename}
+        return f"tenants/{tenant_id}/{entity_path}/{document_type}/{filename}"
     
     def _generate_secure_filename(self, original_filename: str) -> str:
         """Generate a secure, unique filename"""
@@ -394,6 +416,34 @@ class FileStorageService:
         except Exception as e:
             logger.error(f"File download failed: {e}")
             return None, None, f"Download failed: {str(e)}"
+
+    def download_to_temp(self, file_key: str, suffix: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Download a storage object and write to a local temporary file.
+
+        Returns:
+            (local_path, error)
+        """
+        try:
+            content, content_type, err = self.download_file(file_key)
+            if err:
+                return None, err
+
+            # Determine suffix from file_key if not provided
+            if not suffix and '.' in file_key:
+                suffix = '.' + file_key.rsplit('.', 1)[1]
+
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix or '')
+            tmp.write(content)
+            tmp.flush()
+            tmp.close()
+
+            logger.info(f"Downloaded {file_key} to temp file: {tmp.name}")
+            return tmp.name, None
+
+        except Exception as e:
+            logger.error(f"Failed to download_to_temp for {file_key}: {e}")
+            return None, str(e)
     
     def _download_from_gcs(self, file_key: str) -> Tuple[Optional[bytes], Optional[str], Optional[str]]:
         """Download file from GCS"""
@@ -545,337 +595,102 @@ class FileStorageService:
         except Exception as e:
             logger.error(f"File existence check failed: {e}")
             return False
-
-
-# Legacy support for existing resume upload functionality
-class LegacyResumeStorageService(FileStorageService):
-    """
-    Legacy wrapper for backward compatibility with existing resume upload code.
-    Delegates to FileStorageService with appropriate document_type.
-    """
     
-    def upload_resume(
-        self,
-        file: FileStorage,
-        tenant_id: int,
-        candidate_id: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """Legacy resume upload method"""
-        result = self.upload_file(
-            file=file,
-            tenant_id=tenant_id,
-            document_type='resume',
-            candidate_id=candidate_id
-        )
-        
-        if result["success"]:
-            # Transform to legacy format
-            return {
-                "success": True,
-                "file_path": result["file_key"],  # Use file_key as path
-                "file_url": result.get("file_key"),  # Can generate URL separately
-                "file_size": result["file_size"],
-                "file_type": result["mime_type"],
-                "extension": result["file_name"].rsplit('.', 1)[1] if '.' in result["file_name"] else '',
-                "original_filename": file.filename,
-                "uploaded_at": result["uploaded_at"],
-                "error": None
-            }
-        
-        return result
-    
-    def delete_resume(self, file_path: str) -> Dict[str, Any]:
-        """Legacy resume deletion method"""
-        return self.delete_file(file_path)
-    
-    def get_resume(self, file_path: str) -> Optional[str]:
-        """Legacy resume getter"""
-        if self.file_exists(file_path):
-            return file_path
-        return None
-
-
-    """Service for handling file uploads and storage"""
-    
-    # Allowed MIME types for resumes
-    ALLOWED_MIME_TYPES = {
-        'application/pdf': 'pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-        'application/msword': 'doc'
-    }
-    
-    ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc'}
-    
-    def __init__(self, storage_path: str = None, max_size_mb: int = 10):
+    def move_file(self, old_file_key: str, new_file_key: str) -> Dict[str, Any]:
         """
-        Initialize file storage service
+        Move/rename a file within storage (same bucket for GCS, same base path for local).
         
         Args:
-            storage_path: Base path for file storage (default: uploads/resumes)
-            max_size_mb: Maximum file size in MB (default: 10)
-        """
-        self.storage_path = storage_path or os.getenv('RESUME_STORAGE_PATH', 'uploads/resumes')
-        self.max_size_bytes = max_size_mb * 1024 * 1024
-        self._ensure_storage_directory()
-    
-    def _ensure_storage_directory(self):
-        """Create storage directory if it doesn't exist"""
-        Path(self.storage_path).mkdir(parents=True, exist_ok=True)
-    
-    def _get_tenant_path(self, tenant_id: int) -> Path:
-        """Get storage path for a specific tenant"""
-        tenant_path = Path(self.storage_path) / str(tenant_id)
-        tenant_path.mkdir(parents=True, exist_ok=True)
-        return tenant_path
-    
-    def _get_candidate_path(self, tenant_id: int, candidate_id: Optional[int] = None) -> Path:
-        """Get storage path for a specific candidate"""
-        if candidate_id:
-            candidate_path = self._get_tenant_path(tenant_id) / str(candidate_id)
-            candidate_path.mkdir(parents=True, exist_ok=True)
-            return candidate_path
-        else:
-            # For new candidates, use temp directory
-            temp_path = self._get_tenant_path(tenant_id) / 'temp'
-            temp_path.mkdir(parents=True, exist_ok=True)
-            return temp_path
-    
-    def _validate_file_extension(self, filename: str) -> bool:
-        """Validate file extension"""
-        if '.' not in filename:
-            return False
-        extension = filename.rsplit('.', 1)[1].lower()
-        return extension in self.ALLOWED_EXTENSIONS
-    
-    def _validate_file_size(self, file: FileStorage) -> bool:
-        """Validate file size"""
-        file.seek(0, os.SEEK_END)
-        size = file.tell()
-        file.seek(0)  # Reset file pointer
-        return size <= self.max_size_bytes
-    
-    def _validate_mime_type(self, file_path: str) -> Optional[str]:
-        """
-        Validate file MIME type using python-magic (if available)
-        Falls back to extension-based validation
+            old_file_key: Current storage key/path
+            new_file_key: New storage key/path
         
         Returns:
-            File extension if valid, None otherwise
-        """
-        if not MAGIC_AVAILABLE:
-            # Fallback: validate by extension only
-            extension = file_path.rsplit('.', 1)[1].lower() if '.' in file_path else None
-            return extension if extension in self.ALLOWED_EXTENSIONS else None
-        
-        try:
-            mime = magic.Magic(mime=True)
-            mime_type = mime.from_file(file_path)
-            return self.ALLOWED_MIME_TYPES.get(mime_type)
-        except Exception as e:
-            print(f"Error detecting MIME type: {e}")
-            # Fallback to extension
-            extension = file_path.rsplit('.', 1)[1].lower() if '.' in file_path else None
-            return extension if extension in self.ALLOWED_EXTENSIONS else None
-    
-    def _generate_secure_filename(self, original_filename: str) -> str:
-        """Generate a secure, unique filename"""
-        # Secure the filename
-        safe_filename = secure_filename(original_filename)
-        
-        # Add UUID to prevent conflicts
-        name, ext = os.path.splitext(safe_filename)
-        unique_id = uuid.uuid4().hex[:8]
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        
-        return f"{name}_{timestamp}_{unique_id}{ext}"
-    
-    def validate_file(self, file: FileStorage) -> Dict[str, Any]:
-        """
-        Validate uploaded file
-        
-        Returns:
-            Dictionary with validation result:
-            {
-                "valid": bool,
-                "error": Optional[str],
-                "file_type": Optional[str]
-            }
-        """
-        # Check if file exists
-        if not file or not file.filename:
-            return {"valid": False, "error": "No file provided"}
-        
-        # Validate extension
-        if not self._validate_file_extension(file.filename):
-            return {
-                "valid": False,
-                "error": f"Invalid file type. Allowed types: {', '.join(self.ALLOWED_EXTENSIONS)}"
-            }
-        
-        # Validate size
-        if not self._validate_file_size(file):
-            max_size_mb = self.max_size_bytes / (1024 * 1024)
-            return {
-                "valid": False,
-                "error": f"File too large. Maximum size: {max_size_mb}MB"
-            }
-        
-        return {"valid": True, "error": None}
-    
-    def upload_resume(
-        self,
-        file: FileStorage,
-        tenant_id: int,
-        candidate_id: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Upload resume file
-        
-        Args:
-            file: FileStorage object from Flask request
-            tenant_id: Tenant ID for isolation
-            candidate_id: Candidate ID (optional, for new candidates)
-        
-        Returns:
-            Dictionary with upload result:
+            Dictionary with move result:
             {
                 "success": bool,
-                "file_path": str,
-                "file_url": str,
-                "file_size": int,
-                "file_type": str,
-                "original_filename": str,
-                "uploaded_at": str,
+                "new_file_key": str,
                 "error": Optional[str]
             }
         """
-        # Validate file
-        validation = self.validate_file(file)
-        if not validation["valid"]:
-            return {
-                "success": False,
-                "error": validation["error"]
-            }
-        
         try:
-            # Generate secure filename
-            secure_name = self._generate_secure_filename(file.filename)
-            
-            # Get storage path
-            storage_dir = self._get_candidate_path(tenant_id, candidate_id)
-            file_path = storage_dir / secure_name
-            
-            # Save file
-            file.save(str(file_path))
-            
-            # Validate MIME type after saving
-            file_type = self._validate_mime_type(str(file_path))
-            if not file_type:
-                # Delete invalid file
-                os.remove(str(file_path))
-                return {
-                    "success": False,
-                    "error": "Invalid file type detected"
-                }
-            
-            # Get file size
-            file_size = os.path.getsize(str(file_path))
-            
-            # Extract extension from filename
-            extension = os.path.splitext(secure_name)[1].lstrip('.').lower()
-            
-            # Generate file URL (relative path for now, can be S3 URL in production)
-            file_url = f"/{self.storage_path}/{tenant_id}/{candidate_id or 'temp'}/{secure_name}"
-            
-            return {
-                "success": True,
-                "file_path": str(file_path),
-                "file_url": file_url,
-                "file_size": file_size,
-                "file_type": file_type,
-                "extension": extension,  # Added for parser
-                "original_filename": file.filename,
-                "uploaded_at": datetime.utcnow().isoformat(),
-                "error": None
-            }
-        
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Upload failed: {str(e)}"
-            }
-    
-    def delete_resume(self, file_path: str) -> Dict[str, Any]:
-        """
-        Delete resume file
-        
-        Args:
-            file_path: Absolute path to file
-        
-        Returns:
-            Dictionary with deletion result
-        """
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                return {"success": True, "error": None}
+            if self.storage_backend == 'gcs':
+                return self._move_in_gcs(old_file_key, new_file_key)
             else:
-                return {"success": False, "error": "File not found"}
+                return self._move_in_local(old_file_key, new_file_key)
+        
         except Exception as e:
-            return {"success": False, "error": f"Deletion failed: {str(e)}"}
+            logger.error(f"File move failed: {e}")
+            return {"success": False, "error": f"Move failed: {str(e)}"}
     
-    def get_resume(self, file_path: str) -> Optional[str]:
-        """
-        Get resume file path if it exists
-        
-        Args:
-            file_path: Absolute path to file
-        
-        Returns:
-            File path if exists, None otherwise
-        """
-        if os.path.exists(file_path):
-            return file_path
-        return None
-    
-    def move_temp_resume(
-        self,
-        temp_file_path: str,
-        tenant_id: int,
-        candidate_id: int
-    ) -> Dict[str, Any]:
-        """
-        Move resume from temp directory to candidate directory
-        
-        Args:
-            temp_file_path: Current file path in temp directory
-            tenant_id: Tenant ID
-            candidate_id: New candidate ID
-        
-        Returns:
-            Dictionary with new file paths
-        """
+    def _move_in_gcs(self, old_file_key: str, new_file_key: str) -> Dict[str, Any]:
+        """Move file within GCS bucket (copy + delete)"""
         try:
-            if not os.path.exists(temp_file_path):
-                return {"success": False, "error": "File not found"}
+            source_blob = self.bucket.blob(old_file_key)
             
-            # Get new path
-            filename = os.path.basename(temp_file_path)
-            new_dir = self._get_candidate_path(tenant_id, candidate_id)
-            new_path = new_dir / filename
+            if not source_blob.exists():
+                return {"success": False, "error": "Source file not found"}
+            
+            # Copy to new location
+            new_blob = self.bucket.copy_blob(source_blob, self.bucket, new_file_key)
+            
+            # Delete original
+            source_blob.delete()
+            
+            logger.info(f"Moved file in GCS: {old_file_key} -> {new_file_key}")
+            return {"success": True, "new_file_key": new_file_key, "error": None}
+        
+        except Exception as e:
+            logger.error(f"GCS move failed: {e}")
+            return {"success": False, "error": f"GCS move failed: {str(e)}"}
+    
+    def _move_in_local(self, old_file_key: str, new_file_key: str) -> Dict[str, Any]:
+        """Move file within local filesystem"""
+        try:
+            old_path = self.local_path / old_file_key
+            new_path = self.local_path / new_file_key
+            
+            if not old_path.exists():
+                return {"success": False, "error": "Source file not found"}
+            
+            # Create parent directories if needed
+            new_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Move file
-            os.rename(temp_file_path, str(new_path))
+            import shutil
+            shutil.move(str(old_path), str(new_path))
             
-            # Generate new URL
-            new_url = f"/{self.storage_path}/{tenant_id}/{candidate_id}/{filename}"
-            
-            return {
-                "success": True,
-                "file_path": str(new_path),
-                "file_url": new_url,
-                "error": None
-            }
+            logger.info(f"Moved file in local storage: {old_path} -> {new_path}")
+            return {"success": True, "new_file_key": new_file_key, "error": None}
         
         except Exception as e:
-            return {"success": False, "error": f"Move failed: {str(e)}"}
+            logger.error(f"Local move failed: {e}")
+            return {"success": False, "error": f"Local move failed: {str(e)}"}
+    
+    def generate_new_file_key_for_candidate(
+        self,
+        old_file_key: str,
+        tenant_id: int,
+        candidate_id: int,
+        document_type: str
+    ) -> str:
+        """
+        Generate a new file key for moving a file from invitation to candidate folder.
+        
+        Args:
+            old_file_key: Current file key (e.g., tenants/1/invitations/100/resume/file.pdf)
+            tenant_id: Tenant ID
+            candidate_id: Target candidate ID
+            document_type: Document type (resume, id_proof, etc.)
+        
+        Returns:
+            New file key (e.g., tenants/1/candidates/42/resume/file.pdf)
+        """
+        # Extract filename from old key
+        filename = old_file_key.rsplit('/', 1)[-1]
+        
+        # Build new key using candidate path
+        return f"tenants/{tenant_id}/candidates/{candidate_id}/{document_type}/{filename}"
+
+
+# Legacy support for existing resume upload functionality
+# LegacyResumeStorageService removed in Phase 3 cleanup. Use FileStorageService as the single storage abstraction.

@@ -84,6 +84,98 @@ def assign_candidate():
         return error_response("Failed to assign candidate", 500)
 
 
+@assignment_bp.route('/broadcast', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.assign')
+def broadcast_assign_candidate():
+    """
+    Broadcast assign a candidate to ALL managers and recruiters in the tenant.
+    This sets is_visible_to_all_team=True, making the candidate visible to all 
+    current AND future team members.
+    
+    Request Body: { candidate_id: int, assignment_reason?: string }
+    Returns: { message, candidate_id, is_visible_to_all_team, current_team_count }
+    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    """
+    try:
+        tenant_id = g.tenant_id
+        user_id = g.user_id
+        
+        # Get request data
+        data = request.get_json() or {}
+        candidate_id = data.get('candidate_id')
+        assignment_reason = data.get('assignment_reason')
+        
+        if not candidate_id:
+            return error_response("candidate_id is required", 400)
+        
+        # Broadcast assign candidate
+        result = CandidateAssignmentService.broadcast_assign_candidate(
+            candidate_id=candidate_id,
+            assigned_by_user_id=user_id,
+            assignment_reason=assignment_reason,
+            changed_by=f"portal_user:{user_id}",
+            tenant_id=tenant_id
+        )
+        
+        logger.info(f"Candidate {candidate_id} set to visible for all team by user {user_id}")
+        
+        return jsonify(result), 201
+        
+    except ValueError as e:
+        logger.warning(f"Business logic error in broadcast_assign_candidate: {str(e)}")
+        return error_response(str(e), 400)
+    except Exception as e:
+        logger.error(f"Error broadcast assigning candidate: {str(e)}", exc_info=True)
+        return error_response("Failed to broadcast assign candidate", 500)
+
+
+@assignment_bp.route('/visibility/<int:candidate_id>', methods=['PUT'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.assign')
+def set_candidate_visibility(candidate_id):
+    """
+    Set the tenant-wide visibility flag for a candidate.
+    
+    Path Parameters:
+        candidate_id: Candidate ID
+        
+    Request Body: { is_visible_to_all_team: bool }
+    Returns: { message, candidate_id, is_visible_to_all_team }
+    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    """
+    try:
+        user_id = g.user_id
+        
+        # Get request data
+        data = request.get_json() or {}
+        is_visible_to_all_team = data.get('is_visible_to_all_team')
+        
+        if is_visible_to_all_team is None:
+            return error_response("is_visible_to_all_team is required", 400)
+        
+        # Set visibility
+        result = CandidateAssignmentService.set_candidate_visibility(
+            candidate_id=candidate_id,
+            is_visible_to_all_team=bool(is_visible_to_all_team),
+            changed_by_user_id=user_id,
+            changed_by=f"portal_user:{user_id}"
+        )
+        
+        logger.info(f"Candidate {candidate_id} visibility set to {is_visible_to_all_team} by user {user_id}")
+        
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        logger.warning(f"Business logic error in set_candidate_visibility: {str(e)}")
+        return error_response(str(e), 400)
+    except Exception as e:
+        logger.error(f"Error setting candidate visibility: {str(e)}", exc_info=True)
+        return error_response("Failed to set candidate visibility", 500)
+
+
 @assignment_bp.route('/reassign', methods=['POST'])
 @require_portal_auth
 @with_tenant_context

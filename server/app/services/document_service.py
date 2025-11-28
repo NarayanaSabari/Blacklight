@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
 from werkzeug.datastructures import FileStorage
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 
 from app import db
 from app.models.candidate_document import CandidateDocument
@@ -168,7 +168,23 @@ class DocumentService:
         query = select(CandidateDocument).where(CandidateDocument.tenant_id == tenant_id)
         
         if candidate_id:
-            query = query.where(CandidateDocument.candidate_id == candidate_id)
+            # When filtering by candidate_id, also include documents from the candidate's invitation
+            # This handles cases where documents were uploaded during onboarding but not yet moved
+            
+            # Include documents where:
+            # - candidate_id matches directly, OR
+            # - invitation_id is linked to this candidate (for onboarding docs not yet moved)
+            query = query.where(
+                or_(
+                    CandidateDocument.candidate_id == candidate_id,
+                    CandidateDocument.invitation_id.in_(
+                        select(CandidateInvitation.id).where(
+                            CandidateInvitation.candidate_id == candidate_id,
+                            CandidateInvitation.tenant_id == tenant_id
+                        )
+                    )
+                )
+            )
         
         if invitation_id:
             query = query.where(CandidateDocument.invitation_id == invitation_id)
@@ -334,9 +350,9 @@ class DocumentService:
     @staticmethod
     def move_documents_to_candidate(invitation_id: int, candidate_id: int, tenant_id: int) -> Tuple[int, Optional[str]]:
         """
-        Move documents from invitation to candidate (after approval).
-        Updates document records to link to candidate.
-        Files remain in same location (tenant isolation maintained).
+        Move documents from invitation to candidate folder (after approval).
+        - Physically moves files from invitations/{id}/ to candidates/{id}/ in storage
+        - Updates document records with new file_key and candidate_id
         
         Args:
             invitation_id: Source invitation ID
@@ -356,15 +372,48 @@ class DocumentService:
             if not documents:
                 return 0, None
             
+            # Initialize storage service for file moves
+            storage = FileStorageService()
+            
             moved_count = 0
+            move_errors = []
+            
             for document in documents:
-                # Update database record to link to candidate
-                document.candidate_id = candidate_id
-                # Keep invitation_id for audit trail
-                document.updated_at = datetime.utcnow()
-                moved_count += 1
+                old_file_key = document.file_key
+                
+                # Generate new file key for candidate folder
+                new_file_key = storage.generate_new_file_key_for_candidate(
+                    old_file_key=old_file_key,
+                    tenant_id=tenant_id,
+                    candidate_id=candidate_id,
+                    document_type=document.document_type
+                )
+                
+                # Move file in storage (GCS or local)
+                move_result = storage.move_file(old_file_key, new_file_key)
+                
+                if move_result.get('success'):
+                    # Update database record with new file_key and candidate_id
+                    document.file_key = new_file_key
+                    document.candidate_id = candidate_id
+                    # Keep invitation_id for audit trail
+                    document.updated_at = datetime.utcnow()
+                    moved_count += 1
+                    logger.info(f"Moved document {document.id}: {old_file_key} -> {new_file_key}")
+                else:
+                    # Log error but continue with other documents
+                    error_msg = move_result.get('error', 'Unknown error')
+                    move_errors.append(f"Document {document.id}: {error_msg}")
+                    logger.error(f"Failed to move document {document.id}: {error_msg}")
+                    # Still link to candidate even if file move fails
+                    document.candidate_id = candidate_id
+                    document.updated_at = datetime.utcnow()
             
             db.session.commit()
+            
+            if move_errors:
+                logger.warning(f"Some documents failed to move: {move_errors}")
+                return moved_count, f"Moved {moved_count} documents, {len(move_errors)} failed: {'; '.join(move_errors)}"
             
             logger.info(f"Moved {moved_count} documents from invitation {invitation_id} to candidate {candidate_id}")
             return moved_count, None

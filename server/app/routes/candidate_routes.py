@@ -64,6 +64,9 @@ def create_candidate():
         from app import db
         from app.models.candidate import Candidate
         
+        # NOTE: We persist both `resume_file_key` + `resume_storage_backend` and
+        # the legacy `resume_file_path` for backward compatibility. This legacy
+        # field will be removed in Phase 3 after migration verification.
         candidate = Candidate(
             tenant_id=tenant_id,
             first_name=data.first_name,
@@ -133,10 +136,46 @@ def get_candidate(candidate_id: int):
         logger.info(f"[GET] Response - education count: {len(response_dict.get('education', []))}")
         
         return jsonify(response_dict), 200
-    
     except Exception as e:
         logger.error(f"Error getting candidate {candidate_id}: {e}", exc_info=True)
         return error_response(f"Failed to get candidate: {str(e)}", 500)
+
+@candidate_bp.route('/<int:candidate_id>/resume-url', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_candidate_resume_url(candidate_id: int):
+        """
+        Generate a signed URL for the candidate's resume if stored in GCS.
+
+        Optional query param: ttl (seconds) to override default expiry.
+        """
+        try:
+            tenant_id = g.tenant_id
+            # Ensure candidate accessible
+            candidate = candidate_service.get_candidate(candidate_id, tenant_id)
+            if not candidate:
+                return error_response("Candidate not found", 404)
+
+            if not candidate.resume_file_key or candidate.resume_storage_backend != 'gcs':
+                return error_response("No resume available for signed URL", 404)
+
+            # Optional TTL
+            ttl = request.args.get('ttl')
+            ttl_seconds = int(ttl) if ttl else None
+            from app.services.file_storage import FileStorageService
+            fs = FileStorageService()
+            url, err = fs.generate_signed_url(candidate.resume_file_key, expiry_seconds=ttl_seconds) if ttl_seconds else fs.generate_signed_url(candidate.resume_file_key)
+            if err or not url:
+                return error_response(f"Failed to generate signed URL: {err or 'unknown error'}", 500)
+
+            return jsonify({"signed_url": url}), 200
+
+        except Exception as e:
+            logger.error(f"Error generating resume signed URL for candidate {candidate_id}: {e}", exc_info=True)
+            return error_response(f"Failed to generate signed URL: {str(e)}", 500)
+    
+    
 
 
 @candidate_bp.route('/<int:candidate_id>', methods=['PUT'])
@@ -420,6 +459,19 @@ def approve_candidate(candidate_id: int):
             invitation.reviewed_at = datetime.utcnow()
             logger.info(f"Updated invitation {invitation.id} status to 'approved' for candidate {candidate_id}")
         
+        # Move documents from invitation to candidate folder (GCS/local storage)
+        if invitation:
+            from app.services.document_service import DocumentService
+            moved_count, move_error = DocumentService.move_documents_to_candidate(
+                invitation_id=invitation.id,
+                candidate_id=candidate_id,
+                tenant_id=tenant_id
+            )
+            if move_error:
+                logger.warning(f"Document move had issues: {move_error}")
+            else:
+                logger.info(f"Moved {moved_count} documents from invitation {invitation.id} to candidate {candidate_id}")
+        
         db.session.commit()
         
         logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: onboarded")
@@ -500,12 +552,13 @@ def upload_and_create():
         logger.info(f"[UPLOAD-{request_id}] File received: {file.filename}")
         
         # Upload file to storage (fast - 1-2s)
-        from app.services.file_storage import LegacyResumeStorageService
-        storage = LegacyResumeStorageService()
+        from app.services.file_storage import FileStorageService
+        storage = FileStorageService()
         
-        upload_result = storage.upload_resume(
+        upload_result = storage.upload_file(
             file=file,
             tenant_id=tenant_id,
+            document_type='resume',
             candidate_id=None  # Will be updated after candidate creation
         )
         
@@ -516,7 +569,7 @@ def upload_and_create():
                 500
             )
         
-        logger.info(f"[UPLOAD-{request_id}] File uploaded successfully: {upload_result['file_path']}")
+        logger.info(f"[UPLOAD-{request_id}] File uploaded successfully: {upload_result['file_key']}")
         
         # Create candidate with minimal data and status='processing'
         from app.models.candidate import Candidate
@@ -528,7 +581,9 @@ def upload_and_create():
             phone=None,
             status='processing',  # NEW: Processing status
             source='resume_upload',
-            resume_file_path=upload_result['file_path'],
+            resume_file_key=upload_result.get('file_key') or upload_result.get('file_path'),
+            resume_storage_backend=upload_result.get('storage_backend', 'local'),
+            # Note: legacy `resume_file_path` and `resume_file_url` are deprecated; store only file_key + backend
             resume_uploaded_at=datetime.utcnow()
         )
         
@@ -564,7 +619,7 @@ def upload_and_create():
             message='Resume uploaded successfully. AI parsing in progress...',
             file_info={
                 'filename': file.filename,
-                'file_path': upload_result['file_path'],
+                'file_key': upload_result['file_key'],
                 'file_size': upload_result.get('file_size'),
                 'mime_type': upload_result.get('mime_type')
             }
@@ -583,128 +638,13 @@ def upload_and_create():
         return error_response(f"Failed to upload resume: {str(e)}", 500)
 
 
-@candidate_bp.route('/<int:candidate_id>/resume', methods=['POST'])
-@require_portal_auth
-@with_tenant_context
-@require_permission('candidates.edit')
-@require_permission('candidates.upload_resume')
-def upload_resume_for_candidate(candidate_id: int):
-    """
-    Upload resume for existing candidate
-    
-    Form Data:
-        - file: Resume file (PDF/DOCX)
-    
-    Returns: UploadResumeResponseSchema
-    """
-    try:
-        tenant_id = g.tenant_id
-        
-        # Validate file
-        if 'file' not in request.files:
-            return error_response("No file provided", 400)
-        
-        file = request.files['file']
-        
-        if file.filename == '':
-            return error_response("No file selected", 400)
-        
-        # Upload and parse
-        result = candidate_service.upload_and_parse_resume(
-            file=file,
-            tenant_id=tenant_id,
-            candidate_id=candidate_id,
-            auto_create=False
-        )
-        
-        if result['status'] == 'error':
-            return error_response(
-                result.get('error', 'Failed to upload and parse resume'),
-                500
-            )
-        
-        # Trigger background job for embedding generation and job matching
-        try:
-            from app.inngest import inngest_client
-            import inngest
-            import threading
-            
-            def trigger_job_matching():
-                try:
-                    inngest_client.send_sync(
-                        inngest.Event(
-                            name="job-match/generate-candidate",
-                            data={
-                                "candidate_id": candidate_id,
-                                "tenant_id": tenant_id,
-                                "min_score": 50.0,
-                                "trigger": "resume_upload"
-                            }
-                        )
-                    )
-                    logger.info(f"Triggered job matching workflow for candidate {candidate_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to trigger job matching in thread: {str(e)}")
-            
-            # Run in background thread to not block response
-            thread = threading.Thread(target=trigger_job_matching, daemon=True)
-            thread.start()
-            logger.info(f"Started background thread for job matching candidate {candidate_id}")
-        except Exception as e:
-            # Don't fail the upload if background job trigger fails
-            logger.warning(f"Failed to start job matching thread for candidate {candidate_id}: {str(e)}")
-        
-        # Return response
-        response = UploadResumeResponseSchema(
-            candidate_id=result['candidate_id'],
-            status='success',
-            message='Resume uploaded and parsed successfully',
-            file_info=result['file_info'],
-            parsed_data=result['parsed_data'],
-            extracted_metadata=result['extracted_metadata']
-        )
-        
-        return jsonify(response.model_dump()), 200
-    
-    except Exception as e:
-        logger.error(f"Error uploading resume for candidate {candidate_id}: {e}", exc_info=True)
-        return error_response(f"Failed to upload resume: {str(e)}", 500)
+# NOTE: Removed duplicate `get_candidate` implementation in this file.
+# The canonical `get_candidate` route is declared earlier; keeping a single route avoids
+# conflicts during blueprint registration.
 
 
-@candidate_bp.route('/<int:candidate_id>/reparse', methods=['POST'])
-@require_portal_auth
-@with_tenant_context
-@require_permission('candidates.edit')
-def reparse_resume(candidate_id: int):
-    """
-    Re-parse existing resume file
-    
-    Returns: ReparseResumeResponseSchema
-    """
-    try:
-        tenant_id = g.tenant_id
-        
-        # Reparse
-        result = candidate_service.reparse_resume(candidate_id, tenant_id)
-        
-        response = ReparseResumeResponseSchema(
-            candidate_id=result['candidate_id'],
-            status='success',
-            message='Resume re-parsed successfully',
-            parsed_data=result['parsed_data'],
-            extracted_metadata=result['extracted_metadata']
-        )
-        
-        return jsonify(response.model_dump()), 200
-    
-    except ValueError as e:
-        logger.warning(f"Error reparsing resume for candidate {candidate_id}: {e}")
-        return error_response(str(e), 404)
-    
-    except Exception as e:
-        logger.error(f"Error reparsing resume for candidate {candidate_id}: {e}", exc_info=True)
-        return error_response(f"Failed to reparse resume: {str(e)}", 500)
-
+# NOTE: Duplicate `get_candidate_resume_url` implementation removed.
+# The canonical `get_candidate_resume_url` route is declared earlier in this file.
 
 # ==================== Statistics Endpoint ====================
 

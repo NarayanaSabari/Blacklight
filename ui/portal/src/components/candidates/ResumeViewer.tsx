@@ -40,13 +40,13 @@ export function ResumeViewer({ resumeUrl, resumeFileName, candidateName }: Resum
     );
   }
 
-  const isPDF = resumeUrl.toLowerCase().endsWith('.pdf');
-  const isDocx = resumeUrl.toLowerCase().endsWith('.docx');
-  
   // Construct full URL - if it's a relative path, prepend the API base URL
-  const fullResumeUrl = resumeUrl.startsWith('http') 
-    ? resumeUrl 
-    : `${env.apiBaseUrl}${resumeUrl}`;
+  const fullResumeUrl = resumeUrl.startsWith('http') ? resumeUrl : `${env.apiBaseUrl}${resumeUrl}`;
+
+  // Strip query params for extension detection (signed URLs have query string)
+  const urlPath = fullResumeUrl.split('?')[0];
+  const isPDF = urlPath.toLowerCase().endsWith('.pdf');
+  const isDocx = urlPath.toLowerCase().endsWith('.docx');
 
   const handleDownload = () => {
     const link = document.createElement('a');

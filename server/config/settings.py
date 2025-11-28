@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     # File Upload Limits
     max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
     allowed_document_types: str = Field(default="pdf,doc,docx,jpg,jpeg,png", env="ALLOWED_DOCUMENT_TYPES")
-    signed_url_expiry_seconds: int = Field(default=3600, env="SIGNED_URL_EXPIRY_SECONDS")  # 1 hour
+    signed_url_expiry_seconds: int = Field(default=1800, env="SIGNED_URL_EXPIRY_SECONDS")  # 30 minutes
     
     # Database Pool
     pool_size: int = Field(default=10, env="SQLALCHEMY_ENGINE_OPTIONS_POOL_SIZE")

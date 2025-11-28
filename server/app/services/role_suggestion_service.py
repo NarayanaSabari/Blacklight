@@ -4,6 +4,7 @@ AI-powered role suggestions for candidates using Gemini
 """
 import os
 import json
+import re
 from typing import Dict, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -62,6 +63,7 @@ class RoleSuggestionService:
             timeout=30,  # 30 second timeout for suggestions
             max_retries=3,  # 3 retries as requested
         )
+        self.model_name = model_name
         print(f"[DEBUG] Configured Gemini for role suggestions: {model_name}")
     
     async def generate_suggestions(self, candidate: Candidate) -> Dict:
@@ -80,44 +82,108 @@ class RoleSuggestionService:
             # Build prompt from candidate data
             prompt = self._build_analysis_prompt(candidate)
             
-            # Create structured output model
-            structured_llm = self.ai_model.with_structured_output(RoleSuggestionsResponse)
+            # Try structured output first, fallback to JSON parsing
+            result = await self._try_structured_output(prompt)
             
-            # Generate suggestions
+            if result is None:
+                print(f"[DEBUG] Structured output failed, trying JSON fallback...")
+                result = await self._try_json_fallback(prompt)
+            
+            if result is None:
+                print(f"[ERROR] Both structured output and JSON fallback failed")
+                raise ValueError("AI model failed to generate valid output after retries. Please try again.")
+            
+            print(f"[DEBUG] Generated {len(result.get('roles', []))} role suggestions")
+            
+            # Add metadata
+            result["generated_at"] = datetime.utcnow().isoformat()
+            result["model_version"] = self.model_name
+            
+            return result
+            
+        except Exception as e:
+            error_message = str(e)
+            print(f"[ERROR] Role suggestion generation failed: {error_message}")
+            raise
+    
+    async def _try_structured_output(self, prompt: str) -> Optional[Dict]:
+        """Try to get structured output from model"""
+        try:
+            structured_llm = self.ai_model.with_structured_output(RoleSuggestionsResponse)
             result: RoleSuggestionsResponse = structured_llm.invoke([HumanMessage(content=prompt)])
             
-            # Handle None result (API or parsing failure)
             if result is None:
-                print(f"[ERROR] Gemini API returned None - structured output parsing may have failed")
-                raise ValueError("AI model failed to generate valid structured output. Please try again.")
+                return None
             
-            print(f"[DEBUG] Generated {len(result.roles)} role suggestions")
-            
-            # Convert to dict and add metadata
-            suggestions = {
+            return {
                 "roles": [
                     {
                         "role": r.role,
                         "score": round(r.score, 2),
                         "reasoning": r.reasoning
                     }
-                    for r in result.roles[:5]  # Top 5 only
-                ],
-                "generated_at": datetime.utcnow().isoformat(),
-                "model_version": os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+                    for r in result.roles[:5]
+                ]
             }
-            
-            return suggestions
-            
         except Exception as e:
-            error_message = str(e)
-            print(f"[ERROR] Role suggestion generation failed: {error_message}")
+            print(f"[WARNING] Structured output failed: {e}")
+            return None
+    
+    async def _try_json_fallback(self, original_prompt: str) -> Optional[Dict]:
+        """Fallback: ask model to return JSON directly and parse it"""
+        try:
+            json_prompt = original_prompt + """
+
+IMPORTANT: Return your response as a valid JSON object with this exact structure:
+{
+  "roles": [
+    {"role": "Role Title", "score": 0.85, "reasoning": "Brief explanation"},
+    ...
+  ]
+}
+
+Return ONLY the JSON object, no other text or markdown formatting."""
+
+            response = self.ai_model.invoke([HumanMessage(content=json_prompt)])
             
-            # Check if timeout - will auto-retry via max_retries
-            if 'timeout' in error_message.lower() or 'deadline' in error_message.lower():
-                print(f"[WARNING] Gemini API timed out - retrying...")
+            if not response or not response.content:
+                return None
             
-            raise  # Re-raise for retry logic
+            # Extract JSON from response
+            content = response.content.strip()
+            
+            # Try to find JSON in the response
+            json_match = re.search(r'\{[\s\S]*"roles"[\s\S]*\}', content)
+            if json_match:
+                content = json_match.group()
+            
+            # Remove markdown code blocks if present
+            content = re.sub(r'^```(?:json)?\s*', '', content)
+            content = re.sub(r'\s*```$', '', content)
+            
+            # Parse JSON
+            data = json.loads(content)
+            
+            # Validate and normalize
+            if "roles" not in data:
+                return None
+            
+            roles = []
+            for r in data["roles"][:5]:
+                roles.append({
+                    "role": str(r.get("role", "Unknown Role")),
+                    "score": min(1.0, max(0.0, float(r.get("score", 0.5)))),
+                    "reasoning": str(r.get("reasoning", "Based on profile analysis"))
+                })
+            
+            return {"roles": roles}
+            
+        except json.JSONDecodeError as e:
+            print(f"[WARNING] JSON parsing failed: {e}")
+            return None
+        except Exception as e:
+            print(f"[WARNING] JSON fallback failed: {e}")
+            return None
     
     def _build_analysis_prompt(self, candidate: Candidate) -> str:
         """Build prompt for AI model"""

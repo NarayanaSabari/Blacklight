@@ -881,15 +881,17 @@ class InvitationService:
         candidate.work_experience = work_exp_data
         candidate.parsed_resume_data = parsed_resume if parsed_resume else candidate.parsed_resume_data
         
-        # Move documents from invitation to candidate
-        documents = db.session.execute(
-            select(CandidateDocument).where(CandidateDocument.invitation_id == invitation.id)
-        ).scalars().all()
-        
-        for doc in documents:
-            doc.candidate_id = candidate.id
-            # Keep invitation_id for audit trail
-            logger.debug(f"Moved document {doc.id} to candidate {candidate.id}")
+        # Move documents from invitation to candidate (includes file move in GCS/local storage)
+        from app.services.document_service import DocumentService
+        moved_count, move_error = DocumentService.move_documents_to_candidate(
+            invitation_id=invitation.id,
+            candidate_id=candidate.id,
+            tenant_id=invitation.tenant_id
+        )
+        if move_error:
+            logger.warning(f"Document move had issues: {move_error}")
+        else:
+            logger.info(f"Moved {moved_count} documents from invitation {invitation.id} to candidate {candidate.id}")
         
         # Update invitation
         invitation.status = 'approved'
@@ -906,7 +908,7 @@ class InvitationService:
             performed_by=f'portal_user:{reviewed_by_id}',
             extra_data={
                 'candidate_id': candidate.id,
-                'documents_moved': len(documents),
+                'documents_moved': moved_count,
                 'has_notes': bool(notes),
                 'hr_edited_fields': list(edited_data.keys()) if edited_data else None
             }

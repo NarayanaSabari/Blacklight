@@ -163,10 +163,11 @@ class CandidateResponseSchema(BaseModel):
     full_name: Optional[str] = None
     
     # Resume Info
-    resume_file_path: Optional[str] = None
-    resume_file_url: Optional[str] = None
+    resume_file_key: Optional[str] = None
+    resume_storage_backend: Optional[str] = None
     resume_uploaded_at: Optional[datetime] = None
     resume_parsed_at: Optional[datetime] = None
+    # Note: Signed resume URLs are now available via the dedicated endpoint /api/candidates/<id>/resume-url
     
     # Enhanced Personal Info
     location: Optional[str] = None

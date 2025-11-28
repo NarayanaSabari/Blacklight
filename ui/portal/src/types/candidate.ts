@@ -46,8 +46,10 @@ export interface Candidate {
   full_name?: string;
 
   // Resume Info
-  resume_file_path?: string;
-  resume_file_url?: string;
+  resume_file_key?: string;
+  resume_storage_backend?: string;
+  // Signed URLs are provided via the `GET /api/candidates/:id/resume-url` endpoint;
+  // Do not depend on `resume_file_url` which was a legacy public field.
   resume_uploaded_at?: string;
   resume_parsed_at?: string;
 

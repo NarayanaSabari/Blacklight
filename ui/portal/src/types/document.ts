@@ -20,10 +20,10 @@ export interface Document {
   
   // File info
   file_name: string;
-  file_path: string;
+  file_path?: string;
   file_key: string;
   file_size: number;
-  file_type: string;
+  mime_type: string;
   storage_backend: StorageBackend;
   
   // Document metadata
@@ -52,7 +52,7 @@ export interface DocumentListItem {
   invitation_id?: number;
   file_name: string;
   file_size: number;
-  file_type: string;
+  mime_type: string;
   document_type: DocumentType;
   is_verified: boolean;
   verified_at?: string;
@@ -82,10 +82,10 @@ export interface DocumentResponse {
   candidate_id?: number;
   invitation_id?: number;
   file_name: string;
-  file_path: string;
+  file_path?: string;
   file_key: string;
   file_size: number;
-  file_type: string;
+  mime_type: string;
   storage_backend: StorageBackend;
   document_type: DocumentType;
   description?: string;
@@ -99,9 +99,8 @@ export interface DocumentResponse {
 export interface DocumentUrlResponse {
   document_id: number;
   file_name: string;
-  signed_url: string;
-  expires_at: string;
-  storage_backend: StorageBackend;
+  url: string;
+  expires_in: number;
 }
 
 export interface DocumentVerifyRequest {

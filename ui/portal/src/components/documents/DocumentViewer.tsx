@@ -49,7 +49,7 @@ export function DocumentViewer({ document, open, onClose, onDownload }: Document
       documentApi
         .getDocumentUrl(document.id)
         .then((response) => {
-          setSignedUrl(response.signed_url);
+          setSignedUrl(response.url);
         })
         .catch((err) => {
           setError(getErrorMessage(err));
@@ -74,8 +74,9 @@ export function DocumentViewer({ document, open, onClose, onDownload }: Document
     }
   };
 
-  const canPreview = (fileType: string): boolean => {
-    return ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'].includes(fileType);
+  const canPreview = (mimeType: string | undefined): boolean => {
+    if (!mimeType) return false;
+    return ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'].includes(mimeType);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -98,25 +99,27 @@ export function DocumentViewer({ document, open, onClose, onDownload }: Document
                 <span className="text-2xl">{DOCUMENT_TYPE_ICONS[document.document_type]}</span>
                 <span className="truncate">{document.file_name}</span>
               </DialogTitle>
-              <DialogDescription className="mt-2 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline">
-                    {DOCUMENT_TYPE_LABELS[document.document_type]}
-                  </Badge>
-                  <span className="text-xs">•</span>
-                  <span>{formatFileSize(document.file_size)}</span>
-                  <span className="text-xs">•</span>
-                  <span>
-                    Uploaded {formatDistanceToNow(new Date(document.uploaded_at), { addSuffix: true })}
-                  </span>
-                </div>
-                {document.is_verified && document.verified_at && (
-                  <div className="flex items-center gap-1 text-green-600">
-                    <span className="text-xs">
-                      ✓ Verified {formatDistanceToNow(new Date(document.verified_at), { addSuffix: true })}
+              <DialogDescription asChild>
+                <div className="mt-2 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+                    <Badge variant="outline">
+                      {DOCUMENT_TYPE_LABELS[document.document_type]}
+                    </Badge>
+                    <span className="text-xs">•</span>
+                    <span>{formatFileSize(document.file_size)}</span>
+                    <span className="text-xs">•</span>
+                    <span>
+                      Uploaded {formatDistanceToNow(new Date(document.uploaded_at), { addSuffix: true })}
                     </span>
                   </div>
-                )}
+                  {document.is_verified && document.verified_at && (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <span className="text-xs">
+                        ✓ Verified {formatDistanceToNow(new Date(document.verified_at), { addSuffix: true })}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </DialogDescription>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose}>
@@ -141,9 +144,9 @@ export function DocumentViewer({ document, open, onClose, onDownload }: Document
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             </div>
-          ) : canPreview(document.file_type) && signedUrl ? (
+          ) : canPreview(document.mime_type) && signedUrl ? (
             <div className="h-full w-full">
-              {document.file_type === 'application/pdf' ? (
+              {document.mime_type === 'application/pdf' ? (
                 <iframe
                   src={signedUrl}
                   className="w-full h-full"

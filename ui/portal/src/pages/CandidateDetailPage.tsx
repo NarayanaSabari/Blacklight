@@ -203,6 +203,7 @@ export function CandidateDetailPage() {
   // Role Preferences State
   const [preferredRoles, setPreferredRoles] = useState<string[]>([]);
   const [isGeneratingRoles, setIsGeneratingRoles] = useState(false);
+  const [signedResumeUrl, setSignedResumeUrl] = useState<string | null>(null);
 
   // Initialize preferred roles from candidate data
   useEffect(() => {
@@ -210,6 +211,21 @@ export function CandidateDetailPage() {
       setPreferredRoles(candidate.preferred_roles);
     }
   }, [candidate?.preferred_roles]);
+
+  useEffect(() => {
+    if (!candidate) return;
+
+    // If a candidate has a canonical resume file_key, prefer a signed URL and don't fallback
+    // to legacy resume_file_url in case of failure. For legacy candidates without a file_key,
+    // we will not display a resume (no fallback to resume_file_url).
+    if (candidate.resume_file_key) {
+      candidateApi.getResumeUrl(candidate.id)
+        .then((url) => setSignedResumeUrl(url))
+        .catch(() => setSignedResumeUrl(null));
+    } else {
+      setSignedResumeUrl(null);
+    }
+  }, [candidate?.resume_file_key]);
 
   // Update Preferred Roles Mutation
   const updatePreferredRolesMutation = useMutation({
@@ -267,12 +283,34 @@ export function CandidateDetailPage() {
     deleteMutation.mutate();
   };
 
-  const handleDownloadResume = () => {
-    if (candidate?.resume_file_url) {
-      window.open(candidate.resume_file_url, '_blank');
-      toast.success('Resume download started');
-    } else {
-      toast.error('No resume file available');
+  const handleDownloadResume = async () => {
+    try {
+      let url = signedResumeUrl;
+
+      // If we don't already have a signed URL and the candidate has a file_key, try to fetch it
+      if (!url && candidate?.resume_file_key) {
+        try {
+          url = await candidateApi.getResumeUrl(candidate.id);
+          setSignedResumeUrl(url);
+        } catch {
+          // Failed to generate signed URL for canonical storage; do not fallback to legacy URL
+          url = null;
+        }
+      }
+
+      // We do not fallback to legacy resume_file_url; if no signed URL and no file_key, no resume available
+      if (!url && (!candidate?.resume_file_key)) {
+        url = null;
+      }
+
+      if (url) {
+        window.open(url, '_blank');
+        toast.success('Resume download started');
+      } else {
+        toast.error('No resume file available');
+      }
+    } catch (err) {
+      toast.error('Failed to generate resume download URL');
     }
   };
 
@@ -650,7 +688,7 @@ export function CandidateDetailPage() {
                   <UserPlus className="h-4 w-4 mr-2" />
                   {currentAssignment ? 'Reassign' : 'Assign'}
                 </Button>
-                {candidate.resume_file_url && (
+                {(signedResumeUrl || candidate?.resume_file_key) && (
                   <>
                     <Button
                       variant="outline"

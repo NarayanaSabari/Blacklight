@@ -141,3 +141,9 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# GCS credentials (never commit service account keys)
+blacklight-bucket.json
+*-bucket.json
+*-credentials.json
+gcs-*.json

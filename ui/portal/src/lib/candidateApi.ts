@@ -153,5 +153,14 @@ export const candidateApi = {
   generateRoleSuggestions: async (id: number): Promise<any> => {
     return apiRequest.post<any>(`/api/candidates/${id}/suggest-roles`);
   },
+  /**
+   * Generate a signed/resumable URL to download a candidate's resume
+   * Server returns { signed_url: string }
+   */
+  getResumeUrl: async (id: number, ttl?: number): Promise<string> => {
+    const url = ttl ? `/api/candidates/${id}/resume-url?ttl=${ttl}` : `/api/candidates/${id}/resume-url`;
+    const resp = await apiRequest.get<{ signed_url: string }>(url);
+    return resp.signed_url;
+  },
 };
 

@@ -75,6 +75,11 @@ class Candidate(BaseModel):
     manager_id = db.Column(Integer, db.ForeignKey("portal_users.id"), nullable=True)
     recruiter_id = db.Column(Integer, db.ForeignKey("portal_users.id"), nullable=True)
 
+    # Tenant-wide visibility flag (for broadcast assignments)
+    # When True, this candidate is visible to ALL managers and recruiters in the tenant
+    # including future hires (no explicit CandidateAssignment record needed)
+    is_visible_to_all_team = db.Column(db.Boolean, default=False, server_default="false", nullable=False)
+
     # Resume File Storage
     # GCS file key for the resume (preferred storage key in GCS)
     resume_file_key = db.Column(String(1000))
@@ -82,7 +87,6 @@ class Candidate(BaseModel):
     resume_storage_backend = db.Column(String(20), default="gcs")
     # Legacy/local fields retained for backward compatibility (may be deprecated later)
     resume_file_path = db.Column(String(500))
-    resume_file_url = db.Column(String(500))
     resume_uploaded_at = db.Column(DateTime)
     resume_parsed_at = db.Column(DateTime)
 
@@ -202,8 +206,10 @@ class Candidate(BaseModel):
             "source": self.source,
             "resume_file_key": self.resume_file_key,
             "resume_storage_backend": self.resume_storage_backend,
-            "resume_file_path": self.resume_file_path,
-            "resume_file_url": self.resume_file_url,
+            # NOTE: `resume_file_path` is a legacy field retained in the DB for
+            # backward compatibility. As part of the Phase 3 cleanup we stopped
+            # writing `resume_file_url` to this model and the column may be removed
+            # via a migration once all clients and integrations no longer depend on it.
             "resume_uploaded_at": self.resume_uploaded_at.isoformat()
             if self.resume_uploaded_at
             else None,
@@ -244,6 +250,7 @@ class Candidate(BaseModel):
             "rejection_reason": self.rejection_reason,
             "manager_id": self.manager_id,
             "recruiter_id": self.recruiter_id,
+            "is_visible_to_all_team": self.is_visible_to_all_team,
         }
 
         # Include assignment history if requested

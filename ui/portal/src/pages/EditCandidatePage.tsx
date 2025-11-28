@@ -3,7 +3,7 @@
  * Dedicated page for editing candidate information
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +33,21 @@ export function EditCandidatePage() {
       navigate('/candidates');
     }
   }, [error, navigate]);
+
+  const [signedResumeUrl, setSignedResumeUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!candidate) return;
+    // If the candidate has a canonical file_key, prefer a signed URL and don't fallback to legacy file_url.
+    if (candidate.resume_file_key) {
+      candidateApi.getResumeUrl(candidate.id)
+        .then((url) => setSignedResumeUrl(url))
+        .catch(() => setSignedResumeUrl(null));
+    } else {
+      // No legacy fallback: we no longer use candidate.resume_file_url for security reasons
+      setSignedResumeUrl(null);
+    }
+  }, [candidate?.resume_file_key]);
 
   const handleFormSubmit = async (data: CandidateCreateInput | CandidateUpdateInput) => {
     try {
@@ -107,8 +122,9 @@ export function EditCandidatePage() {
         {/* Right Column: Resume Viewer */}
         <div className="lg:col-span-1 lg:sticky lg:top-6 lg:self-start">
           <ResumeViewer
-            resumeUrl={candidate.resume_file_url}
-            resumeFileName={candidate.resume_file_url?.split('/').pop()}
+            // Prefer signedResumeUrl if available; if candidate has a file_key but signed URL is unavailable, show no resume.
+            resumeUrl={signedResumeUrl}
+            resumeFileName={signedResumeUrl?.split('/').pop()}
             candidateName={candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
           />
         </div>

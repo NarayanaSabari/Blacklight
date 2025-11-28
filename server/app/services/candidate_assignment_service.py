@@ -446,6 +446,7 @@ class CandidateAssignmentService:
     ) -> List[Dict]:
         """
         Get all candidates assigned to a user.
+        Also includes candidates with is_visible_to_all_team=True (broadcast visible).
 
         Args:
             user_id: ID of user
@@ -467,24 +468,27 @@ class CandidateAssignmentService:
         if user.tenant_id != tenant_id:
             raise ValueError("User does not belong to the specified tenant")
 
-        # Build query
+        result = []
+        seen_candidate_ids = set()
+
+        # Part 1: Get candidates with explicit assignments to this user
         query = select(CandidateAssignment).where(
             CandidateAssignment.assigned_to_user_id == user_id
         )
 
         # Filter by status
-        # Frontend uses ACTIVE to mean PENDING or ACCEPTED
+        # Frontend uses ACTIVE to mean PENDING, ACCEPTED, or ACTIVE (broadcast)
         if status_filter:
             if status_filter == 'ACTIVE':
                 query = query.where(
-                    CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
+                    CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
                 )
             else:
                 query = query.where(CandidateAssignment.status == status_filter)
         elif not include_completed:
-            # By default, show only active assignments
+            # By default, show only active assignments (including broadcast)
             query = query.where(
-                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
+                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
             )
 
         query = query.order_by(CandidateAssignment.assigned_at.desc())
@@ -492,13 +496,13 @@ class CandidateAssignmentService:
         assignments = list(db.session.scalars(query))
 
         # Get candidate details with assignment info
-        # Transform to match frontend expectation: candidates with current_assignment nested
-        result = []
         for assignment in assignments:
             if assignment.candidate:
-                # Map PENDING/ACCEPTED to ACTIVE for frontend compatibility
+                seen_candidate_ids.add(assignment.candidate.id)
+                
+                # Map PENDING/ACCEPTED/ACTIVE to ACTIVE for frontend compatibility
                 display_status = assignment.status
-                if assignment.status in ['PENDING', 'ACCEPTED']:
+                if assignment.status in ['PENDING', 'ACCEPTED', 'ACTIVE']:
                     display_status = 'ACTIVE'
                     
                 candidate_dict = {
@@ -508,6 +512,7 @@ class CandidateAssignmentService:
                     'email': assignment.candidate.email,
                     'phone': assignment.candidate.phone,
                     'onboarding_status': assignment.candidate.onboarding_status,
+                    'is_visible_to_all_team': assignment.candidate.is_visible_to_all_team,
                     'current_assignment': {
                         'id': assignment.id,
                         'assigned_to_user_id': assignment.assigned_to_user_id,
@@ -517,6 +522,39 @@ class CandidateAssignmentService:
                         'assignment_reason': assignment.assignment_reason,
                         'assigned_at': assignment.assigned_at.isoformat() if assignment.assigned_at else None,
                         'completed_at': assignment.completed_at.isoformat() if assignment.completed_at else None,
+                    }
+                }
+                result.append(candidate_dict)
+
+        # Part 2: Get candidates with is_visible_to_all_team=True (only if showing active)
+        # These are automatically visible to all team members without explicit assignment
+        if status_filter == 'ACTIVE' or (not status_filter and not include_completed):
+            broadcast_candidates_query = select(Candidate).where(
+                Candidate.tenant_id == tenant_id,
+                Candidate.is_visible_to_all_team == True,
+                ~Candidate.id.in_(seen_candidate_ids) if seen_candidate_ids else True
+            ).order_by(Candidate.updated_at.desc())
+
+            broadcast_candidates = list(db.session.scalars(broadcast_candidates_query))
+
+            for candidate in broadcast_candidates:
+                candidate_dict = {
+                    'id': candidate.id,
+                    'first_name': candidate.first_name,
+                    'last_name': candidate.last_name,
+                    'email': candidate.email,
+                    'phone': candidate.phone,
+                    'onboarding_status': candidate.onboarding_status,
+                    'is_visible_to_all_team': candidate.is_visible_to_all_team,
+                    'current_assignment': {
+                        'id': None,  # No explicit assignment record
+                        'assigned_to_user_id': None,
+                        'assigned_by_user_id': None,
+                        'assignment_type': 'BROADCAST',
+                        'status': 'ACTIVE',
+                        'assignment_reason': 'Visible to all team members',
+                        'assigned_at': candidate.updated_at.isoformat() if candidate.updated_at else None,
+                        'completed_at': None,
                     }
                 }
                 result.append(candidate_dict)
@@ -654,4 +692,208 @@ class CandidateAssignmentService:
         return {
             "message": "Notification marked as read",
             "notification_id": notification_id,
+        }
+
+    @staticmethod
+    def broadcast_assign_candidate(
+        candidate_id: int,
+        assigned_by_user_id: int,
+        assignment_reason: Optional[str] = None,
+        changed_by: str = None,
+        tenant_id: int = None
+    ) -> Dict:
+        """
+        Broadcast assign a candidate to ALL managers and recruiters in the tenant.
+        This sets is_visible_to_all_team=True, making the candidate visible to all 
+        current AND future users with MANAGER, HIRING_MANAGER, or RECRUITER roles.
+
+        Args:
+            candidate_id: ID of candidate to assign
+            assigned_by_user_id: ID of user performing assignment
+            assignment_reason: Optional reason for broadcast assignment
+            changed_by: Identifier for audit log (format: "portal_user:123")
+            tenant_id: Tenant ID for validation
+
+        Returns:
+            Dictionary with assignment details
+
+        Raises:
+            ValueError: If validation fails or permissions denied
+        """
+        from app.models.role import Role
+        
+        # Get the candidate
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+
+        # Get the assigner
+        assigner = db.session.get(PortalUser, assigned_by_user_id)
+        if not assigner:
+            raise ValueError("Assigner user not found")
+
+        # Verify assigner has permission
+        if not assigner.has_permission("candidates.assign"):
+            raise ValueError("Only users with 'candidates.assign' permission can broadcast assign candidates")
+
+        # Use candidate's tenant if not provided
+        if tenant_id is None:
+            tenant_id = candidate.tenant_id
+        
+        # Verify same tenant
+        if candidate.tenant_id != tenant_id or assigner.tenant_id != tenant_id:
+            raise ValueError("Candidate and assigner must be in the same tenant")
+
+        # Check if already visible to all team
+        if candidate.is_visible_to_all_team:
+            raise ValueError("Candidate is already visible to all team members")
+
+        # Cancel any existing active individual assignments for this candidate
+        existing_assignments = db.session.scalars(
+            select(CandidateAssignment).where(
+                CandidateAssignment.candidate_id == candidate_id,
+                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+            )
+        ).all()
+
+        cancelled_count = 0
+        for existing in existing_assignments:
+            existing.status = 'CANCELLED'
+            existing.completed_at = datetime.utcnow()
+            existing.notes = 'Cancelled due to tenant-wide broadcast'
+            cancelled_count += 1
+
+        # Set the tenant-wide visibility flag
+        candidate.is_visible_to_all_team = True
+
+        # Update candidate status
+        candidate.onboarding_status = 'ASSIGNED'
+
+        # Get count of current team members for the response message
+        target_roles = ['MANAGER', 'HIRING_MANAGER', 'RECRUITER']
+        team_count_query = (
+            select(PortalUser)
+            .join(PortalUser.roles)
+            .where(
+                PortalUser.tenant_id == tenant_id,
+                PortalUser.is_active == True,
+                Role.name.in_(target_roles)
+            )
+            .distinct()
+        )
+        current_team_count = len(list(db.session.scalars(team_count_query)))
+
+        db.session.commit()
+
+        # Log audit
+        if not changed_by:
+            changed_by = f"portal_user:{assigned_by_user_id}"
+
+        AuditLogService.log_action(
+            action="BROADCAST_ASSIGN_CANDIDATE",
+            entity_type="Candidate",
+            entity_id=candidate_id,
+            changed_by=changed_by,
+            changes={
+                "candidate_id": candidate_id,
+                "candidate_name": f"{candidate.first_name} {candidate.last_name}",
+                "assignment_type": "BROADCAST",
+                "is_visible_to_all_team": True,
+                "current_team_count": current_team_count,
+                "previous_assignments_cancelled": cancelled_count,
+                "assignment_reason": assignment_reason,
+            },
+        )
+
+        logger.info(
+            f"Candidate {candidate_id} set to visible for all team by user {assigned_by_user_id} "
+            f"(current team size: {current_team_count})"
+        )
+
+        return {
+            "message": f"Candidate '{candidate.first_name} {candidate.last_name}' is now visible to all team members (currently {current_team_count} users, plus any future hires)",
+            "candidate_id": candidate_id,
+            "is_visible_to_all_team": True,
+            "current_team_count": current_team_count,
+            "previous_assignments_cancelled": cancelled_count,
+        }
+
+    @staticmethod
+    def set_candidate_visibility(
+        candidate_id: int,
+        is_visible_to_all_team: bool,
+        changed_by_user_id: int,
+        changed_by: str = None
+    ) -> Dict:
+        """
+        Set the tenant-wide visibility flag for a candidate.
+        
+        Args:
+            candidate_id: ID of candidate
+            is_visible_to_all_team: Whether candidate should be visible to all team
+            changed_by_user_id: ID of user making the change
+            changed_by: Identifier for audit log (format: "portal_user:123")
+            
+        Returns:
+            Dictionary with updated candidate info
+            
+        Raises:
+            ValueError: If validation fails or permissions denied
+        """
+        # Get the candidate
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            raise ValueError(f"Candidate with ID {candidate_id} not found")
+
+        # Get the user making the change
+        user = db.session.get(PortalUser, changed_by_user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        # Verify permission
+        if not user.has_permission("candidates.assign"):
+            raise ValueError("Only users with 'candidates.assign' permission can change candidate visibility")
+
+        # Verify same tenant
+        if candidate.tenant_id != user.tenant_id:
+            raise ValueError("Cannot modify candidates from other tenants")
+
+        previous_value = candidate.is_visible_to_all_team
+        
+        if previous_value == is_visible_to_all_team:
+            return {
+                "message": f"Candidate visibility unchanged (already {'visible' if is_visible_to_all_team else 'not visible'} to all team)",
+                "candidate_id": candidate_id,
+                "is_visible_to_all_team": is_visible_to_all_team,
+            }
+
+        # Update the flag
+        candidate.is_visible_to_all_team = is_visible_to_all_team
+        
+        db.session.commit()
+
+        # Log audit
+        if not changed_by:
+            changed_by = f"portal_user:{changed_by_user_id}"
+
+        AuditLogService.log_action(
+            action="SET_CANDIDATE_VISIBILITY",
+            entity_type="Candidate",
+            entity_id=candidate_id,
+            changed_by=changed_by,
+            changes={
+                "candidate_id": candidate_id,
+                "candidate_name": f"{candidate.first_name} {candidate.last_name}",
+                "is_visible_to_all_team": is_visible_to_all_team,
+                "previous_value": previous_value,
+            },
+        )
+
+        visibility_text = "visible to all team members" if is_visible_to_all_team else "no longer visible to all team members"
+        logger.info(f"Candidate {candidate_id} is now {visibility_text}")
+
+        return {
+            "message": f"Candidate '{candidate.first_name} {candidate.last_name}' is now {visibility_text}",
+            "candidate_id": candidate_id,
+            "is_visible_to_all_team": is_visible_to_all_team,
         }

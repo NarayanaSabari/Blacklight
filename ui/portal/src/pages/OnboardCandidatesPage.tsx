@@ -35,13 +35,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -62,10 +55,9 @@ import { toast } from 'sonner';
 import { onboardingApi } from '@/lib/onboardingApi';
 import { invitationApi } from '@/lib/api/invitationApi'; // Added import
 import { candidateApi } from '@/lib/candidateApi'; // Added for async resume uploads
-import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
-import { teamApi } from '@/lib/teamApi';
 import { usePermissions } from '@/hooks/usePermissions';
 import { ReviewModal } from '@/components/candidates/ReviewModal'; // Added for async resume review
+import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import type { OnboardingStatus, CandidateOnboardingInfo, Candidate } from '@/types'; // Modified import
 
 const ONBOARDING_STATUS_COLORS: Record<OnboardingStatus, string> = {
@@ -99,7 +91,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
   const [reviewModalOpen, setReviewModalOpen] = useState(false); // For async resume review
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateOnboardingInfo | null>(null);
   const [selectedResumeCandidate, setSelectedResumeCandidate] = useState<Candidate | null>(null); // For async resume candidates
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState('');
 
   // Permission checks
@@ -157,29 +148,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
     enabled: canViewCandidates && activeTab === 'email-invitations',
   });
 
-  // Fetch available users for assignment
-  const { data: availableUsersData } = useQuery({
-    queryKey: ['available-managers'],
-    queryFn: () => teamApi.getAvailableManagers(),
-    enabled: assignDialogOpen && canOnboardCandidates,
-  });
-
-  // Assign candidate mutation
-  const assignMutation = useMutation({
-    mutationFn: candidateAssignmentApi.assignCandidate,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pending-assignment-candidates'] });
-      queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-      toast.success('Candidate assigned successfully');
-      setAssignDialogOpen(false);
-      setSelectedCandidate(null);
-      setSelectedUserId('');
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to assign candidate');
-    },
-  });
-
   // Onboard candidate mutation
   const onboardMutation = useMutation({
     mutationFn: onboardingApi.onboardCandidate,
@@ -230,18 +198,6 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
   const handleAssign = (candidate: CandidateOnboardingInfo) => {
     setSelectedCandidate(candidate);
     setAssignDialogOpen(true);
-  };
-
-  // Confirm assign
-  const confirmAssign = () => {
-    if (!selectedCandidate || !selectedUserId) {
-      toast.error('Please select a user to assign');
-      return;
-    }
-    assignMutation.mutate({
-      candidate_id: selectedCandidate.id,
-      assigned_to_user_id: parseInt(selectedUserId),
-    });
   };
 
   // Handle onboard candidate
@@ -963,52 +919,24 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
         </CardContent>
       </Card>
 
-      {/* Assign Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign Candidate</DialogTitle>
-            <DialogDescription>
-              Assign {selectedCandidate?.first_name} {selectedCandidate?.last_name} to a user for
-              onboarding
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Select User</label>
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableUsersData?.managers.map((user) => (
-                    <SelectItem key={user.id} value={user.id.toString()}>
-                      {user.first_name} {user.last_name} ({user.email})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAssignDialogOpen(false);
-                setSelectedCandidate(null);
-                setSelectedUserId('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={confirmAssign} disabled={assignMutation.isPending || !selectedUserId}>
-              {assignMutation.isPending ? 'Assigning...' : 'Assign'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Assign Dialog - Using CandidateAssignmentDialog */}
+      {selectedCandidate && (
+        <CandidateAssignmentDialog
+          candidateId={selectedCandidate.id}
+          candidateName={`${selectedCandidate.first_name} ${selectedCandidate.last_name}`}
+          open={assignDialogOpen}
+          onOpenChange={(open) => {
+            setAssignDialogOpen(open);
+            if (!open) {
+              setSelectedCandidate(null);
+            }
+          }}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['ready-to-assign'] });
+            queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
+          }}
+        />
+      )}
 
       {/* Onboard Dialog */}
       <Dialog open={onboardDialogOpen} onOpenChange={setOnboardDialogOpen}>

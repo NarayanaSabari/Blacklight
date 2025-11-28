@@ -36,6 +36,46 @@ export const candidateAssignmentApi = {
   },
 
   /**
+   * Broadcast assign a candidate to ALL managers and recruiters in the tenant
+   * Sets is_visible_to_all_team=True, making the candidate visible to all current AND future team members
+   * @param candidateId - Candidate ID to broadcast assign
+   * @param reason - Optional reason for assignment
+   */
+  broadcastAssignCandidate: async (
+    candidateId: number,
+    reason?: string
+  ): Promise<{
+    message: string;
+    candidate_id: number;
+    is_visible_to_all_team: boolean;
+    current_team_count: number;
+    previous_assignments_cancelled: number;
+  }> => {
+    return apiRequest.post('/api/candidates/assignments/broadcast', {
+      candidate_id: candidateId,
+      assignment_reason: reason,
+    });
+  },
+
+  /**
+   * Set the tenant-wide visibility flag for a candidate
+   * @param candidateId - Candidate ID
+   * @param isVisibleToAllTeam - Whether candidate should be visible to all team members
+   */
+  setCandidateVisibility: async (
+    candidateId: number,
+    isVisibleToAllTeam: boolean
+  ): Promise<{
+    message: string;
+    candidate_id: number;
+    is_visible_to_all_team: boolean;
+  }> => {
+    return apiRequest.put(`/api/candidates/assignments/visibility/${candidateId}`, {
+      is_visible_to_all_team: isVisibleToAllTeam,
+    });
+  },
+
+  /**
    * Reassign a candidate from current assignee to a new assignee
    * @param data - Reassignment data (candidate_id, new_assigned_to_user_id, optional reason)
    */

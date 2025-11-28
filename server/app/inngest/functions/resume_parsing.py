@@ -3,6 +3,7 @@ Inngest Resume Parsing Workflow
 Handles async resume parsing after upload
 """
 import logging
+import os
 from typing import Dict, Any
 
 import inngest
@@ -12,6 +13,7 @@ from app import db
 from app.models.candidate import Candidate
 from app.services.resume_parser import ResumeParserService
 from app.utils.text_extractor import TextExtractor  # FIXED: correct import path
+from app.services.file_storage import FileStorageService
 
 logger = logging.getLogger(__name__)
 
@@ -66,16 +68,39 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
                 "skipped": True,
             }
         
-        if not candidate.resume_file_path:
+        if not candidate.resume_file_key:
             logger.error(f"[PARSE-RESUME] No resume file for candidate {candidate_id}")
             _update_candidate_status(candidate_id, "pending_review", {})
             return {"status": "error", "message": "No resume file"}
         
         # Step 2: Extract text (STEP - file operation, might fail)
-        resume_text = await ctx.step.run(
-            "extract-resume-text",
-            lambda: _extract_resume_text(candidate.resume_file_path)
-        )
+        local_path = None
+        # If file is remote, download to temp using FileStorageService
+        if getattr(candidate, 'resume_file_key', None):
+            storage = FileStorageService()
+            local_path, err = storage.download_to_temp(candidate.resume_file_key)
+            if err:
+                logger.error(f"[PARSE-RESUME] Failed to download file for candidate {candidate_id}: {err}")
+                _update_candidate_status(candidate_id, "pending_review", {})
+                return {"status": "error", "message": "Failed to download resume file"}
+
+            try:
+                resume_text = await ctx.step.run(
+                    "extract-resume-text",
+                    lambda: _extract_resume_text(local_path)
+                )
+            finally:
+                try:
+                    import os
+                    os.remove(local_path)
+                except Exception:
+                    pass
+        else:
+            # NOTE: No local fallback supported in Phase 3 - we only support parsing by file_key.
+            resume_text = await ctx.step.run(
+                "extract-resume-text",
+                lambda: _extract_resume_text(local_path)
+            )
         
         if not resume_text:
             logger.error(f"[PARSE-RESUME] Failed to extract text from resume for candidate {candidate_id}")
@@ -86,7 +111,7 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
         # Step 3: Run AI parsing (STEP - external API, can fail, needs retry)
         parsed_data = await ctx.step.run(
             "ai-parse-resume",
-            lambda: _parse_with_ai(resume_text, candidate.resume_file_path)
+            lambda: _parse_with_ai(resume_text, local_path)
         )
         
         # Step 4 & 5: Update candidate (direct - simple DB operations)

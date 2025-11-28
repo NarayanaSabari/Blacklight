@@ -5,6 +5,7 @@ Public API endpoints for candidate document upload during onboarding (token-base
 from flask import Blueprint, request, jsonify
 from werkzeug.datastructures import FileStorage
 from datetime import datetime, timezone
+import os
 
 from app.services.document_service import DocumentService
 from app.services.invitation_service import InvitationService
@@ -138,7 +139,7 @@ def upload_public_document():
         if document_type == 'resume' and document:
             try:
                 from app.services.resume_parser import ResumeParserService
-                from app.utils.text_extractor import extract_text_from_file
+                from app.utils.text_extractor import TextExtractor
                 from app.services.skills_matcher import SkillsMatcher
                 import logging
                 
@@ -149,7 +150,23 @@ def upload_public_document():
                 logger.info(f"[PARSE] Starting resume parsing for invitation {invitation.id}")
                 
                 # Extract text from uploaded file
-                text = extract_text_from_file(document.file_path)
+                from app.services.file_storage import FileStorageService
+                fs = FileStorageService()
+                if getattr(document, 'storage_backend', None) == 'gcs' or (document.file_path and not os.path.exists(document.file_path)):
+                    tmp_file, err = fs.download_to_temp(document.file_key)
+                    if err:
+                        logger.error(f"[PARSE] Failed to download resume for parsing: {err}")
+                        text = ''
+                    else:
+                        extracted = TextExtractor.extract_from_file(tmp_file)
+                        text = TextExtractor.clean_text(extracted.get('text', ''))
+                        try:
+                            os.remove(tmp_file)
+                        except Exception:
+                            pass
+                else:
+                    extracted = TextExtractor.extract_from_file(document.file_path)
+                    text = TextExtractor.clean_text(extracted.get('text', ''))
                 
                 if not text or len(text.strip()) < 50:
                     logger.warning(f"[PARSE] Insufficient text extracted from resume for invitation {invitation.id} (length: {len(text) if text else 0})")

@@ -45,7 +45,7 @@ interface SplitScreenReviewProps {
 type ReviewCandidate = Candidate | InvitationWithRelations;
 
 const isCandidateType = (item: ReviewCandidate): item is Candidate => {
-    return 'resume_file_url' in item || 'status' in item;
+    return 'status' in item; // Candidate objects include 'status' field reliably
 };
 
 export function SplitScreenReview({

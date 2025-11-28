@@ -9,7 +9,7 @@ from werkzeug.datastructures import FileStorage
 
 from app import db
 from app.models.candidate import Candidate
-from app.services.file_storage import LegacyResumeStorageService
+from app.services.file_storage import FileStorageService
 from app.services.resume_parser import ResumeParserService
 from app.utils.text_extractor import TextExtractor
 from app.utils.skills_matcher import SkillsMatcher
@@ -21,7 +21,8 @@ class CandidateService:
     """
     
     def __init__(self):
-        self.file_storage = LegacyResumeStorageService()
+        # Use modern FileStorageService for uploads/downloads; legacy wrapper remains in file_storage for compatibility
+        self.file_storage = FileStorageService()
         self.parser = None  # Lazy initialization
         self.skills_matcher = SkillsMatcher()
     
@@ -56,13 +57,14 @@ class CandidateService:
             }
         """
         try:
-            # Stage 1: Upload file
-            upload_result = self.file_storage.upload_resume(
+            # Stage 1: Upload file via FileStorageService
+            upload_result = self.file_storage.upload_file(
                 file=file,
                 tenant_id=tenant_id,
+                document_type='resume',
                 candidate_id=candidate_id,
             )
-            
+
             # Check upload success
             if not upload_result.get('success', False):
                 return {
@@ -70,56 +72,99 @@ class CandidateService:
                     'status': 'error',
                     'error': upload_result.get('error', 'File upload failed'),
                 }
-            
-            file_path = upload_result['file_path']
-            
-            # Stage 2: Extract text
-            print(f"[DEBUG] Extracting text from: {file_path}")
-            extracted = TextExtractor.extract_from_file(file_path)
+
+            # Normalize result
+            file_key = upload_result.get('file_key') or upload_result.get('file_path')
+            file_name = upload_result.get('file_name') or upload_result.get('original_filename')
+            storage_backend = upload_result.get('storage_backend', self.file_storage.storage_backend)
+            # Determine a usable path for local parsing
+            if storage_backend == 'gcs':
+                file_path = None
+            else:
+                # Local backend stores files under self.file_storage.local_path / file_key
+                file_path = upload_result.get('file_path') or str(self.file_storage.local_path / file_key)
+
+            # Stage 2: Extract text (download to temp if remote)
+            local_path = None
+            if storage_backend == 'gcs' or (file_path and not os.path.exists(file_path)):
+                local_path, dl_err = self.file_storage.download_to_temp(file_key)
+                if dl_err:
+                    raise Exception(f"Failed to download file for parsing: {dl_err}")
+                target_path = local_path
+            else:
+                target_path = file_path
+
+            print(f"[DEBUG] Extracting text from: {target_path}")
+            extracted = TextExtractor.extract_from_file(target_path)
             text = TextExtractor.clean_text(extracted['text'])
             print(f"[DEBUG] Extracted {len(text)} characters")
-            
+
             # Stage 3: Parse with hybrid approach
             print(f"[DEBUG] Parsing resume with AI...")
             parser = self._get_parser()
-            parsed_data = parser.parse_resume(text, file_type=upload_result['extension'])
+            extension = upload_result.get('file_name', file_name).rsplit('.', 1)[1] if upload_result.get('file_name') or file_name and '.' in (upload_result.get('file_name') or file_name) else ''
+            parsed_data = parser.parse_resume(text, file_type=extension)
             print(f"[DEBUG] Parsing complete")
-            
+
             # Stage 4: Enhance skills with matcher
             if parsed_data.get('skills'):
                 skills_analysis = self.skills_matcher.extract_skills(' '.join(parsed_data['skills']))
                 parsed_data['skills'] = skills_analysis['matched_skills']
                 parsed_data['skills_categories'] = skills_analysis['categories']
-            
-            # Stage 5: Create or update candidate
-            print(f"[DEBUG] Creating/updating candidate...")
+
+            # Stage 5: Build file_info (backwards compatible)
+            file_info = {
+                'file_key': file_key,
+                'file_name': file_name,
+                'file_url': upload_result.get('file_url') or file_key,
+                'storage_backend': storage_backend,
+                'mime_type': upload_result.get('mime_type'),
+                'extension': extension,
+                'file_size': upload_result.get('file_size'),
+                'uploaded_at': upload_result.get('uploaded_at'),
+                'original_filename': upload_result.get('original_filename'),
+            }
+
+            # Stage 6: Create or update candidate
             if candidate_id:
-                candidate = self._update_candidate(candidate_id, parsed_data, upload_result)
+                candidate = self._update_candidate(candidate_id, parsed_data, file_info)
             elif auto_create:
-                candidate = self._create_candidate(tenant_id, parsed_data, upload_result)
+                candidate = self._create_candidate(tenant_id, parsed_data, file_info)
             else:
-                # Just return parsed data without saving
+                # Cleanup temp file if created
+                if local_path:
+                    try:
+                        os.remove(local_path)
+                    except Exception:
+                        pass
                 return {
                     'candidate_id': None,
-                    'file_info': upload_result,
+                    'file_info': file_info,
                     'parsed_data': parsed_data,
                     'extracted_metadata': extracted,
                     'status': 'success',
                 }
-            
+
             db.session.commit()
             print(f"[DEBUG] Candidate saved: ID={candidate.id}")
-            
+
             # Verify data was saved
             db.session.refresh(candidate)
             print(f"[DEBUG] After commit - work_experience count: {len(candidate.work_experience or [])}")
             print(f"[DEBUG] After commit - education count: {len(candidate.education or [])}")
             if candidate.work_experience:
                 print(f"[DEBUG] After commit - first work_experience: {candidate.work_experience[0]}")
-            
+
+            # Cleanup local temp file if created
+            if local_path:
+                try:
+                    os.remove(local_path)
+                except Exception:
+                    pass
+
             return {
                 'candidate_id': candidate.id,
-                'file_info': upload_result,
+                'file_info': file_info,
                 'parsed_data': parsed_data,
                 'extracted_metadata': extracted,
                 'status': 'success',
@@ -192,7 +237,7 @@ class CandidateService:
         if education_data:
             print(f"[DEBUG] First education: {education_data[0]}")
         
-        candidate = Candidate(
+            candidate = Candidate(
             tenant_id=tenant_id,
             
             # Basic info - ensure no nulls
@@ -203,8 +248,9 @@ class CandidateService:
             full_name=full_name,
             
             # Resume file
-            resume_file_path=file_info['file_path'],
-            resume_file_url=file_info['file_url'],
+            # File storage fields
+            resume_file_key=file_info.get('file_key'),
+            resume_storage_backend=file_info.get('storage_backend', 'local'),
             resume_uploaded_at=datetime.utcnow(),
             resume_parsed_at=datetime.utcnow(),
             
@@ -240,24 +286,23 @@ class CandidateService:
         
         db.session.add(candidate)
         return candidate
-    
+
     def _update_candidate(
         self,
         candidate_id: int,
         parsed_data: Dict,
         file_info: Dict,
     ) -> Candidate:
-        """
-        Update existing candidate with parsed data
-        """
+        """Update existing candidate with parsed data"""
         candidate = db.session.get(Candidate, candidate_id)
         
         if not candidate:
             raise ValueError(f"Candidate {candidate_id} not found")
         
         # Update resume file
-        candidate.resume_file_path = file_info['file_path']
-        candidate.resume_file_url = file_info['file_url']
+        candidate.resume_file_key = file_info.get('file_key')
+        candidate.resume_storage_backend = file_info.get('storage_backend', candidate.resume_storage_backend)
+        # Do not set `resume_file_url` (legacy field); prefer signed URL generation using `resume_file_key`.
         candidate.resume_uploaded_at = datetime.utcnow()
         candidate.resume_parsed_at = datetime.utcnow()
         
@@ -319,10 +364,9 @@ class CandidateService:
         return parts[0] if parts else None
     
     def _extract_last_name(self, full_name: Optional[str]) -> Optional[str]:
-        """Extract last name from full name"""
         if not full_name:
             return None
-        
+
         parts = full_name.strip().split()
         if len(parts) > 1:
             return ' '.join(parts[1:])
@@ -469,8 +513,8 @@ class CandidateService:
         if not candidate:
             return False
         
-        # Store resume file path before deletion
-        resume_file_path = candidate.resume_file_path
+        # Store resume file key before deletion (prefer file_key for GCS)
+        resume_file_key = candidate.resume_file_key
         
         # Get all document file paths before deletion
         doc_stmt = select(CandidateDocument).where(CandidateDocument.candidate_id == candidate_id)
@@ -506,17 +550,25 @@ class CandidateService:
             raise Exception(f"Failed to delete candidate from database: {str(e)}")
         
         # Delete resume file after successful database deletion
-        if resume_file_path:
-            try:
-                self.file_storage.delete_resume(resume_file_path)
-            except Exception as e:
-                # Log but don't fail - database deletion already succeeded
-                print(f"Warning: Failed to delete resume file {resume_file_path}: {e}")
+        # Prefer delete by resume_file_key (GCS), otherwise by legacy path
+        try:
+            if resume_file_key:
+                self.file_storage.delete_file(resume_file_key)
+            else:
+                # No fallback deletion by local path - we only delete files by `resume_file_key`.
+                # Legacy local files will not be deleted by this operation. This is acceptable
+                # because we are deprecating local `resume_file_path` usage and won't backfill.
+                pass
+        except Exception as e:
+            # Log but don't fail - database deletion already succeeded
+            # Provide whichever path/key was attempted to be deleted for debugging
+            attempted = resume_file_key
+            print(f"Warning: Failed to delete resume file {attempted}: {e}")
         
         # Delete document files after successful database deletion
         for doc_path in document_paths:
             try:
-                self.file_storage.delete_document(doc_path)
+                self.file_storage.delete_file(doc_path)
             except Exception as e:
                 # Log but don't fail - database deletion already succeeded
                 print(f"Warning: Failed to delete document file {doc_path}: {e}")
@@ -535,17 +587,28 @@ class CandidateService:
             Parsed data
         """
         candidate = self.get_candidate(candidate_id, tenant_id)
-        
-        if not candidate or not candidate.resume_file_path:
+
+        if not candidate:
+            raise ValueError("Candidate not found")
+
+        # Determine file source: prefer resume_file_key for GCS or remote storage
+        local_path = None
+        if getattr(candidate, 'resume_file_key', None):
+            local_path, err = self.file_storage.download_to_temp(candidate.resume_file_key)
+            if err:
+                raise Exception(f"Failed to download resume for parsing: {err}")
+            target_path = local_path
+        else:
+            # Require `resume_file_key` (no fallback to `resume_file_path` in Phase 3)
             raise ValueError("Candidate or resume file not found")
-        
+
         # Extract text
-        extracted = TextExtractor.extract_from_file(candidate.resume_file_path)
+        extracted = TextExtractor.extract_from_file(target_path)
         text = TextExtractor.clean_text(extracted['text'])
-        
+
         # Parse
         parser = self._get_parser()
-        file_ext = os.path.splitext(candidate.resume_file_path)[1][1:]
+        file_ext = os.path.splitext(target_path)[1][1:]
         parsed_data = parser.parse_resume(text, file_type=file_ext)
         
         # Enhance skills
@@ -553,10 +616,17 @@ class CandidateService:
             skills_analysis = self.skills_matcher.extract_skills(' '.join(parsed_data['skills']))
             parsed_data['skills'] = skills_analysis['matched_skills']
             parsed_data['skills_categories'] = skills_analysis['categories']
+        # At this point `target_path` is guaranteed to be set and accessible.
         
         # Update candidate
+        # Set parsed metadata and cleanup
         candidate.parsed_resume_data = parsed_data
         candidate.resume_parsed_at = datetime.utcnow()
+        if local_path:
+            try:
+                os.remove(local_path)
+            except Exception:
+                pass
         
         db.session.commit()
         
@@ -577,15 +647,15 @@ class CandidateService:
     ) -> Candidate:
         """
         Mark a candidate as onboarded.
-        
+
         Args:
             candidate_id: Candidate ID
             onboarded_by_user_id: ID of user performing onboarding
             tenant_id: Tenant ID (for access control)
-        
+
         Returns:
             Updated candidate
-        
+
         Raises:
             ValueError: If candidate not found or validation fails
         """
