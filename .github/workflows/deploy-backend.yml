@@ -1,0 +1,107 @@
+# =============================================================================
+# GitHub Actions - Deploy Blacklight Backend to Cloud Run
+# =============================================================================
+# Triggers only when server/ files change
+# =============================================================================
+
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+  SERVICE_NAME: blacklight-api
+
+jobs:
+  deploy:
+    name: Build and Deploy Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build Docker image
+        working-directory: ./server
+        run: |
+          docker build \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
+            -f Dockerfile .
+
+      - name: Push Docker image
+        run: |
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 100 \
+            --timeout 300 \
+            --concurrency 80 \
+            --set-env-vars "\
+              ENVIRONMENT=production,\
+              FLASK_ENV=production,\
+              FLASK_DEBUG=false,\
+              LOG_LEVEL=INFO,\
+              LOG_FORMAT=json,\
+              STORAGE_BACKEND=gcs,\
+              GCS_BUCKET_NAME=blacklight_freelance,\
+              GCS_PROJECT_ID=${{ env.PROJECT_ID }},\
+              AI_PARSING_PROVIDER=gemini,\
+              GEMINI_MODEL=gemini-2.5-flash,\
+              MAX_FILE_SIZE_MB=10,\
+              SIGNED_URL_EXPIRY_SECONDS=3600,\
+              SMTP_ENABLED=true,\
+              SMTP_HOST=smtp.gmail.com,\
+              SMTP_PORT=587,\
+              SMTP_USE_TLS=true,\
+              SMTP_FROM_EMAIL=sabariokg@gmail.com,\
+              SMTP_FROM_NAME=BlackLight HR,\
+              SMTP_USERNAME=sabariokg@gmail.com,\
+              INNGEST_DEV=false" \
+            --set-secrets "\
+              SECRET_KEY=blacklight-secret-key:latest,\
+              DATABASE_URL=blacklight-database-url:latest,\
+              REDIS_URL=blacklight-redis-url:latest,\
+              REDIS_CACHE_URL=blacklight-redis-url:latest,\
+              GEMINI_API_KEY=blacklight-gemini-api-key:latest,\
+              GOOGLE_API_KEY=blacklight-gemini-api-key:latest,\
+              GCS_CREDENTIALS_JSON=blacklight-gcs-credentials:latest,\
+              SMTP_PASSWORD=blacklight-smtp-password:latest"
+
+      - name: Get Service URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region ${{ env.REGION }} \
+            --format 'value(status.url)')
+          echo "✅ Backend deployed to: $URL"
+          echo "BACKEND_URL=$URL" >> $GITHUB_ENV
