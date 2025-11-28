@@ -266,7 +266,11 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     setup_logging(app, app.config.get("LOG_FORMAT", "json"))
     
     # Initialize extensions
-    db.init_app(app)
+    try:
+        db.init_app(app)
+    except Exception:
+        app.logger.error("Failed to initialize database extension", exc_info=True)
+        raise
     
     # Initialize limiter with logging
     limiter.init_app(app)
@@ -290,10 +294,18 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     setup_error_handlers(app)
     
     # Register blueprints
-    register_blueprints(app)
+    try:
+        register_blueprints(app)
+    except Exception as e:
+        app.logger.error("Failed to register blueprints during app startup", exc_info=True)
+        raise
     
     # Register Inngest background jobs
-    register_inngest(app)
+    try:
+        register_inngest(app)
+    except Exception as e:
+        app.logger.error("Failed to register Inngest during app startup", exc_info=True)
+        raise
     
     # Note: Database tables are managed via Alembic migrations (python manage.py migrate)
     # Do not use db.create_all() as it bypasses migration tracking

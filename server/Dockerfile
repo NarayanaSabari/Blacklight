@@ -95,5 +95,5 @@ CMD exec gunicorn \
     --error-logfile - \
     --capture-output \
     --enable-stdio-inheritance \
-    --log-level info \
+    --log-level debug \
     "wsgi:app"
