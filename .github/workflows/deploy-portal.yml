@@ -39,8 +39,8 @@ jobs:
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Get Backend URL
         id: backend
@@ -59,20 +59,20 @@ jobs:
         working-directory: ./ui/portal
         run: |
           docker build \
-            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
-            -t gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/blacklight/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/blacklight/${{ env.SERVICE_NAME }}:latest \
             --build-arg VITE_API_URL=${{ steps.backend.outputs.url }} \
             -f Dockerfile .
 
       - name: Push Docker image
         run: |
-          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
-          docker push gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:latest
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/blacklight/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/blacklight/${{ env.SERVICE_NAME }}:latest
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/blacklight/${{ env.SERVICE_NAME }}:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
