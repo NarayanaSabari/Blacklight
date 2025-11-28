@@ -5,7 +5,7 @@
 
 export const env = {
   // API Configuration
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000',
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'https://blacklight-api-667302703024.us-central1.run.app',
   apiTimeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
 
   // Application

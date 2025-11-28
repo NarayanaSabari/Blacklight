@@ -11,7 +11,7 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
 };
 
 export const env = {
-  apiBaseUrl: getEnvVar('VITE_API_BASE_URL', 'http://localhost:5000'),
+  apiBaseUrl: getEnvVar('VITE_API_BASE_URL', 'https://blacklight-api-667302703024.us-central1.run.app'),
   apiTimeout: parseInt(getEnvVar('VITE_API_TIMEOUT', '30000'), 10),
   environment: getEnvVar('VITE_ENVIRONMENT', 'development'),
 } as const;
