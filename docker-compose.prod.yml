@@ -211,9 +211,12 @@ services:
     container_name: blacklight-nginx
     restart: unless-stopped
     depends_on:
-      - backend
-      - portal
-      - central
+      backend:
+        condition: service_healthy
+      portal:
+        condition: service_healthy
+      central:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
