@@ -62,6 +62,7 @@ blacklight-bucket.json
 
 # Production Deployment
 .env.production
+.env.vm
 backups/
 nginx/ssl/*.pem
 
