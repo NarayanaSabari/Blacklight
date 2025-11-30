@@ -42,7 +42,7 @@ export function DeleteTenantDialog({
   const [understood, setUnderstood] = useState(false);
 
   const expectedText = tenant.slug;
-  const isConfirmValid = confirmText === expectedText && understood && reason.trim().length > 0;
+  const isConfirmValid = confirmText === expectedText && understood && reason.trim().length >= 10;
 
   const handleConfirm = async () => {
     if (isConfirmValid) {

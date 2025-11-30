@@ -20,6 +20,7 @@ class PMAdminUserCreateSchema(BaseModel):
 class PMAdminUserUpdateSchema(BaseModel):
     """Schema for updating a PM admin user."""
     
+    email: Optional[EmailStr] = Field(None, description="Admin email (globally unique)")
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)

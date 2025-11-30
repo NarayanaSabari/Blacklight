@@ -71,7 +71,7 @@ export function useDeletePMAdmin(adminId: number) {
   return useMutation({
     mutationFn: async () => {
       const response = await apiClient.delete<{ message: string }>(
-        `/api/pm-admin/users/${adminId}`
+        `/api/pm-admin/admins/${adminId}`
       );
       return response.data;
     },

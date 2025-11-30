@@ -12,7 +12,7 @@ export function useReactivateTenant(tenantId: number) {
   return useMutation({
     mutationFn: async () => {
       const response = await apiClient.post<{ message: string }>(
-        `/api/tenants/${tenantId}/reactivate`
+        `/api/tenants/${tenantId}/activate`
       );
       return response.data;
     },

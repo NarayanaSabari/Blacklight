@@ -436,10 +436,10 @@ class TenantService:
         # Validate new plan limits against current usage
         stats = TenantService.get_usage_stats(tenant_id)
 
-        if stats.users_count > new_plan.max_users:
+        if stats.user_count > new_plan.max_users:
             raise ValueError(
                 f"Cannot change to plan '{new_plan.name}': "
-                f"Current users ({stats.users_count}) exceed plan limit ({new_plan.max_users})"
+                f"Current users ({stats.user_count}) exceed plan limit ({new_plan.max_users})"
             )
 
         # TODO: Validate candidate and job limits when those features are implemented

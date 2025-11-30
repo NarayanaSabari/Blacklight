@@ -225,6 +225,11 @@ class PMAdminService:
             changes["last_name"] = (admin.last_name, data.last_name)
             admin.last_name = data.last_name
 
+        # Update phone
+        if data.phone is not None and data.phone != admin.phone:
+            changes["phone"] = (admin.phone, data.phone)
+            admin.phone = data.phone
+
         # Update is_active
         if data.is_active is not None and data.is_active != admin.is_active:
             changes["is_active"] = (admin.is_active, data.is_active)
@@ -307,3 +312,132 @@ class PMAdminService:
             "message": f"Password reset successfully for tenant admin '{portal_user.email}'",
             "portal_user_id": data.portal_user_id,
         }
+
+    @staticmethod
+    def change_password(admin_id: int, current_password: str, new_password: str) -> dict:
+        """
+        Change a PM Admin user's own password.
+
+        Args:
+            admin_id: Admin ID
+            current_password: Current password for verification
+            new_password: New password to set
+
+        Returns:
+            Dictionary with success message
+
+        Raises:
+            ValueError: If admin not found or current password incorrect
+        """
+        admin = db.session.get(PMAdminUser, admin_id)
+        if not admin:
+            raise ValueError(f"PM Admin with ID {admin_id} not found")
+
+        # Verify current password
+        if not bcrypt.checkpw(current_password.encode("utf-8"), admin.password_hash.encode("utf-8")):
+            raise ValueError("Current password is incorrect")
+
+        # Validate new password length
+        if len(new_password) < 8:
+            raise ValueError("New password must be at least 8 characters")
+
+        # Hash and set new password
+        password_hash = bcrypt.hashpw(
+            new_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+
+        admin.password_hash = password_hash
+        db.session.commit()
+
+        logger.info(f"PM Admin password changed: {admin_id}")
+
+        return {"message": "Password changed successfully"}
+
+    @staticmethod
+    def reset_admin_password(admin_id: int, new_password: str, changed_by: str) -> dict:
+        """
+        Reset another PM Admin user's password (PM Admin privilege).
+
+        Args:
+            admin_id: Admin ID to reset password for
+            new_password: New password to set
+            changed_by: Identifier for audit log (format: "pm_admin:123")
+
+        Returns:
+            Dictionary with success message
+
+        Raises:
+            ValueError: If admin not found or validation fails
+        """
+        admin = db.session.get(PMAdminUser, admin_id)
+        if not admin:
+            raise ValueError(f"PM Admin with ID {admin_id} not found")
+
+        # Validate new password length
+        if len(new_password) < 8:
+            raise ValueError("New password must be at least 8 characters")
+
+        # Hash and set new password
+        password_hash = bcrypt.hashpw(
+            new_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+
+        admin.password_hash = password_hash
+        db.session.commit()
+
+        # Log audit
+        AuditLogService.log_action(
+            action="RESET_PASSWORD",
+            entity_type="PMAdminUser",
+            entity_id=admin_id,
+            changed_by=changed_by,
+            changes={
+                "email": admin.email,
+                "reset_by_pm_admin": True,
+            },
+        )
+
+        logger.info(f"PM Admin password reset: {admin_id} ({admin.email}) by {changed_by}")
+
+        return {"message": f"Password reset successfully for admin '{admin.email}'"}
+
+    @staticmethod
+    def delete_admin(admin_id: int, changed_by: str) -> dict:
+        """
+        Delete a PM Admin user.
+
+        Args:
+            admin_id: Admin ID to delete
+            changed_by: Identifier for audit log (format: "pm_admin:123")
+
+        Returns:
+            Dictionary with deletion confirmation
+
+        Raises:
+            ValueError: If admin not found
+        """
+        admin = db.session.get(PMAdminUser, admin_id)
+        if not admin:
+            raise ValueError(f"PM Admin with ID {admin_id} not found")
+
+        email = admin.email
+
+        # Log audit before deletion
+        AuditLogService.log_action(
+            action="DELETE",
+            entity_type="PMAdminUser",
+            entity_id=admin_id,
+            changed_by=changed_by,
+            changes={
+                "email": email,
+                "first_name": admin.first_name,
+                "last_name": admin.last_name,
+            },
+        )
+
+        db.session.delete(admin)
+        db.session.commit()
+
+        logger.info(f"PM Admin deleted: {admin_id} ({email}) by {changed_by}")
+
+        return {"message": f"PM Admin '{email}' deleted successfully"}

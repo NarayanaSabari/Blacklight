@@ -397,6 +397,50 @@ def get_tenant(identifier: str):
         return error_response(str(e), 500)
 
 
+@bp.route("/<string:identifier>", methods=["PUT"])
+@require_pm_admin
+def update_tenant(identifier: str):
+    """
+    Update tenant by ID or slug.
+    
+    Requires: PM Admin authentication
+    
+    Path params:
+        - identifier: Tenant ID (integer) or slug (string)
+    
+    Request body: TenantUpdateSchema
+    
+    Returns:
+        200: Updated tenant
+        400: Validation error
+        404: Tenant not found
+    """
+    try:
+        data = TenantUpdateSchema.model_validate(request.get_json())
+        changed_by = get_changed_by()
+
+        # Convert identifier to int if possible
+        try:
+            tenant_id = int(identifier)
+        except ValueError:
+            # Get tenant by slug first to get ID
+            tenant = TenantService.get_tenant(identifier)
+            tenant_id = tenant.id
+
+        tenant = TenantService.update_tenant(tenant_id, data, changed_by)
+
+        return jsonify({
+            "tenant": tenant.model_dump(),
+            "message": "Tenant updated successfully"
+        }), 200
+
+    except ValueError as e:
+        status = 404 if "not found" in str(e).lower() else 400
+        return error_response(str(e), status)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @bp.route("/<string:identifier>", methods=["DELETE"])
 @require_pm_admin
 def delete_tenant(identifier: str):
@@ -416,7 +460,9 @@ def delete_tenant(identifier: str):
         404: Tenant not found
     """
     try:
-        data = TenantDeleteSchema.model_validate(request.get_json())
+        # Get JSON body - force parsing even for DELETE
+        json_data = request.get_json(force=True, silent=True) or {}
+        data = TenantDeleteSchema.model_validate(json_data)
         changed_by = get_changed_by()
 
         # Convert identifier to int if possible

@@ -370,3 +370,159 @@ def reset_tenant_admin_password():
         return error_response(str(e), 400)
     except Exception as e:
         return error_response(str(e), 500)
+
+
+# === Profile Management Endpoints ===
+
+
+@bp.route("/profile", methods=["PUT"])
+@require_pm_admin
+def update_profile():
+    """
+    Update current PM admin's profile.
+    
+    Requires: PM Admin authentication
+    
+    Request body:
+        - first_name: string (optional)
+        - last_name: string (optional)
+        - email: string (optional)
+        - phone: string (optional)
+    
+    Returns:
+        200: Updated admin profile
+        400: Validation error
+    """
+    try:
+        admin_id = request.pm_admin.get("user_id")
+        data = request.get_json()
+        changed_by = get_changed_by()
+
+        # Only allow updating certain fields for own profile
+        allowed_fields = ["first_name", "last_name", "email", "phone"]
+        update_data = {k: v for k, v in data.items() if k in allowed_fields}
+
+        if not update_data:
+            return error_response("No valid fields to update", 400)
+
+        admin = PMAdminService.update_admin(
+            admin_id, 
+            PMAdminUserUpdateSchema.model_validate(update_data), 
+            changed_by
+        )
+
+        return jsonify(admin.model_dump()), 200
+
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/password", methods=["PUT"])
+@require_pm_admin
+def change_password():
+    """
+    Change current PM admin's password.
+    
+    Requires: PM Admin authentication
+    
+    Request body:
+        - current_password: string (required)
+        - new_password: string (required)
+    
+    Returns:
+        200: Password changed successfully
+        400: Current password incorrect or validation error
+    """
+    try:
+        admin_id = request.pm_admin.get("user_id")
+        data = request.get_json()
+
+        current_password = data.get("current_password")
+        new_password = data.get("new_password")
+
+        if not current_password or not new_password:
+            return error_response("current_password and new_password are required", 400)
+
+        result = PMAdminService.change_password(admin_id, current_password, new_password)
+
+        return jsonify(result), 200
+
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/admins/<int:admin_id>", methods=["DELETE"])
+@require_pm_admin
+def delete_admin(admin_id: int):
+    """
+    Delete a PM admin user.
+    
+    Requires: PM Admin authentication
+    
+    Path params:
+        - admin_id: Admin ID
+    
+    Returns:
+        200: Admin deleted successfully
+        400: Cannot delete self or validation error
+        404: Admin not found
+    """
+    try:
+        current_admin_id = request.pm_admin.get("user_id")
+        
+        # Prevent self-deletion
+        if admin_id == current_admin_id:
+            return error_response("Cannot delete your own account", 400)
+        
+        changed_by = get_changed_by()
+        result = PMAdminService.delete_admin(admin_id, changed_by)
+
+        return jsonify(result), 200
+
+    except ValueError as e:
+        status = 404 if "not found" in str(e).lower() else 400
+        return error_response(str(e), status)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/admins/<int:admin_id>/password", methods=["PUT"])
+@require_pm_admin
+def reset_admin_password(admin_id: int):
+    """
+    Reset another PM admin's password (PM Admin privilege).
+    
+    Requires: PM Admin authentication
+    
+    Path params:
+        - admin_id: Admin ID
+    
+    Request body:
+        - new_password: string (required)
+    
+    Returns:
+        200: Password reset successfully
+        400: Validation error
+        404: Admin not found
+    """
+    try:
+        data = request.get_json()
+        new_password = data.get("new_password")
+
+        if not new_password:
+            return error_response("new_password is required", 400)
+
+        changed_by = get_changed_by()
+        result = PMAdminService.reset_admin_password(admin_id, new_password, changed_by)
+
+        return jsonify(result), 200
+
+    except ValueError as e:
+        status = 404 if "not found" in str(e).lower() else 400
+        return error_response(str(e), status)
+    except Exception as e:
+        return error_response(str(e), 500)

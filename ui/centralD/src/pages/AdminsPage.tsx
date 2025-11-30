@@ -11,9 +11,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePMAdmins } from '@/hooks/api';
 import { AdminTable } from '@/components/admins/AdminTable';
+import { CreateAdminDialog } from '@/components/dialogs/CreateAdminDialog';
 
 export function AdminsPage() {
   const [search, setSearch] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const { data: admins, isLoading, error } = usePMAdmins();
 
   const filteredAdmins = admins?.filter((admin) =>
@@ -30,7 +32,7 @@ export function AdminsPage() {
             Manage platform administrator accounts
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowCreateDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Create Admin
         </Button>
@@ -84,6 +86,12 @@ export function AdminsPage() {
       {!isLoading && !error && filteredAdmins && (
         <AdminTable admins={filteredAdmins} />
       )}
+
+      {/* Create Admin Dialog */}
+      <CreateAdminDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+      />
     </div>
   );
 }
