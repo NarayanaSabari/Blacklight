@@ -158,8 +158,9 @@ apiClient.interceptors.response.use(
         tokenManager.clearTokens();
         
         // Redirect to login if not already there
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        const loginPath = `${env.basePath}/login`;
+        if (!window.location.pathname.endsWith('/login')) {
+          window.location.href = loginPath;
         }
         
         return Promise.reject(refreshError);

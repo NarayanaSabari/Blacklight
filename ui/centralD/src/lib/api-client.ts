@@ -31,17 +31,21 @@ apiClient.interceptors.request.use(
   }
 );
 
+// Build login path with basePath
+const getLoginPath = () => `${env.basePath}/login`;
+
 // Response interceptor - Handle errors globally
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    const loginPath = getLoginPath();
     // Handle authentication errors
     if (error.response?.status === 401) {
       // Clear auth state
       localStorage.removeItem('pm_admin_token');
       // Redirect to login if not already there
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (!window.location.pathname.endsWith('/login')) {
+        window.location.href = loginPath;
       }
     }
 

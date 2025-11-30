@@ -4,6 +4,7 @@
  */
 
 import { apiRequest, tokenManager } from './api-client';
+import { env } from '@/lib/env';
 
 export interface LoginCredentials {
   email: string;
@@ -61,8 +62,9 @@ export async function logout(): Promise<void> {
     // Always clear local storage
     tokenManager.clearTokens();
     
-    // Redirect to login
-    window.location.href = '/login';
+    // Redirect to login with basePath
+    const loginPath = `${env.basePath}/login`;
+    window.location.href = loginPath;
   }
 }
 
