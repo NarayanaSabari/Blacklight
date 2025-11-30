@@ -64,3 +64,9 @@ blacklight-bucket.json
 .env.production
 backups/
 nginx/ssl/*.pem
+
+# Credentials (NEVER commit these!)
+credentials/*.json
+credentials/gcs-credentials.json
+*.pem
+*.key
