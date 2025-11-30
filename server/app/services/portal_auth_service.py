@@ -10,10 +10,9 @@ from app import db, redis_client
 from app.models import PortalUser, Tenant
 from app.models.tenant import TenantStatus
 from app.schemas.portal_user_schema import PortalLoginResponseSchema, PortalUserResponseSchema
-from config.settings import Settings
+from config.settings import settings  # Use global settings instance
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 
 class PortalAuthService:

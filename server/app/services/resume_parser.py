@@ -2,7 +2,6 @@
 Resume Parser Service
 Hybrid parsing using spaCy (fast extraction) + Gemini AI with LangChain (complex analysis)
 """
-import os
 import re
 import json
 from typing import Dict, List, Optional, Any
@@ -12,6 +11,8 @@ from spacy.matcher import Matcher
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
+
+from config.settings import settings  # Use global settings instance
 
 
 # Pydantic schemas for structured output
@@ -79,7 +80,7 @@ class ResumeParserService:
             )
         
         # Configure AI provider
-        self.ai_provider = os.getenv('AI_PARSING_PROVIDER', 'gemini')
+        self.ai_provider = settings.ai_parsing_provider
         self._configure_ai()
         
         # Initialize matcher for pattern matching
@@ -89,21 +90,21 @@ class ResumeParserService:
     def _configure_ai(self):
         """Configure AI provider (Gemini via LangChain or OpenAI)"""
         if self.ai_provider == 'gemini':
-            api_key = os.getenv('GEMINI_API_KEY')
+            api_key = settings.google_api_key
             if not api_key:
                 raise ValueError(
-                    "GEMINI_API_KEY not found in environment. "
+                    "GOOGLE_API_KEY not found in settings. "
                     "Get one from https://ai.google.dev/"
                 )
             if api_key == 'your_gemini_api_key_here' or api_key.startswith('your_'):
                 raise ValueError(
-                    "GEMINI_API_KEY is not configured properly. "
+                    "GOOGLE_API_KEY is not configured properly. "
                     "Please set a valid API key in .env file. "
                     "Get one from https://makersuite.google.com/app/apikey"
                 )
             
-            # Get model from environment or use default
-            model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+            # Get model from settings
+            model_name = settings.gemini_model
             
             # Initialize LangChain ChatGoogleGenerativeAI with timeout and retry config
             self.ai_model = ChatGoogleGenerativeAI(
@@ -117,9 +118,9 @@ class ResumeParserService:
             print(f"[DEBUG] Configured LangChain Gemini model: {model_name}")
         elif self.ai_provider == 'openai':
             # OpenAI configuration (for future)
-            api_key = os.getenv('OPENAI_API_KEY')
+            api_key = settings.openai_api_key
             if not api_key:
-                raise ValueError("OPENAI_API_KEY not found in environment")
+                raise ValueError("OPENAI_API_KEY not found in settings")
             # Will implement OpenAI client when needed
             self.ai_model = None
         else:

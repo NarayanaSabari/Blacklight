@@ -28,10 +28,9 @@ try:
 except ImportError:
     MAGIC_AVAILABLE = False
 
-from config.settings import Settings
+from config.settings import settings  # Use global settings instance
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 
 class FileStorageService:

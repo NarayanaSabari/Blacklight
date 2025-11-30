@@ -246,6 +246,10 @@ def create_app(config: Type[BaseConfig] = None) -> Flask:
     """
     app = Flask(__name__)
     
+    # Display configuration at startup
+    from config.settings import settings as app_settings
+    app_settings.display_config()
+    
     # Load configuration
     if config is None:
         from config.settings import settings

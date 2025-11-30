@@ -23,12 +23,18 @@ RUN \
 COPY . .
 
 # Build arguments for environment variables at build time
-ARG VITE_API_URL
-ARG VITE_APP_NAME="Blacklight Admin"
+ARG VITE_API_BASE_URL
+ARG VITE_API_TIMEOUT=30000
+ARG VITE_ENVIRONMENT=production
+ARG VITE_APP_NAME="Blacklight Central Dashboard"
+ARG VITE_APP_VERSION="1.0.0"
 
 # Set environment variables for build
-ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_API_TIMEOUT=${VITE_API_TIMEOUT}
+ENV VITE_ENVIRONMENT=${VITE_ENVIRONMENT}
 ENV VITE_APP_NAME=${VITE_APP_NAME}
+ENV VITE_APP_VERSION=${VITE_APP_VERSION}
 
 # Build the application
 RUN npm run build

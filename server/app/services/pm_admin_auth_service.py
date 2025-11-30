@@ -9,10 +9,9 @@ import bcrypt
 from app import db, redis_client
 from app.models import PMAdminUser
 from app.schemas.pm_admin_schema import PMAdminLoginResponseSchema
-from config.settings import Settings
+from config.settings import settings  # Use global settings instance
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 
 class PMAdminAuthService:

@@ -89,10 +89,17 @@ class Settings(BaseSettings):
     inngest_serve_host: str = Field(default="http://localhost:5000", env="INNGEST_SERVE_HOST")
     inngest_serve_path: str = Field(default="/api/inngest", env="INNGEST_SERVE_PATH")
     
+    # AI/Resume Parsing Configuration
+    ai_parsing_provider: str = Field(default="gemini", env="AI_PARSING_PROVIDER")  # 'gemini' or 'openai'
+    
     # Google Gemini API Configuration
     google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", env="GEMINI_MODEL")  # For resume parsing & suggestions
     gemini_embedding_model: str = Field(default="models/embedding-001", env="GEMINI_EMBEDDING_MODEL")
     gemini_embedding_dimension: int = Field(default=768, env="GEMINI_EMBEDDING_DIMENSION")
+    
+    # OpenAI Configuration (optional alternative to Gemini)
+    openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     
     class Config:
         """Pydantic configuration."""
@@ -148,6 +155,55 @@ class Settings(BaseSettings):
         if v.lower() not in valid_classes:
             raise ValueError(f"Worker class must be one of {valid_classes}")
         return v.lower()
+    
+    def display_config(self) -> None:
+        """Display all environment variables in a formatted table at startup."""
+        
+        def mask_sensitive(key: str, value: str) -> str:
+            """Mask sensitive values like passwords and API keys."""
+            sensitive_keywords = ['password', 'secret', 'key', 'token', 'credentials']
+            if any(kw in key.lower() for kw in sensitive_keywords):
+                if value and len(value) > 8:
+                    return f"{value[:4]}{'*' * (len(value) - 8)}{value[-4:]}"
+                elif value:
+                    return '*' * len(value)
+            return value
+        
+        # Group settings by category
+        categories = {
+            "🔧 Core": ["environment", "debug", "testing"],
+            "🗄️ Database": ["database_url", "pool_size", "pool_recycle", "pool_pre_ping"],
+            "📦 Redis": ["redis_url", "redis_cache_url"],
+            "🌐 Server": ["host", "port", "workers", "worker_class", "worker_connections"],
+            "📝 Logging": ["log_level", "log_format"],
+            "🔗 CORS": ["cors_origins", "cors_supports_credentials"],
+            "🔒 Security": ["secret_key", "allowed_hosts", "secure_headers"],
+            "🤖 AI/Parsing": ["ai_parsing_provider", "google_api_key", "gemini_model", "gemini_embedding_model", "openai_api_key"],
+            "📁 Storage": ["storage_backend", "storage_local_path", "gcs_bucket_name", "gcs_project_id", "max_file_size_mb"],
+            "📧 Email": ["smtp_enabled", "smtp_host", "smtp_port", "smtp_username", "smtp_from_email"],
+            "🔗 Frontend": ["frontend_base_url", "invitation_expiry_hours"],
+            "⚡ Inngest": ["inngest_dev", "inngest_base_url", "inngest_serve_host", "inngest_event_key"],
+        }
+        
+        print("\n" + "=" * 80)
+        print("🚀 BLACKLIGHT SERVER CONFIGURATION")
+        print("=" * 80)
+        
+        for category, keys in categories.items():
+            print(f"\n{category}")
+            print("-" * 40)
+            for key in keys:
+                if hasattr(self, key):
+                    value = str(getattr(self, key))
+                    masked_value = mask_sensitive(key, value)
+                    # Truncate long values
+                    if len(masked_value) > 50:
+                        masked_value = masked_value[:47] + "..."
+                    print(f"  {key:30} = {masked_value}")
+        
+        print("\n" + "=" * 80)
+        print(f"✅ Configuration loaded from: .env")
+        print("=" * 80 + "\n")
 
 
 # Create global settings instance

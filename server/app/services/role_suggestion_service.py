@@ -2,7 +2,6 @@
 Role Suggestion Service
 AI-powered role suggestions for candidates using Gemini
 """
-import os
 import json
 import re
 from typing import Dict, List, Optional
@@ -11,6 +10,7 @@ from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+from config.settings import settings
 from app.models.candidate import Candidate
 
 
@@ -39,20 +39,20 @@ class RoleSuggestionService:
     
     def _configure_ai(self):
         """Configure Gemini AI (same pattern as resume parser)"""
-        api_key = os.getenv('GEMINI_API_KEY')
+        api_key = settings.google_api_key
         if not api_key:
             raise ValueError(
-                "GEMINI_API_KEY not found in environment. "
+                "GOOGLE_API_KEY not found in settings. "
                 "Get one from https://ai.google.dev/"
             )
         if api_key == 'your_gemini_api_key_here' or api_key.startswith('your_'):
             raise ValueError(
-                "GEMINI_API_KEY is not configured properly. "
+                "GOOGLE_API_KEY is not configured properly. "
                 "Please set a valid API key in .env file."
             )
         
-        # Get model from environment or use default
-        model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+        # Get model from settings or use default
+        model_name = settings.gemini_model or 'gemini-1.5-flash'
         
         # Initialize LangChain ChatGoogleGenerativeAI with timeout and retry config
         self.ai_model = ChatGoogleGenerativeAI(

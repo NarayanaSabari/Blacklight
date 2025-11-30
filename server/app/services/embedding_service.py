@@ -13,6 +13,7 @@ import time
 import logging
 from typing import List, Optional, Dict, Any
 import google.generativeai as genai
+from config.settings import settings
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -48,16 +49,16 @@ class EmbeddingService:
         Initialize EmbeddingService with Google Gemini API.
         
         Args:
-            api_key: Google API key. If not provided, reads from GOOGLE_API_KEY env var.
+            api_key: Google API key. If not provided, reads from settings.
         
         Raises:
-            ValueError: If API key is not provided or found in environment
+            ValueError: If API key is not provided or found in settings
         """
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        self.api_key = api_key or settings.google_api_key
         
         if not self.api_key:
             raise ValueError(
-                "Google API key is required. Provide via constructor or GOOGLE_API_KEY environment variable."
+                "Google API key is required. Provide via constructor or GOOGLE_API_KEY in settings."
             )
         
         # Configure Gemini API
