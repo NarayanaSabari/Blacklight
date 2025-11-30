@@ -42,6 +42,7 @@ import {
   CheckCircle2,
   XCircle,
   Star,
+  Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -66,10 +67,28 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   DocumentList,
   DocumentViewer,
   DocumentVerificationModal,
+  DocumentUpload,
 } from '@/components/documents';
+import type { UploadedFile } from '@/components/documents/DocumentUpload';
+import type { DocumentType } from '@/types/document';
 import { TagInput } from '@/components/ui/tag-input';
 import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
 import { EducationEditor } from '@/components/candidates/EducationEditor';
@@ -111,6 +130,12 @@ export function CandidateDetailPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   // We don't currently persist the reject reason, but keep setter for future use
   const [, setRejectReason] = useState('');
+
+  // Document upload state
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<UploadedFile[]>([]);
+  const [uploadDocumentType, setUploadDocumentType] = useState<DocumentType>('resume');
+  const [isUploading, setIsUploading] = useState(false);
 
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -366,6 +391,47 @@ export function CandidateDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
     setShowVerificationModal(false);
     setSelectedDocument(null);
+  };
+
+  // Document upload handler
+  const handleUploadDocuments = async () => {
+    if (uploadFiles.length === 0) {
+      toast.error('Please select at least one file to upload');
+      return;
+    }
+
+    setIsUploading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const uploadFile of uploadFiles) {
+      try {
+        await documentApi.uploadDocument({
+          file: uploadFile.file,
+          document_type: uploadDocumentType,
+          candidate_id: Number(id),
+        });
+        successCount++;
+      } catch (error) {
+        console.error('Upload failed:', error);
+        errorCount++;
+      }
+    }
+
+    setIsUploading(false);
+
+    if (successCount > 0) {
+      toast.success(`Successfully uploaded ${successCount} document(s)`);
+      queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
+    }
+    if (errorCount > 0) {
+      toast.error(`Failed to upload ${errorCount} document(s)`);
+    }
+
+    // Reset and close dialog
+    setUploadFiles([]);
+    setUploadDocumentType('resume');
+    setShowUploadDialog(false);
   };
 
   // Edit mode handlers
@@ -1007,13 +1073,25 @@ export function CandidateDetailPage() {
           {/* Documents Section */}
           <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <CardHeader className="bg-slate-50">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                Documents
-              </CardTitle>
-              <CardDescription>
-                {documentsResponse?.total || 0} document{documentsResponse?.total !== 1 ? 's' : ''} uploaded
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                    Documents
+                  </CardTitle>
+                  <CardDescription>
+                    {documentsResponse?.total || 0} document{documentsResponse?.total !== 1 ? 's' : ''} uploaded
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => setShowUploadDialog(true)}
+                  size="sm"
+                  className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {documentsLoading ? (
@@ -1609,6 +1687,82 @@ export function CandidateDetailPage() {
           onVerified={handleDocumentVerified}
         />
       )}
+
+      {/* Document Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Upload Documents
+            </DialogTitle>
+            <DialogDescription>
+              Upload documents for {candidate?.full_name || `${candidate?.first_name} ${candidate?.last_name}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Document Type Selector */}
+            <div className="space-y-2">
+              <Label htmlFor="document-type">Document Type</Label>
+              <Select value={uploadDocumentType} onValueChange={(value) => setUploadDocumentType(value as DocumentType)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="resume">Resume</SelectItem>
+                  <SelectItem value="id_proof">ID Proof</SelectItem>
+                  <SelectItem value="address_proof">Address Proof</SelectItem>
+                  <SelectItem value="education_certificate">Education Certificate</SelectItem>
+                  <SelectItem value="experience_letter">Experience Letter</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* File Upload */}
+            <DocumentUpload
+              onFilesChange={setUploadFiles}
+              maxFiles={5}
+              maxSizeInMB={10}
+              documentType={uploadDocumentType}
+              label="Select Files"
+              description="Drag and drop files here, or click to select (PDF, DOC, DOCX, JPG, PNG)"
+              disabled={isUploading}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUploadDialog(false);
+                setUploadFiles([]);
+                setUploadDocumentType('resume');
+              }}
+              disabled={isUploading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUploadDocuments}
+              disabled={uploadFiles.length === 0 || isUploading}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload {uploadFiles.length > 0 ? `(${uploadFiles.length})` : ''}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
