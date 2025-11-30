@@ -14,4 +14,6 @@ export const env = {
   apiBaseUrl: getEnvVar('VITE_API_BASE_URL', 'https://blacklight-api-667302703024.us-central1.run.app'),
   apiTimeout: parseInt(getEnvVar('VITE_API_TIMEOUT', '30000'), 10),
   environment: getEnvVar('VITE_ENVIRONMENT', 'development'),
+  // Base path for router (e.g., '/portal' for sub-path deployment)
+  basePath: import.meta.env.VITE_BASE_PATH?.replace(/\/$/, '') || '',
 } as const;

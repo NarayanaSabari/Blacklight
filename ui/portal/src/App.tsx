@@ -22,6 +22,7 @@ import DocumentsPage from '@/pages/DocumentsPage';
 import { RolesPage } from '@/pages/RolesPage';
 import { ManageTeamPage, YourCandidatesPageNew, CandidateManagementPage } from '@/pages';
 import { Loader2 } from 'lucide-react';
+import { env } from '@/lib/env';
 import './App.css';
 
 // Create a client
@@ -60,7 +61,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={env.basePath}>
         <PortalAuthProvider>
           <Routes>
             {/* Public Routes */}

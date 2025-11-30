@@ -210,19 +210,26 @@ def register_inngest(app: Flask) -> None:
         from inngest.flask import serve as inngest_serve_func
         from app.inngest import inngest_client
         from app.inngest.functions import INNGEST_FUNCTIONS
+        from config.settings import settings
         
         # Get the Inngest serve path (default: /api/inngest)
         inngest_path = app.config.get('INNGEST_SERVE_PATH', '/api/inngest')
         
         app.logger.info(f"Inngest: Attempting to register {len(INNGEST_FUNCTIONS)} functions")
         app.logger.info(f"Inngest: Functions to register: {[f.name for f in INNGEST_FUNCTIONS]}")
+        app.logger.info(f"Inngest: Production Mode: {inngest_client.is_production}")
         
-        # Register Inngest endpoint - inngest.flask.serve automatically registers at /api/inngest
-        # It only takes 3 parameters: app, client, functions (no serve_path parameter)
+        # Build serve_origin for production (tells Inngest Cloud where to reach this server)
+        serve_origin = settings.inngest_serve_host if not settings.inngest_dev else None
+        app.logger.info(f"Inngest: Serve Origin: {serve_origin}")
+        
+        # Register Inngest endpoint
         inngest_serve_func(
             app,
             inngest_client,
             INNGEST_FUNCTIONS,
+            serve_origin=serve_origin,
+            serve_path=inngest_path,
         )
         
         app.logger.info(f"Inngest: Successfully registered {len(INNGEST_FUNCTIONS)} functions")

@@ -1,6 +1,6 @@
 # =============================================================================
 # Blacklight Backend - Flask API Server
-# Optimized for Google Cloud Run deployment with Auto-Scaling
+# Optimized for VM deployment with Docker Compose
 # =============================================================================
 
 FROM python:3.11-slim AS builder
@@ -57,37 +57,39 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY --chown=blacklight:blacklight . .
 
-# Create directories for uploads and ensure correct permissions
-RUN mkdir -p /app/storage/uploads /app/uploads && \
+# Create directories for uploads, credentials and ensure correct permissions
+RUN mkdir -p /app/storage/uploads /app/uploads /app/credentials && \
     chown -R blacklight:blacklight /app
 
 # Switch to non-root user
 USER blacklight
 
-# Expose port (Cloud Run uses PORT env var, default 8080)
-EXPOSE 8080
+# Expose port 5000 for VM deployment
+EXPOSE 5000
 
-# Health check (disabled for Cloud Run - it has its own)
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-#     CMD curl -f http://localhost:${PORT:-8080}/api/health || exit 1
+# Health check for Docker Compose
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-5000}/api/health || exit 1
 
 # =============================================================================
-# Gunicorn Configuration for Cloud Run Auto-Scaling
+# Gunicorn Configuration for VM Deployment
 # =============================================================================
-# - workers: 2 (Cloud Run recommends 1-4 for 1 CPU)
-# - threads: 8 (handle concurrent requests per worker)
+# - workers: 4 (2 * CPU cores + 1, adjust based on your VM)
+# - threads: 4 (handle concurrent requests per worker)
 # - worker-class: gthread (threaded workers for I/O bound tasks)
-# - timeout: 0 (Cloud Run handles timeouts, disable Gunicorn's)
-# - keep-alive: 5 (Cloud Run load balancer keeps connections)
+# - timeout: 120 (2 min timeout for long operations like resume parsing)
+# - keep-alive: 5 (connection keep-alive)
 # - max-requests: 1000 (restart workers to prevent memory leaks)
+# - graceful-timeout: 30 (graceful shutdown time)
 # =============================================================================
 CMD exec gunicorn \
-    --bind :${PORT:-8080} \
-    --workers 2 \
-    --threads 8 \
+    --bind 0.0.0.0:${PORT:-5000} \
+    --workers ${GUNICORN_WORKERS:-4} \
+    --threads ${GUNICORN_THREADS:-4} \
     --worker-class gthread \
     --worker-tmp-dir /dev/shm \
-    --timeout 0 \
+    --timeout ${GUNICORN_TIMEOUT:-120} \
+    --graceful-timeout 30 \
     --keep-alive 5 \
     --max-requests 1000 \
     --max-requests-jitter 50 \
@@ -95,5 +97,5 @@ CMD exec gunicorn \
     --error-logfile - \
     --capture-output \
     --enable-stdio-inheritance \
-    --log-level debug \
+    --log-level ${LOG_LEVEL:-info} \
     "wsgi:app"

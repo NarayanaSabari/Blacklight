@@ -32,7 +32,7 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={env.basePath}>
         <PMAdminAuthProvider>
           <Routes>
             {/* Public routes */}

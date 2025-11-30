@@ -191,7 +191,7 @@ case "$1" in
         run_migrations
         ;;
     seed)
-        seed_database
+        seed_all_database
         ;;
     init)
         init_database

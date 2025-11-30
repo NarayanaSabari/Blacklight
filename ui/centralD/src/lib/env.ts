@@ -17,6 +17,9 @@ export const env = {
   isDevelopment: import.meta.env.DEV,
   isProduction: import.meta.env.PROD,
 
+  // Base path for router (e.g., '/central' for sub-path deployment)
+  basePath: (import.meta.env.VITE_BASE_PATH as string)?.replace(/\/$/, '') || '',
+
   // Feature Flags
   enableQueryDevtools:
     import.meta.env.VITE_ENABLE_QUERY_DEVTOOLS === 'true' || import.meta.env.DEV,
