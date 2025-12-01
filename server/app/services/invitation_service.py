@@ -521,6 +521,7 @@ class InvitationService:
             full_name = data.get('full_name') or f"{first_name} {last_name}".strip()
             position = data.get('position') or data.get('current_job_title') or data.get('current_title')
             experience_years = data.get('experience_years') or data.get('years_of_experience') or data.get('total_experience_years')
+            expected_salary = data.get('expected_salary')
             summary = data.get('summary') or data.get('professional_summary')
 
             # Skills and simple arrays
@@ -586,6 +587,7 @@ class InvitationService:
                 portfolio_url=data.get('portfolio_url') or parsed_resume.get('portfolio_url'),
                 current_title=position or parsed_resume.get('current_title'),
                 total_experience_years=experience_years or parsed_resume.get('total_experience_years'),
+                expected_salary=expected_salary,
                 professional_summary=summary or parsed_resume.get('professional_summary'),
                 skills=skills,
                 preferred_roles=preferred_roles,

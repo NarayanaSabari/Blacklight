@@ -62,6 +62,7 @@ class InvitationSubmitSchema(BaseModel):
     current_employer: Optional[str] = Field(None, max_length=200)
     experience_years: Optional[int] = Field(None, ge=0, le=70)
     years_of_experience: Optional[int] = Field(None, ge=0, le=70)
+    expected_salary: str = Field(..., min_length=1, max_length=100, description="Expected pay rate/salary (required)")
     skills: Optional[List[str]] = Field(None, description="List of skills")
     preferred_roles: Optional[List[str]] = Field(None, description="List of preferred job roles (max 10)")
     education: Optional[str] = Field(None, description="Education details")

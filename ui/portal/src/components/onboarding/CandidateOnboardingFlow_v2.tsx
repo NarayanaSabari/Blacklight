@@ -87,6 +87,7 @@ const personalInfoSchema = z.object({
 const professionalInfoSchema = z.object({
   position: z.string().optional(),
   experience_years: z.number().min(0).max(50).optional(),
+  expected_salary: z.string().min(1, 'Expected pay rate is required'),
   skills: z.string().optional(),
   education: z.string().optional(),
   work_experience: z.string().optional(),
@@ -171,6 +172,7 @@ export function CandidateOnboardingFlow({
     defaultValues: {
       position: '',
       experience_years: 0,
+      expected_salary: '',
       skills: '',
       education: '',
       work_experience: '',
@@ -516,6 +518,7 @@ export function CandidateOnboardingFlow({
           ...personalData,
           position: professionalData.position,
           experience_years: professionalData.experience_years,
+          expected_salary: professionalData.expected_salary,
           skills,
           preferred_roles: preferredRoles,
           education: professionalData.education,
@@ -938,6 +941,25 @@ export function CandidateOnboardingFlow({
                           </FormItem>
                         )}
                       />
+                      <FormField
+                        control={professionalForm.control}
+                        name="expected_salary"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Expected Pay Rate *</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="e.g., $80/hr, $150,000/year"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Enter your expected hourly rate or annual salary
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </div>
 
@@ -1232,6 +1254,7 @@ export function CandidateOnboardingFlow({
                 <ReviewSection title="Professional Information">
                   <ReviewItem label="Position" value={professionalForm.getValues('position') || 'Not provided'} />
                   <ReviewItem label="Experience" value={`${professionalForm.getValues('experience_years') || 0} years`} />
+                  <ReviewItem label="Expected Pay Rate" value={professionalForm.getValues('expected_salary') || 'Not provided'} />
                   <ReviewItem label="Skills" value={professionalForm.getValues('skills') || 'Not provided'} />
                 </ReviewSection>
 
