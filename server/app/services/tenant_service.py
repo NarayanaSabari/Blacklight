@@ -236,6 +236,39 @@ class TenantService:
 
         logger.info(f"Tenant created: {tenant.id} ({slug}) by {changed_by}")
 
+        # Trigger tenant welcome email via Inngest
+        try:
+            import os
+            import inngest
+            from app.inngest import inngest_client
+            
+            # Build admin full name
+            admin_name = f"{data.tenant_admin_first_name}"
+            if data.tenant_admin_last_name:
+                admin_name += f" {data.tenant_admin_last_name}"
+            
+            # Get portal login URL from environment
+            portal_base_url = os.getenv("PORTAL_BASE_URL", "http://localhost:5173")
+            login_url = f"{portal_base_url}/login"
+            
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="email/tenant-welcome",
+                    data={
+                        "tenant_id": tenant.id,
+                        "tenant_name": data.name,
+                        "admin_email": data.tenant_admin_email,
+                        "admin_name": admin_name,
+                        "temporary_password": data.tenant_admin_password,
+                        "login_url": login_url
+                    }
+                )
+            )
+            logger.info(f"Tenant welcome email event triggered for {data.tenant_admin_email}")
+        except Exception as e:
+            # Don't fail tenant creation if email trigger fails
+            logger.error(f"Failed to trigger tenant welcome email: {e}")
+
         return TenantResponseSchema.model_validate(tenant)
 
     @staticmethod

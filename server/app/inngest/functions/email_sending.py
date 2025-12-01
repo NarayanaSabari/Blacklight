@@ -172,6 +172,59 @@ async def send_hr_notification_workflow(ctx: inngest.Context) -> dict:
     return {"notification_sent": result}
 
 
+@inngest_client.create_function(
+    fn_id="send-tenant-welcome-email",
+    trigger=inngest.TriggerEvent(event="email/tenant-welcome"),
+    retries=3,
+    name="Send Tenant Welcome Email"
+)
+async def send_tenant_welcome_email_workflow(ctx: inngest.Context) -> dict:
+    """
+    Send welcome email to new tenant admin with temporary credentials.
+    Triggered when a new tenant is created via CentralD.
+    
+    Event data:
+        - tenant_id: int - The newly created tenant ID
+        - tenant_name: str - Tenant company name
+        - admin_email: str - Tenant admin email
+        - admin_name: str - Tenant admin full name
+        - temporary_password: str - The temporary password set during creation
+        - login_url: str - URL to the portal login page
+    """
+    event = ctx.event
+    tenant_id = event.data.get("tenant_id")
+    tenant_name = event.data.get("tenant_name")
+    admin_email = event.data.get("admin_email")
+    admin_name = event.data.get("admin_name")
+    temporary_password = event.data.get("temporary_password")
+    login_url = event.data.get("login_url")
+    
+    logger.info(f"[INNGEST] Sending tenant welcome email to {admin_email} for tenant {tenant_name}")
+    
+    # Validate required data
+    if not all([admin_email, admin_name, tenant_name, temporary_password, login_url]):
+        logger.error(f"[INNGEST] Missing required data for tenant welcome email. Event data: {event.data}")
+        return {"email_sent": False, "error": "Missing required data"}
+    
+    result = await ctx.step.run(
+        "send-tenant-welcome",
+        send_tenant_welcome_step,
+        admin_email,
+        admin_name,
+        tenant_name,
+        temporary_password,
+        login_url
+    )
+    
+    logger.info(f"[INNGEST] Tenant welcome email result for {admin_email}: {result}")
+    
+    return {
+        "email_sent": result,
+        "tenant_id": tenant_id,
+        "admin_email": admin_email
+    }
+
+
 # Step Functions
 
 def fetch_invitation_step(invitation_id: int, tenant_id: int) -> dict:
@@ -339,3 +392,22 @@ def log_email_status_step(
     db.session.commit()
     
     logger.info(f"[INNGEST] Logged email status for invitation {invitation_id}: {success}")
+
+
+def send_tenant_welcome_step(
+    admin_email: str,
+    admin_name: str,
+    tenant_name: str,
+    temporary_password: str,
+    login_url: str
+) -> bool:
+    """Send welcome email to new tenant admin"""
+    from app.services.email_service import EmailService
+    
+    return EmailService.send_tenant_welcome_email(
+        to_email=admin_email,
+        admin_name=admin_name,
+        tenant_name=tenant_name,
+        temporary_password=temporary_password,
+        login_url=login_url
+    )
