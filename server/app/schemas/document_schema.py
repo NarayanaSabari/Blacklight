@@ -254,10 +254,21 @@ class DocumentUploadSchema(BaseModel):
     @field_validator('document_type')
     @classmethod
     def validate_document_type(cls, v):
-        # Valid document types - will be checked against tenant config in service layer
+        # Valid document types - matches the configurable types in tenant settings
+        # These are all the document types that can be configured by tenant admins
         valid_types = [
-            'resume', 'id_proof', 'work_authorization', 
-            'background_check', 'certificates', 'other'
+            'resume',
+            'id_proof', 
+            'work_authorization',
+            'educational_certificates',
+            'employment_verification',
+            'professional_certifications', 
+            'background_check',
+            'tax_documents',
+            'references',
+            'portfolio',
+            'certificates',  # Legacy/alias for educational_certificates
+            'other'
         ]
         if v not in valid_types:
             raise ValueError(f'Invalid document type. Must be one of: {", ".join(valid_types)}')

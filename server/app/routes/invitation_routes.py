@@ -3,6 +3,7 @@ Candidate Invitation Routes
 Authenticated routes for HR and public routes for candidates
 """
 from flask import Blueprint, request, jsonify, current_app, send_file
+import json
 from pydantic import ValidationError
 import os
 import logging
@@ -34,11 +35,29 @@ logger = logging.getLogger(__name__)
 
 def error_response(message: str, status: int = 400, details: dict = None):
     """Create a standardized error response."""
+    def _sanitize(obj):
+        # Recursively convert non-serializable objects (like Exceptions) to strings
+        if obj is None:
+            return None
+        if isinstance(obj, (str, int, float, bool)):
+            return obj
+        if isinstance(obj, list):
+            return [_sanitize(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _sanitize(v) for k, v in obj.items()}
+        # Exceptions or other non-serializable types -> stringify
+        try:
+            json.dumps(obj)
+            return obj
+        except Exception:
+            return str(obj)
+
+    safe_details = _sanitize(details)
     return jsonify({
         "error": "Error",
         "message": message,
         "status": status,
-        "details": details,
+        "details": safe_details,
     }), status
 
 

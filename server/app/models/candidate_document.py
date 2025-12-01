@@ -52,6 +52,7 @@ class CandidateDocument(BaseModel):
     verified_by = relationship('PortalUser', foreign_keys=[verified_by_id], backref='verified_documents')
     
     # Allowed document types per category
+    # These match the configurable document types in tenant settings
     DOCUMENT_TYPES = {
         'resume': {
             'label': 'Resume/CV',
@@ -68,12 +69,42 @@ class CandidateDocument(BaseModel):
             'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
             'max_size_mb': 5
         },
+        'educational_certificates': {
+            'label': 'Educational Certificates',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
+            'max_size_mb': 5
+        },
+        'employment_verification': {
+            'label': 'Employment Verification',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
+            'max_size_mb': 5
+        },
+        'professional_certifications': {
+            'label': 'Professional Certifications',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
+            'max_size_mb': 5
+        },
         'background_check': {
             'label': 'Background Check Consent',
             'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
             'max_size_mb': 5
         },
-        'certificate': {
+        'tax_documents': {
+            'label': 'Tax Documents',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
+            'max_size_mb': 5
+        },
+        'references': {
+            'label': 'References',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+            'max_size_mb': 5
+        },
+        'portfolio': {
+            'label': 'Portfolio',
+            'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
+            'max_size_mb': 10
+        },
+        'certificates': {
             'label': 'Certificate',
             'allowed_mimes': ['application/pdf', 'image/jpeg', 'image/png'],
             'max_size_mb': 5
