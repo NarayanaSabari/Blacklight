@@ -59,6 +59,7 @@ const personalInfoSchema = z.object({
 const professionalInfoSchema = z.object({
   position: z.string().optional(),
   experience_years: z.number().min(0).max(50).optional(),
+  expected_salary: z.string().min(1, 'Expected pay rate is required'),
   skills: z.string().optional(),
   education: z.string().optional(),
   summary: z.string().min(50, 'Summary must be at least 50 characters').optional().or(z.literal('')),
@@ -104,6 +105,7 @@ export function CandidateOnboardingFlow({
     defaultValues: {
       position: '',
       experience_years: 0,
+      expected_salary: '',
       skills: '',
       education: '',
       summary: '',
