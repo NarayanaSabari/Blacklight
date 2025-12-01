@@ -94,6 +94,30 @@ class Tenant(BaseModel):
         passive_deletes=True
     )
     
+    candidates = db.relationship(
+        'Candidate',
+        back_populates='tenant',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        passive_deletes=True
+    )
+    
+    invitations = db.relationship(
+        'CandidateInvitation',
+        back_populates='tenant',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        passive_deletes=True
+    )
+    
+    documents = db.relationship(
+        'CandidateDocument',
+        back_populates='tenant',
+        lazy='dynamic',
+        cascade='all, delete-orphan',
+        passive_deletes=True
+    )
+    
     def to_dict(self, include_plan=False, include_stats=False):
         """Convert model to dictionary."""
         data = super().to_dict()

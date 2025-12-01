@@ -157,7 +157,7 @@ class Candidate(BaseModel):
     embedding = db.Column(Vector(768))  # Google Gemini embeddings for semantic matching
 
     # Relationships
-    tenant = db.relationship("Tenant", backref="candidates")
+    tenant = db.relationship("Tenant", back_populates="candidates")
 
     # Onboarding relationships
     assignments = db.relationship(

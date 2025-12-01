@@ -61,7 +61,7 @@ class CandidateInvitation(BaseModel):
     candidate_id = db.Column(Integer, ForeignKey('candidates.id', ondelete='SET NULL'))
     
     # Relationships
-    tenant = relationship('Tenant', backref='invitations')
+    tenant = relationship('Tenant', back_populates='invitations')
     invited_by = relationship('PortalUser', foreign_keys=[invited_by_id], backref='sent_invitations')
     reviewed_by = relationship('PortalUser', foreign_keys=[reviewed_by_id], backref='reviewed_invitations')
     candidate = relationship('Candidate', backref='invitation', foreign_keys=[candidate_id])

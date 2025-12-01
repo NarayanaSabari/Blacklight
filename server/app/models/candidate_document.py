@@ -45,7 +45,7 @@ class CandidateDocument(BaseModel):
     verification_notes = db.Column(Text)
     
     # Relationships
-    tenant = relationship('Tenant', backref='documents')
+    tenant = relationship('Tenant', back_populates='documents')
     candidate = relationship('Candidate', backref='documents', foreign_keys=[candidate_id])
     invitation = relationship('CandidateInvitation', backref='documents', foreign_keys=[invitation_id])
     uploaded_by = relationship('PortalUser', foreign_keys=[uploaded_by_id], backref='uploaded_documents')
