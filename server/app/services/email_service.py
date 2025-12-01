@@ -404,37 +404,241 @@ class EmailService:
     def send_approval_email(
         tenant_id: int,
         to_email: str,
-        candidate_name: str
+        candidate_name: str,
+        candidate_data: dict = None,
+        hr_edited_fields: list = None
     ) -> bool:
-        """Send approval email to candidate"""
+        """
+        Send approval email to candidate with full profile details.
+        
+        Args:
+            tenant_id: Tenant ID
+            to_email: Candidate email
+            candidate_name: Candidate name for greeting
+            candidate_data: Dictionary with full candidate profile data
+            hr_edited_fields: List of field names that were edited by HR
+        """
         smtp_config = EmailService._get_tenant_smtp_config(tenant_id)
         if not smtp_config:
             return False
         
         company_name = smtp_config.get('from_name', 'Our Company')
+        candidate_data = candidate_data or {}
+        hr_edited_fields = hr_edited_fields or []
         
-        subject = f"Welcome to {company_name}! 🎉"
+        # Helper to format field with HR edit indicator
+        def format_field(label: str, value, field_name: str) -> str:
+            if not value:
+                return ""
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Updated by HR</span>' if field_name in hr_edited_fields else ""
+            return f'<tr><td style="padding: 8px 12px; color: #6b7280; width: 160px; vertical-align: top;">{label}</td><td style="padding: 8px 12px;"><strong>{value}</strong>{edit_badge}</td></tr>'
+        
+        # Build profile sections
+        # Personal Information
+        personal_info = ""
+        personal_info += format_field("Full Name", candidate_data.get('full_name'), 'full_name')
+        personal_info += format_field("Email", candidate_data.get('email'), 'email')
+        personal_info += format_field("Phone", candidate_data.get('phone'), 'phone')
+        personal_info += format_field("Location", candidate_data.get('location'), 'location')
+        if candidate_data.get('linkedin_url'):
+            linkedin = f'<a href="{candidate_data.get("linkedin_url")}" style="color: #2563eb;">LinkedIn Profile</a>'
+            personal_info += format_field("LinkedIn", linkedin, 'linkedin_url')
+        if candidate_data.get('portfolio_url'):
+            portfolio = f'<a href="{candidate_data.get("portfolio_url")}" style="color: #2563eb;">Portfolio</a>'
+            personal_info += format_field("Portfolio", portfolio, 'portfolio_url')
+        
+        # Professional Information
+        professional_info = ""
+        professional_info += format_field("Current Title", candidate_data.get('current_title'), 'current_title')
+        if candidate_data.get('total_experience_years'):
+            exp_years = candidate_data.get('total_experience_years')
+            exp_text = f"{exp_years} year{'s' if exp_years != 1 else ''}"
+            professional_info += format_field("Experience", exp_text, 'total_experience_years')
+        professional_info += format_field("Expected Salary", candidate_data.get('expected_salary'), 'expected_salary')
+        
+        # Summary
+        summary_section = ""
+        if candidate_data.get('professional_summary'):
+            summary = candidate_data.get('professional_summary')
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'professional_summary' in hr_edited_fields else ""
+            summary_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Professional Summary{edit_badge}</h3>
+                <p style="background-color: #f9fafb; padding: 15px; border-radius: 8px; color: #374151; line-height: 1.6;">{summary}</p>
+            </div>
+            '''
+        
+        # Skills
+        skills_section = ""
+        skills = candidate_data.get('skills', [])
+        if skills:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'skills' in hr_edited_fields else ""
+            skills_html = ' '.join([f'<span style="background-color: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 12px; font-size: 13px; display: inline-block; margin: 3px;">{skill}</span>' for skill in skills[:15]])
+            skills_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Skills{edit_badge}</h3>
+                <div>{skills_html}</div>
+            </div>
+            '''
+        
+        # Preferred Roles
+        roles_section = ""
+        preferred_roles = candidate_data.get('preferred_roles', [])
+        if preferred_roles:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'preferred_roles' in hr_edited_fields else ""
+            roles_html = ' '.join([f'<span style="background-color: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 12px; font-size: 13px; display: inline-block; margin: 3px;">{role}</span>' for role in preferred_roles])
+            roles_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Preferred Roles{edit_badge}</h3>
+                <div>{roles_html}</div>
+            </div>
+            '''
+        
+        # Education
+        education_section = ""
+        education = candidate_data.get('education', [])
+        if education:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'education' in hr_edited_fields else ""
+            edu_items = []
+            for edu in education[:3]:  # Limit to 3
+                degree = edu.get('degree', '')
+                institution = edu.get('institution', '')
+                year = edu.get('graduation_year', '')
+                edu_items.append(f'<li style="margin-bottom: 8px;"><strong>{degree}</strong> - {institution} {f"({year})" if year else ""}</li>')
+            education_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Education{edit_badge}</h3>
+                <ul style="margin: 0; padding-left: 20px; color: #374151;">{"".join(edu_items)}</ul>
+            </div>
+            '''
+        
+        # Work Experience
+        experience_section = ""
+        work_experience = candidate_data.get('work_experience', [])
+        if work_experience:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'work_experience' in hr_edited_fields else ""
+            exp_items = []
+            for exp in work_experience[:3]:  # Limit to 3
+                title = exp.get('title', '')
+                company = exp.get('company', '')
+                start = exp.get('start_date', '')
+                end = exp.get('end_date', 'Present')
+                is_current = exp.get('is_current', False)
+                period = f"{start} - {'Present' if is_current else end}" if start else ""
+                exp_items.append(f'<li style="margin-bottom: 10px;"><strong>{title}</strong> at {company}<br/><span style="color: #6b7280; font-size: 13px;">{period}</span></li>')
+            experience_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Work Experience{edit_badge}</h3>
+                <ul style="margin: 0; padding-left: 20px; color: #374151; list-style-type: none;">{"".join(exp_items)}</ul>
+            </div>
+            '''
+        
+        # Certifications
+        certifications_section = ""
+        certifications = candidate_data.get('certifications', [])
+        if certifications:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'certifications' in hr_edited_fields else ""
+            certs_html = ' '.join([f'<span style="background-color: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 12px; font-size: 13px; display: inline-block; margin: 3px;">{cert}</span>' for cert in certifications])
+            certifications_section = f'''
+            <div style="margin-top: 20px;">
+                <h3 style="color: #374151; margin-bottom: 10px; font-size: 16px;">Certifications{edit_badge}</h3>
+                <div>{certs_html}</div>
+            </div>
+            '''
+        
+        # Languages
+        languages_section = ""
+        languages = candidate_data.get('languages', [])
+        if languages:
+            edit_badge = ' <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span>' if 'languages' in hr_edited_fields else ""
+            langs_html = ', '.join(languages)
+            languages_section = f'''
+            <div style="margin-top: 15px;">
+                <span style="color: #6b7280;">Languages:</span> <strong>{langs_html}</strong>{edit_badge}
+            </div>
+            '''
+        
+        # HR edits notice
+        hr_notice = ""
+        if hr_edited_fields:
+            hr_notice = f'''
+            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin-top: 25px; border-radius: 0 8px 8px 0;">
+                <p style="margin: 0; color: #92400e;">
+                    <strong>📝 Note:</strong> Some fields in your profile were updated by our HR team during the review process. 
+                    Fields marked with <span style="background-color: #fef3c7; color: #92400e; font-size: 11px; padding: 2px 6px; border-radius: 4px;">Updated by HR</span> 
+                    have been modified. If you have any questions about these changes, please contact us.
+                </p>
+            </div>
+            '''
+        
+        subject = f"Welcome to {company_name}! Your Profile Has Been Approved 🎉"
         
         body_html = f"""
         <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <h2 style="color: #16a34a;">Hi {candidate_name},</h2>
-            
-            <p>Great news! Your candidate profile has been approved.</p>
-            
-            <p>Welcome to <strong>{company_name}</strong>! We're excited to have you in our talent pipeline.</p>
-            
-            <p><strong>What's next:</strong></p>
-            <ul>
-                <li>Your profile is now active in our system</li>
-                <li>Our recruiters will reach out for relevant opportunities</li>
-                <li>You can update your profile anytime by contacting us</li>
-            </ul>
-            
-            <p>If you have any questions, feel free to reach out.</p>
-            
-            <p>Best regards,<br>
-            <strong>{company_name} HR Team</strong></p>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; line-height: 1.6; color: #333; max-width: 650px; margin: 0 auto; background-color: #f3f4f6; padding: 20px;">
+            <div style="background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Congratulations!</h1>
+                    <p style="color: #bbf7d0; margin: 10px 0 0 0; font-size: 16px;">Your profile has been approved</p>
+                </div>
+                
+                <!-- Content -->
+                <div style="padding: 30px;">
+                    <p style="font-size: 18px; color: #374151;">Hi <strong>{candidate_name}</strong>,</p>
+                    
+                    <p style="color: #4b5563;">Great news! Your candidate profile with <strong>{company_name}</strong> has been reviewed and approved. 
+                    You are now part of our talent pipeline!</p>
+                    
+                    {hr_notice}
+                    
+                    <!-- Profile Summary Card -->
+                    <div style="background-color: #f9fafb; border-radius: 8px; padding: 20px; margin-top: 25px;">
+                        <h2 style="color: #1f2937; margin: 0 0 15px 0; font-size: 18px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">📋 Your Approved Profile</h2>
+                        
+                        <!-- Personal Information -->
+                        <h3 style="color: #374151; margin: 15px 0 10px 0; font-size: 16px;">Contact Information</h3>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            {personal_info}
+                        </table>
+                        
+                        <!-- Professional Information -->
+                        {f'<h3 style="color: #374151; margin: 20px 0 10px 0; font-size: 16px;">Professional Details</h3><table style="width: 100%; border-collapse: collapse;">{professional_info}</table>' if professional_info else ''}
+                    </div>
+                    
+                    {summary_section}
+                    {skills_section}
+                    {roles_section}
+                    {experience_section}
+                    {education_section}
+                    {certifications_section}
+                    {languages_section}
+                    
+                    <!-- Next Steps -->
+                    <div style="margin-top: 30px; background-color: #eff6ff; border-radius: 8px; padding: 20px;">
+                        <h3 style="color: #1e40af; margin: 0 0 15px 0; font-size: 16px;">📌 What's Next?</h3>
+                        <ul style="margin: 0; padding-left: 20px; color: #374151;">
+                            <li style="margin-bottom: 8px;">Your profile is now active in our system</li>
+                            <li style="margin-bottom: 8px;">Our recruiters will reach out when relevant opportunities arise</li>
+                            <li style="margin-bottom: 8px;">You can contact us anytime to update your profile</li>
+                        </ul>
+                    </div>
+                    
+                    <p style="margin-top: 30px; color: #4b5563;">If you have any questions, feel free to reach out to us.</p>
+                    
+                    <p style="margin-top: 20px;">
+                        Best regards,<br>
+                        <strong>{company_name} HR Team</strong>
+                    </p>
+                </div>
+                
+                <!-- Footer -->
+                <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                        This email was sent by {company_name} via Blacklight Recruiting Platform
+                    </p>
+                </div>
+            </div>
         </body>
         </html>
         """

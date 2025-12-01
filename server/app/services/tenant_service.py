@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, Dict
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm.attributes import flag_modified
 import bcrypt
 
 from app import db
@@ -891,12 +892,16 @@ class TenantService:
             raise ValueError(f"Tenant with ID {tenant_id} not found")
         
         # Get current settings or create empty dict
-        settings = tenant.settings or {}
-        old_requirements = settings.get('required_documents', [])
+        current_settings = tenant.settings or {}
+        old_requirements = current_settings.get('required_documents', [])
         
-        # Update requirements in settings
-        settings['required_documents'] = requirements
-        tenant.settings = settings
+        # Create a new dict to ensure SQLAlchemy detects the change
+        new_settings = dict(current_settings)
+        new_settings['required_documents'] = requirements
+        tenant.settings = new_settings
+        
+        # Flag the column as modified to ensure SQLAlchemy persists the JSONB change
+        flag_modified(tenant, 'settings')
         
         db.session.commit()
         

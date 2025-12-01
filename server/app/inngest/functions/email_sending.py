@@ -105,18 +105,22 @@ async def send_submission_confirmation_workflow(ctx: inngest.Context) -> dict:
     name="Send Approval Email"
 )
 async def send_approval_email_workflow(ctx: inngest.Context) -> dict:
-    """Send approval email to candidate"""
+    """Send approval email to candidate with full profile details"""
     event = ctx.event
     tenant_id = event.data.get("tenant_id")
     email = event.data.get("email")
     candidate_name = event.data.get("candidate_name")
+    candidate_data = event.data.get("candidate_data", {})
+    hr_edited_fields = event.data.get("hr_edited_fields", [])
     
     result = await ctx.step.run(
         "send-approval",
         send_approval_step,
         tenant_id,
         email,
-        candidate_name
+        candidate_name,
+        candidate_data,
+        hr_edited_fields
     )
     
     return {"email_sent": result}
@@ -313,15 +317,19 @@ def send_confirmation_step(
 def send_approval_step(
     tenant_id: int,
     email: str,
-    candidate_name: str
+    candidate_name: str,
+    candidate_data: dict = None,
+    hr_edited_fields: list = None
 ) -> bool:
-    """Send approval email"""
+    """Send approval email with candidate profile details"""
     from app.services.email_service import EmailService
     
     return EmailService.send_approval_email(
         tenant_id=tenant_id,
         to_email=email,
-        candidate_name=candidate_name
+        candidate_name=candidate_name,
+        candidate_data=candidate_data or {},
+        hr_edited_fields=hr_edited_fields or []
     )
 
 
