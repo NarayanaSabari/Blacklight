@@ -45,7 +45,7 @@ class InvitationSubmitSchema(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone: str = Field(..., min_length=10, max_length=20, description="Phone number (required)")
     location: Optional[str] = Field(None, max_length=200)
     
     # Address (optional for initial submission)
@@ -82,6 +82,8 @@ class InvitationSubmitSchema(BaseModel):
     @field_validator('phone')
     @classmethod
     def validate_phone(cls, v):
+        if not v:
+            raise ValueError('Phone number is required')
         # Remove common formatting characters
         cleaned = ''.join(c for c in v if c.isdigit() or c == '+')
         if len(cleaned) < 10:

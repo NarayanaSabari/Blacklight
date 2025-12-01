@@ -66,7 +66,7 @@ const personalInfoSchema = z.object({
   first_name: z.string().min(2, 'First name must be at least 2 characters'),
   last_name: z.string().min(2, 'Last name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  phone: z.string().optional(),
+  phone: z.string().min(10, 'Phone number must be at least 10 digits').max(20, 'Phone number is too long'),
   location: z.string().optional(),
   linkedin_url: z.string().url('Invalid URL').optional().or(z.literal('')),
   github_url: z.string().url('Invalid URL').optional().or(z.literal('')),
@@ -513,10 +513,11 @@ export function CandidateOnboardingFlow({
                     name="phone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Phone</FormLabel>
+                        <FormLabel>Phone *</FormLabel>
                         <FormControl>
                           <Input placeholder="+1 (555) 123-4567" {...field} />
                         </FormControl>
+                        <FormDescription>Required for recruiters to contact you</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
