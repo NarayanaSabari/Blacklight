@@ -238,18 +238,17 @@ class TenantService:
 
         # Trigger tenant welcome email via Inngest
         try:
-            import os
             import inngest
             from app.inngest import inngest_client
+            from config.settings import settings
             
             # Build admin full name
             admin_name = f"{data.tenant_admin_first_name}"
             if data.tenant_admin_last_name:
                 admin_name += f" {data.tenant_admin_last_name}"
             
-            # Get portal login URL from environment
-            portal_base_url = os.getenv("PORTAL_BASE_URL", "http://localhost:5173")
-            login_url = f"{portal_base_url}/login"
+            # Get portal login URL from settings (same as candidate invitation)
+            login_url = f"{settings.frontend_base_url}/login"
             
             inngest_client.send_sync(
                 inngest.Event(
