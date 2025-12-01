@@ -51,6 +51,7 @@ import {
   Edit3,
   Upload,
   AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { DocumentUpload, type UploadedFile } from '@/components/documents/DocumentUpload';
 import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnboarding';
@@ -61,6 +62,16 @@ import { TagInput } from '@/components/ui/tag-input';
 import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
 import { EducationEditor } from '@/components/candidates/EducationEditor';
 import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const personalInfoSchema = z.object({
   first_name: z.string().min(2, 'First name must be at least 2 characters'),
@@ -130,6 +141,13 @@ export function CandidateOnboardingFlow({
   const [documentRequirements, setDocumentRequirements] = useState<DocumentRequirement[]>([]);
   const [documentFiles, setDocumentFiles] = useState<Record<string, UploadedFile[]>>({});
   const [isLoadingRequirements, setIsLoadingRequirements] = useState(true);
+  
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  
+  // Success state
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [countdown, setCountdown] = useState(5);
 
   const submitMutation = useSubmitOnboarding();
   const uploadMutation = useUploadOnboardingDocument();
@@ -507,13 +525,92 @@ export function CandidateOnboardingFlow({
         },
       });
 
-      onSuccess();
+      // Show success screen
+      setShowConfirmDialog(false);
+      setIsSubmitted(true);
     } catch (error) {
       console.error('Onboarding submission failed:', error);
+      setShowConfirmDialog(false);
     }
   };
+  
+  // Countdown effect for auto-close after submission
+  useEffect(() => {
+    if (!isSubmitted) return;
+    
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      // Close the page/tab
+      window.close();
+      // Fallback: if window.close() doesn't work (e.g., page wasn't opened by script)
+      // redirect or call onSuccess
+      onSuccess();
+    }
+  }, [isSubmitted, countdown, onSuccess]);
 
   const isSubmitting = submitMutation.isPending || uploadMutation.isPending;
+
+  // Show success screen after submission
+  if (isSubmitted) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Card className="text-center">
+          <CardContent className="pt-12 pb-12">
+            <div className="flex flex-col items-center gap-6">
+              {/* Success Icon */}
+              <div className="rounded-full bg-green-100 p-4">
+                <CheckCircle2 className="h-16 w-16 text-green-600" />
+              </div>
+              
+              {/* Success Message */}
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-green-600">
+                  Thank You for Submitting!
+                </h2>
+                <p className="text-lg text-muted-foreground">
+                  Your application has been successfully submitted.
+                </p>
+              </div>
+              
+              {/* Additional Info */}
+              <div className="max-w-md space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Our team will review your application and get back to you soon.
+                </p>
+                <p>
+                  You will receive a confirmation email at <strong>{invitation.email}</strong>
+                </p>
+              </div>
+              
+              {/* Countdown */}
+              <div className="mt-4 rounded-lg bg-slate-100 px-6 py-4">
+                <p className="text-sm text-slate-600">
+                  This page will close automatically in
+                </p>
+                <p className="text-3xl font-bold text-slate-800">
+                  {countdown} {countdown === 1 ? 'second' : 'seconds'}
+                </p>
+              </div>
+              
+              {/* Manual Close Button */}
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  window.close();
+                  onSuccess();
+                }}
+                className="mt-2"
+              >
+                Close Now
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -1221,7 +1318,7 @@ export function CandidateOnboardingFlow({
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={isSubmitting}>
+            <Button onClick={() => setShowConfirmDialog(true)} disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1237,6 +1334,53 @@ export function CandidateOnboardingFlow({
           )}
         </CardFooter>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Confirm Submission
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                You are about to submit your application. Please note:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Once submitted, you <strong>cannot modify</strong> your application</li>
+                <li>Your information will be reviewed by the hiring team</li>
+                <li>You will receive an email confirmation after submission</li>
+              </ul>
+              <p className="font-medium text-foreground">
+                Are you sure you want to proceed?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>
+              Go Back & Review
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="bg-primary"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Yes, Submit Application
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
