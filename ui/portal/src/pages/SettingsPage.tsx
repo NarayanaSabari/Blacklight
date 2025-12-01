@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePortalAuth } from '@/contexts/PortalAuthContext';
-import { Building2, User, Bell, Shield } from 'lucide-react';
+import { Building2, User, Bell, Shield, FileCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DocumentRequirementsSettings } from '@/components/settings';
 
 export function SettingsPage() {
   const { user, tenantName } = usePortalAuth();
@@ -32,6 +33,10 @@ export function SettingsPage() {
           <TabsTrigger value="organization" className="gap-2">
             <Building2 className="h-4 w-4" />
             Organization
+          </TabsTrigger>
+          <TabsTrigger value="onboarding" className="gap-2">
+            <FileCheck className="h-4 w-4" />
+            Onboarding
           </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2">
             <Bell className="h-4 w-4" />
@@ -120,6 +125,11 @@ export function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Onboarding Tab */}
+        <TabsContent value="onboarding" className="space-y-4">
+          <DocumentRequirementsSettings />
         </TabsContent>
 
         {/* Notifications Tab */}

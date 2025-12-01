@@ -840,3 +840,104 @@ class TenantService:
             job_usage_percent=job_usage_percent, # Added
             storage_usage_percent=storage_usage_percent, # Added
         )
+
+    # =========================================================================
+    # Document Requirements Management
+    # =========================================================================
+
+    @staticmethod
+    def get_document_requirements(tenant_id: int) -> list:
+        """
+        Get document requirements for a tenant.
+        
+        Args:
+            tenant_id: Tenant ID
+            
+        Returns:
+            List of document requirement dictionaries
+            
+        Raises:
+            ValueError: If tenant not found
+        """
+        tenant = db.session.get(Tenant, tenant_id)
+        if not tenant:
+            raise ValueError(f"Tenant with ID {tenant_id} not found")
+        
+        # Get requirements from settings, default to empty list
+        settings = tenant.settings or {}
+        return settings.get('required_documents', [])
+
+    @staticmethod
+    def update_document_requirements(
+        tenant_id: int,
+        requirements: list,
+        changed_by: str
+    ) -> list:
+        """
+        Update document requirements for a tenant.
+        
+        Args:
+            tenant_id: Tenant ID
+            requirements: List of document requirement dictionaries
+            changed_by: Identifier of user making the change
+            
+        Returns:
+            Updated list of document requirements
+            
+        Raises:
+            ValueError: If tenant not found
+        """
+        tenant = db.session.get(Tenant, tenant_id)
+        if not tenant:
+            raise ValueError(f"Tenant with ID {tenant_id} not found")
+        
+        # Get current settings or create empty dict
+        settings = tenant.settings or {}
+        old_requirements = settings.get('required_documents', [])
+        
+        # Update requirements in settings
+        settings['required_documents'] = requirements
+        tenant.settings = settings
+        
+        db.session.commit()
+        
+        # Log audit
+        AuditLogService.log_action(
+            action="UPDATE",
+            entity_type="TenantDocumentRequirements",
+            entity_id=tenant_id,
+            changed_by=changed_by,
+            changes={
+                "required_documents": (old_requirements, requirements)
+            },
+        )
+        
+        logger.info(f"Document requirements updated for tenant {tenant_id} by {changed_by}")
+        
+        return requirements
+
+    @staticmethod
+    def get_document_requirements_by_token(token: str) -> list:
+        """
+        Get document requirements for a tenant using invitation token.
+        Public method for onboarding flow.
+        
+        Args:
+            token: Invitation token
+            
+        Returns:
+            List of document requirement dictionaries
+            
+        Raises:
+            ValueError: If token is invalid
+        """
+        from app.models.candidate_invitation import CandidateInvitation
+        
+        invitation = db.session.scalar(
+            select(CandidateInvitation).where(CandidateInvitation.token == token)
+        )
+        
+        if not invitation:
+            raise ValueError("Invalid invitation token")
+        
+        return TenantService.get_document_requirements(invitation.tenant_id)

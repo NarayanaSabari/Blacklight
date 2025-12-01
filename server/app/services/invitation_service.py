@@ -463,7 +463,7 @@ class InvitationService:
             Updated invitation
             
         Raises:
-            ValueError: If token is invalid or expired
+            ValueError: If token is invalid or expired or required documents missing
         """
         invitation = InvitationService.get_by_token(token)
         if not invitation:
@@ -473,6 +473,33 @@ class InvitationService:
             if invitation.is_expired:
                 raise ValueError("Invitation has expired")
             raise ValueError(f"Invitation is no longer valid (status: {invitation.status})")
+        
+        # Validate required documents are uploaded (grandfathers existing - only checks at submission time)
+        from app.services import TenantService
+        from app.models.candidate_document import CandidateDocument
+        
+        required_documents = TenantService.get_document_requirements(invitation.tenant_id)
+        if required_documents:
+            # Get uploaded document types for this invitation
+            uploaded_docs = db.session.execute(
+                select(CandidateDocument.document_type).where(
+                    CandidateDocument.invitation_id == invitation.id
+                )
+            ).scalars().all()
+            uploaded_doc_types = set(uploaded_docs)
+            
+            # Check which required documents are missing
+            missing_documents = []
+            for req in required_documents:
+                if req.get('is_required', True) and req.get('document_type') not in uploaded_doc_types:
+                    missing_documents.append({
+                        'document_type': req.get('document_type'),
+                        'label': req.get('label', req.get('document_type'))
+                    })
+            
+            if missing_documents:
+                missing_labels = [doc['label'] for doc in missing_documents]
+                raise ValueError(f"Missing required documents: {', '.join(missing_labels)}")
         
         # Update invitation
         invitation.invitation_data = invitation_data

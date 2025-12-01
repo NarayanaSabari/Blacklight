@@ -9,3 +9,4 @@ export * from './interviews';
 export * from './users';
 export * from './roles';
 export * from './dashboard';
+export * from './settings';

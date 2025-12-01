@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict, model_validator
 from datetime import datetime
 from enum import Enum
+import uuid
 
 from app.schemas.subscription_plan_schema import SubscriptionPlanResponseSchema
 
@@ -20,6 +21,90 @@ class BillingCycleEnum(str, Enum):
     MONTHLY = "MONTHLY"
     YEARLY = "YEARLY"
 
+
+# =============================================================================
+# Document Requirements Schemas
+# =============================================================================
+
+class DocumentRequirementSchema(BaseModel):
+    """Schema for a single document requirement."""
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier")
+    document_type: str = Field(..., min_length=1, max_length=50, description="Document type identifier (e.g., 'id_proof', 'work_authorization')")
+    label: str = Field(..., min_length=1, max_length=100, description="Display name for the document")
+    description: Optional[str] = Field(None, max_length=500, description="Help text for candidates")
+    is_required: bool = Field(True, description="Whether this document is mandatory")
+    display_order: int = Field(0, ge=0, description="Order in which to display the document")
+    allowed_file_types: List[str] = Field(
+        default_factory=lambda: ["application/pdf", "image/jpeg", "image/png"],
+        description="List of allowed MIME types"
+    )
+    max_file_size_mb: int = Field(5, ge=1, le=50, description="Maximum file size in MB")
+    
+    @field_validator('document_type')
+    @classmethod
+    def validate_document_type(cls, v):
+        """Validate document type is alphanumeric with underscores."""
+        import re
+        if not re.match(r'^[a-z0-9_]+$', v):
+            raise ValueError('Document type must contain only lowercase letters, numbers, and underscores')
+        return v
+    
+    @field_validator('allowed_file_types')
+    @classmethod
+    def validate_file_types(cls, v):
+        """Validate file types are valid MIME types."""
+        allowed_mime_types = {
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'text/plain'
+        }
+        for mime_type in v:
+            if mime_type.lower() not in allowed_mime_types:
+                raise ValueError(f'Invalid MIME type: {mime_type}. Allowed: {allowed_mime_types}')
+        return [mt.lower() for mt in v]
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentRequirementsUpdateSchema(BaseModel):
+    """Schema for updating tenant document requirements."""
+    
+    requirements: List[DocumentRequirementSchema] = Field(
+        default_factory=list,
+        description="List of document requirements"
+    )
+    
+    @field_validator('requirements')
+    @classmethod
+    def validate_requirements(cls, v):
+        """Validate no duplicate document types."""
+        doc_types = [req.document_type for req in v]
+        if len(doc_types) != len(set(doc_types)):
+            raise ValueError('Duplicate document types are not allowed')
+        return v
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentRequirementsResponseSchema(BaseModel):
+    """Schema for document requirements response."""
+    
+    requirements: List[DocumentRequirementSchema] = Field(
+        default_factory=list,
+        description="List of document requirements"
+    )
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+# =============================================================================
+# Tenant Schemas
+# =============================================================================
 
 class TenantCreateSchema(BaseModel):
     """Schema for creating a tenant."""

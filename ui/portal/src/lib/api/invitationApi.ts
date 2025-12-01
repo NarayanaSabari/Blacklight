@@ -158,12 +158,36 @@ export const invitationApi = {
  * Public Candidate Onboarding (Unauthenticated Routes)
  */
 
+export interface DocumentRequirement {
+  id: string;
+  document_type: string;
+  label: string;
+  description?: string;
+  is_required: boolean;
+  display_order: number;
+  allowed_file_types: string[];
+  max_file_size_mb: number;
+}
+
+export interface DocumentRequirementsResponse {
+  requirements: DocumentRequirement[];
+}
+
 export const onboardingApi = {
   /**
    * Verify invitation token
    */
   verify: (token: string): Promise<InvitationWithRelations> => {
     return apiRequest.get<InvitationWithRelations>(`${INVITATION_BASE}/public/verify?token=${token}`);
+  },
+
+  /**
+   * Get document requirements for a tenant (public endpoint)
+   */
+  getDocumentRequirements: (token: string): Promise<DocumentRequirementsResponse> => {
+    return apiRequest.get<DocumentRequirementsResponse>(
+      `${INVITATION_BASE}/public/document-requirements?token=${token}`
+    );
   },
 
   /**

@@ -384,6 +384,40 @@ def get_audit_logs(invitation_id):
 # PUBLIC ROUTES (Candidate)
 # ============================================================================
 
+@bp.route("/public/document-requirements", methods=["GET"])
+@limiter.limit("30/minute")
+def get_public_document_requirements():
+    """
+    Get document requirements for a tenant using invitation token.
+    Public endpoint for candidate onboarding flow.
+    
+    GET /api/invitations/public/document-requirements?token=xxx
+    
+    Returns:
+        200: List of document requirements for the tenant
+        400: Token is required
+        404: Invalid token
+    """
+    try:
+        from app.services import TenantService
+        
+        token = request.args.get("token")
+        if not token:
+            return error_response("Token is required", 400)
+        
+        requirements = TenantService.get_document_requirements_by_token(token)
+        
+        return jsonify({
+            "requirements": requirements
+        }), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        current_app.logger.error(f"Error getting document requirements: {e}")
+        return error_response("Internal server error", 500)
+
+
 @bp.route("/public/verify", methods=["GET"])
 @limiter.limit("20/minute")
 def verify_token():

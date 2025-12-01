@@ -421,3 +421,98 @@ def assign_user_roles(user_id: int):
         return error_response(str(e), 400)
     except Exception as e:
         return error_response(str(e), 500)
+
+
+# =============================================================================
+# Tenant Settings - Document Requirements
+# =============================================================================
+
+@bp.route("/settings/document-requirements", methods=["GET"])
+@require_portal_auth
+@require_permission('settings.view')
+def get_document_requirements():
+    """
+    Get document requirements for the current tenant.
+    
+    Requires: Portal authentication with settings.view permission
+    
+    Returns:
+        200: List of document requirements
+        404: Tenant not found
+    """
+    try:
+        from app.services import TenantService
+        
+        current_user = get_current_user()
+        tenant_id = current_user.get("tenant_id")
+        
+        requirements = TenantService.get_document_requirements(tenant_id)
+        
+        return jsonify({
+            "requirements": requirements
+        }), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/settings/document-requirements", methods=["PUT"])
+@require_portal_auth
+@require_permission('settings.edit')
+def update_document_requirements():
+    """
+    Update document requirements for the current tenant.
+    
+    Requires: Portal authentication with settings.edit permission
+    
+    Request body: {
+        "requirements": [
+            {
+                "id": "uuid",
+                "document_type": "id_proof",
+                "label": "Government ID",
+                "description": "Passport, Driver's License, or State ID",
+                "is_required": true,
+                "display_order": 1,
+                "allowed_file_types": ["pdf", "jpg", "jpeg", "png"],
+                "max_file_size_mb": 5
+            }
+        ]
+    }
+    
+    Returns:
+        200: Updated list of document requirements
+        400: Validation error
+        404: Tenant not found
+    """
+    try:
+        from app.services import TenantService
+        from app.schemas.tenant_schema import DocumentRequirementsUpdateSchema
+        
+        current_user = get_current_user()
+        tenant_id = current_user.get("tenant_id")
+        changed_by = get_changed_by()
+        
+        # Validate request body
+        data = DocumentRequirementsUpdateSchema.model_validate(request.get_json())
+        
+        # Convert Pydantic models to dicts for storage
+        requirements_dicts = [req.model_dump() for req in data.requirements]
+        
+        updated_requirements = TenantService.update_document_requirements(
+            tenant_id=tenant_id,
+            requirements=requirements_dicts,
+            changed_by=changed_by
+        )
+        
+        return jsonify({
+            "message": "Document requirements updated successfully",
+            "requirements": updated_requirements
+        }), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)

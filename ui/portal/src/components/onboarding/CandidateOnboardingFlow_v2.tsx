@@ -5,7 +5,7 @@
  * 1) Personal Info
  * 2) Resume Upload + AI Parsing (with manual entry option)
  * 3) Review & Edit Parsed Data
- * 4) Additional Documents
+ * 4) Additional Documents (Dynamic based on tenant settings)
  * 5) Final Review & Submit
  */
 
@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 import { DocumentUpload, type UploadedFile } from '@/components/documents/DocumentUpload';
 import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnboarding';
-import { onboardingApi } from '@/lib/api/invitationApi';
+import { onboardingApi, type DocumentRequirement } from '@/lib/api/invitationApi';
 import type { InvitationWithRelations } from '@/types';
 import { toast } from 'sonner';
 import { TagInput } from '@/components/ui/tag-input';
@@ -125,6 +125,11 @@ export function CandidateOnboardingFlow({
     model_version: string;
   } | null>(null);
   const [isGeneratingRoles, setIsGeneratingRoles] = useState(false);
+  
+  // Document requirements state
+  const [documentRequirements, setDocumentRequirements] = useState<DocumentRequirement[]>([]);
+  const [documentFiles, setDocumentFiles] = useState<Record<string, UploadedFile[]>>({});
+  const [isLoadingRequirements, setIsLoadingRequirements] = useState(true);
 
   const submitMutation = useSubmitOnboarding();
   const uploadMutation = useUploadOnboardingDocument();
@@ -216,6 +221,29 @@ export function CandidateOnboardingFlow({
     }
   };
 
+  // Fetch document requirements on mount
+  useEffect(() => {
+    const fetchDocumentRequirements = async () => {
+      try {
+        setIsLoadingRequirements(true);
+        const response = await onboardingApi.getDocumentRequirements(token);
+        // Sort by display_order
+        const sorted = (response.requirements || []).sort(
+          (a, b) => (a.display_order || 0) - (b.display_order || 0)
+        );
+        setDocumentRequirements(sorted);
+      } catch (error) {
+        console.error('Failed to fetch document requirements:', error);
+        // Non-fatal - just means no custom requirements configured
+        setDocumentRequirements([]);
+      } finally {
+        setIsLoadingRequirements(false);
+      }
+    };
+    
+    fetchDocumentRequirements();
+  }, [token]);
+
   // Auto-fill form with parsed data when available
   useEffect(() => {
     if (parsedData && currentStep === 3) {
@@ -259,6 +287,71 @@ export function CandidateOnboardingFlow({
     }
   }, [parsedData, originalParsedData, currentStep, professionalForm, personalForm]);
 
+  // Helper to get MIME types from file extensions or pass through if already MIME types
+  const getMimeTypesFromExtensions = (fileTypes: string[]): string[] => {
+    const mimeMap: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'txt': 'text/plain',
+    };
+    return fileTypes.map(ft => {
+      // If it's already a MIME type (contains /), pass through
+      if (ft.includes('/')) {
+        return ft;
+      }
+      // Otherwise, map extension to MIME type
+      return mimeMap[ft.toLowerCase()] || `application/${ft}`;
+    }).filter(Boolean);
+  };
+
+  // Helper to get friendly labels for file types (extensions or MIME types)
+  const getFileTypeLabels = (fileTypes: string[]): string => {
+    const mimeToLabel: Record<string, string> = {
+      'application/pdf': 'PDF',
+      'application/msword': 'DOC',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+      'image/jpeg': 'JPEG',
+      'image/png': 'PNG',
+      'image/gif': 'GIF',
+      'text/plain': 'TXT',
+    };
+    return fileTypes.map(ft => {
+      // If it's a MIME type, look up label
+      if (ft.includes('/')) {
+        return mimeToLabel[ft.toLowerCase()] || ft.split('/')[1]?.toUpperCase() || ft;
+      }
+      // Otherwise, it's an extension - just uppercase it
+      return ft.toUpperCase();
+    }).join(', ');
+  };
+
+  // Handle document file change for a specific requirement
+  const handleDocumentFileChange = (documentType: string, files: UploadedFile[]) => {
+    setDocumentFiles(prev => ({
+      ...prev,
+      [documentType]: files
+    }));
+  };
+
+  // Check if all required documents are uploaded
+  const validateRequiredDocuments = (): { valid: boolean; missing: string[] } => {
+    const missing: string[] = [];
+    for (const req of documentRequirements) {
+      if (req.is_required) {
+        const files = documentFiles[req.document_type] || [];
+        if (files.length === 0) {
+          missing.push(req.label);
+        }
+      }
+    }
+    return { valid: missing.length === 0, missing };
+  };
+
   const handleNextStep = async () => {
     if (currentStep === 1) {
       const isValid = await personalForm.trigger();
@@ -280,6 +373,15 @@ export function CandidateOnboardingFlow({
       // Validate professional form
       const isValid = await professionalForm.trigger();
       if (!isValid) return;
+    }
+
+    if (currentStep === 4) {
+      // Validate required documents are uploaded
+      const { valid, missing } = validateRequiredDocuments();
+      if (!valid) {
+        toast.error(`Please upload required documents: ${missing.join(', ')}`);
+        return;
+      }
     }
 
     setCurrentStep((prev) => Math.min(prev + 1, steps.length));
@@ -336,7 +438,20 @@ export function CandidateOnboardingFlow({
         }
       }
 
-      // Upload additional documents
+      // Upload required/optional documents from document requirements
+      for (const [documentType, files] of Object.entries(documentFiles)) {
+        for (const file of files) {
+          if (file.status === 'pending') {
+            await uploadMutation.mutateAsync({
+              token,
+              file: file.file,
+              documentType,
+            });
+          }
+        }
+      }
+
+      // Upload additional documents (legacy - for any files not in requirements)
       for (const file of additionalFiles) {
         if (file.status === 'pending') {
           await uploadMutation.mutateAsync({
@@ -901,30 +1016,96 @@ export function CandidateOnboardingFlow({
             </div>
           )}
 
-          {/* Step 4: Additional Documents */}
+          {/* Step 4: Documents (Dynamic based on tenant requirements) */}
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold mb-2">Additional Documents (Optional)</h3>
+                <h3 className="text-lg font-semibold mb-2">Required Documents</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Upload any additional documents such as ID proof, work authorization, certifications, or portfolio samples.
+                  {documentRequirements.length > 0 
+                    ? 'Please upload the following documents. Items marked with * are required.'
+                    : 'Upload any additional documents such as ID proof, work authorization, certifications, or portfolio samples.'}
                 </p>
               </div>
-              <DocumentUpload
-                onFilesChange={setAdditionalFiles}
-                maxFiles={5}
-                maxSizeInMB={10}
-                acceptedFileTypes={[
-                  'application/pdf',
-                  'application/msword',
-                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                  'image/jpeg',
-                  'image/png',
-                ]}
-                documentType="other"
-                label="Upload Additional Documents"
-                description="Optional: Add certifications, portfolio, work authorization, or other relevant documents"
-              />
+
+              {isLoadingRequirements ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-muted-foreground">Loading document requirements...</span>
+                </div>
+              ) : documentRequirements.length > 0 ? (
+                <div className="space-y-6">
+                  {documentRequirements.map((req) => (
+                    <div key={req.id} className="border rounded-lg p-4">
+                      <div className="mb-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          {req.label}
+                          {req.is_required && (
+                            <Badge variant="destructive" className="text-xs">Required</Badge>
+                          )}
+                        </h4>
+                        {req.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{req.description}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Allowed: {getFileTypeLabels(req.allowed_file_types)} • Max size: {req.max_file_size_mb}MB
+                        </p>
+                      </div>
+                      <DocumentUpload
+                        onFilesChange={(files) => handleDocumentFileChange(req.document_type, files)}
+                        maxFiles={1}
+                        maxSizeInMB={req.max_file_size_mb}
+                        acceptedFileTypes={getMimeTypesFromExtensions(req.allowed_file_types)}
+                        documentType={req.document_type}
+                        label={`Upload ${req.label}`}
+                        description={req.is_required ? 'This document is required' : 'Optional'}
+                      />
+                    </div>
+                  ))}
+
+                  <Separator />
+
+                  {/* Additional documents section for any other files */}
+                  <div>
+                    <h4 className="font-medium mb-2">Other Documents (Optional)</h4>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Upload any additional documents not listed above.
+                    </p>
+                    <DocumentUpload
+                      onFilesChange={setAdditionalFiles}
+                      maxFiles={5}
+                      maxSizeInMB={10}
+                      acceptedFileTypes={[
+                        'application/pdf',
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'image/jpeg',
+                        'image/png',
+                      ]}
+                      documentType="other"
+                      label="Upload Additional Documents"
+                      description="Optional: Add any other relevant documents"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* Fallback to original behavior if no requirements configured */
+                <DocumentUpload
+                  onFilesChange={setAdditionalFiles}
+                  maxFiles={5}
+                  maxSizeInMB={10}
+                  acceptedFileTypes={[
+                    'application/pdf',
+                    'application/msword',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'image/jpeg',
+                    'image/png',
+                  ]}
+                  documentType="other"
+                  label="Upload Additional Documents"
+                  description="Optional: Add certifications, portfolio, work authorization, or other relevant documents"
+                />
+              )}
             </div>
           )}
 
@@ -985,12 +1166,28 @@ export function CandidateOnboardingFlow({
                         {resumeFiles.length > 0 ? resumeFiles[0].file.name : entryMethod === 'manual' ? 'Entered manually' : 'Not uploaded'}
                       </span>
                     </div>
-                    <div>
-                      <span className="text-sm font-medium">Additional Documents:</span>
-                      <span className="text-sm text-muted-foreground ml-2">
-                        {additionalFiles.length > 0 ? `${additionalFiles.length} file(s)` : 'None'}
-                      </span>
-                    </div>
+                    {/* Show required documents */}
+                    {documentRequirements.map((req) => {
+                      const files = documentFiles[req.document_type] || [];
+                      return (
+                        <div key={req.id}>
+                          <span className="text-sm font-medium">{req.label}:</span>
+                          <span className="text-sm text-muted-foreground ml-2">
+                            {files.length > 0 
+                              ? files.map(f => f.file.name).join(', ')
+                              : req.is_required ? 'Not uploaded (Required)' : 'Not uploaded'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {additionalFiles.length > 0 && (
+                      <div>
+                        <span className="text-sm font-medium">Other Documents:</span>
+                        <span className="text-sm text-muted-foreground ml-2">
+                          {additionalFiles.map(f => f.file.name).join(', ')}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </ReviewSection>
 
