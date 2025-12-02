@@ -434,8 +434,8 @@ def get_assigned_candidates_matches():
     
     Returns matches for:
     - Recruiters: Candidates assigned to them
-    - Managers: Candidates assigned to them or their team recruiters
-    - Hiring Managers: All candidates they manage
+    - Team Leads: Candidates assigned to them or their team recruiters
+    - Managers: All candidates they manage
     """
     try:
         tenant_id = g.tenant_id

@@ -25,7 +25,7 @@ export const teamApi = {
 
   /**
    * Get list of all managers (users who have team members)
-   * @param roleFilter - Optional role name filter (e.g., MANAGER, HIRING_MANAGER)
+   * @param roleFilter - Optional role name filter (e.g., TEAM_LEAD, MANAGER)
    */
   getManagersList: async (roleFilter?: string): Promise<ManagersListResponse> => {
     const params = new URLSearchParams();

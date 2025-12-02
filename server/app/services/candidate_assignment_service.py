@@ -35,7 +35,7 @@ class CandidateAssignmentService:
         Args:
             candidate_id: ID of candidate to assign
             assigned_to_user_id: ID of user to assign candidate to
-            assigned_by_user_id: ID of user performing assignment (must be HIRING_MANAGER)
+            assigned_by_user_id: ID of user performing assignment (must be MANAGER)
             assignment_reason: Optional reason for assignment
             changed_by: Identifier for audit log (format: "portal_user:123")
             tenant_id: Tenant ID for validation (optional, will use candidate's tenant if not provided)
@@ -85,7 +85,7 @@ class CandidateAssignmentService:
 
         # Determine assignment type based on assignee's role
         assignee_roles = [role.name for role in assignee.roles]
-        is_manager = 'MANAGER' in assignee_roles or 'HIRING_MANAGER' in assignee_roles
+        is_manager = 'TEAM_LEAD' in assignee_roles or 'MANAGER' in assignee_roles
 
         # Create assignment
         assignment = CandidateAssignment(
@@ -163,7 +163,7 @@ class CandidateAssignmentService:
         Args:
             candidate_id: ID of candidate to reassign
             new_assigned_to_user_id: ID of new user to assign candidate to
-            assigned_by_user_id: ID of user performing reassignment (must be HIRING_MANAGER)
+            assigned_by_user_id: ID of user performing reassignment (must be MANAGER)
             assignment_reason: Optional reason for reassignment
             changed_by: Identifier for audit log (format: "portal_user:123")
 
@@ -221,7 +221,7 @@ class CandidateAssignmentService:
 
         # Determine assignment type based on new assignee's role
         new_assignee_roles = [role.name for role in new_assignee.roles]
-        is_manager = 'MANAGER' in new_assignee_roles or 'HIRING_MANAGER' in new_assignee_roles
+        is_manager = 'TEAM_LEAD' in new_assignee_roles or 'MANAGER' in new_assignee_roles
 
         # Create new assignment
         new_assignment = CandidateAssignment(
@@ -301,7 +301,7 @@ class CandidateAssignmentService:
 
         Args:
             candidate_id: ID of candidate to unassign
-            unassigned_by_user_id: ID of user performing unassignment (must be HIRING_MANAGER)
+            unassigned_by_user_id: ID of user performing unassignment (must be MANAGER)
             reason: Optional reason for unassignment
             changed_by: Identifier for audit log (format: "portal_user:123")
 
@@ -705,7 +705,7 @@ class CandidateAssignmentService:
         """
         Broadcast assign a candidate to ALL managers and recruiters in the tenant.
         This sets is_visible_to_all_team=True, making the candidate visible to all 
-        current AND future users with MANAGER, HIRING_MANAGER, or RECRUITER roles.
+        current AND future users with TEAM_LEAD, MANAGER, or RECRUITER roles.
 
         Args:
             candidate_id: ID of candidate to assign
@@ -770,7 +770,7 @@ class CandidateAssignmentService:
         candidate.onboarding_status = 'ASSIGNED'
 
         # Get count of current team members for the response message
-        target_roles = ['MANAGER', 'HIRING_MANAGER', 'RECRUITER']
+        target_roles = ['TEAM_LEAD', 'MANAGER', 'RECRUITER']
         team_count_query = (
             select(PortalUser)
             .join(PortalUser.roles)

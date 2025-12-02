@@ -8,10 +8,10 @@ The platform includes two web applications:
     - Tenant-specific HR/Recruiter interfaces with role-based access control
     - Candidate Management: Upload resumes, send email invitations, track onboarding status
     - Candidate Onboarding Workflow: Review submissions, approve/reject candidates, manage documents
-    - Candidate Assignment: Assign approved candidates to recruiters/hiring managers
+    - Candidate Assignment: Assign approved candidates to recruiters/team leads
     - Your Candidates: View and manage assigned candidates with filtering
     - Email Invitations: Track invitation status, resend invites, manage expiry
-    - Roles: TENANT_ADMIN, HIRING_MANAGER, MANAGER, RECRUITER (each with specific permissions)
+    - Roles: TENANT_ADMIN, MANAGER, TEAM_LEAD, RECRUITER (each with specific permissions)
     
 - **Central Management Platform (ui/centralD)**: 
     - Super-admin (PM_ADMIN) interface for platform management
@@ -40,7 +40,7 @@ The platform includes two web applications:
 - `POST /api/invitations/{invitation_id}/resend` - Resend invitation email
 
 ### 2. Candidate Onboarding Review & Approval
-**Actors**: HIRING_MANAGER, MANAGER, TENANT_ADMIN
+**Actors**: MANAGER, TEAM_LEAD, TENANT_ADMIN
 
 **Flow**:
 1. After candidate submits, HR reviews submission in Onboarding Workflow tab
@@ -57,32 +57,32 @@ The platform includes two web applications:
 - `GET /api/candidate-onboarding/stats` - Get workflow statistics (pending, approved, rejected)
 
 ### 3. Candidate Assignment Management
-**Actors**: HIRING_MANAGER (HR), MANAGER, RECRUITER
+**Actors**: MANAGER (HR), TEAM_LEAD, RECRUITER
 
 **Assignment Hierarchy**:
-- **HR → Manager**: HR can assign candidates directly to managers
+- **HR → Team Lead**: HR can assign candidates directly to team leads
 - **HR → Recruiter**: HR can assign candidates directly to recruiters
-- **Manager → Recruiter**: Managers can reassign candidates to their team recruiters
-- **Automatic Visibility**: When HR assigns to a recruiter, that recruiter's manager automatically sees the candidate
+- **Team Lead → Recruiter**: Team Leads can reassign candidates to their team recruiters
+- **Automatic Visibility**: When HR assigns to a recruiter, that recruiter's team lead automatically sees the candidate
 
 **Flow**:
 1. **HR Assignment**:
-   - HR assigns approved candidate to Manager or Recruiter via `/api/candidate-assignments`
+   - HR assigns approved candidate to Team Lead or Recruiter via `/api/candidate-assignments`
    - Assignment is created with status `ACTIVE` immediately (no acceptance/decline workflow)
-   - If assigned to Recruiter with a manager, the manager can also view this candidate
+   - If assigned to Recruiter with a team lead, the team lead can also view this candidate
    
-2. **Manager Reassignment**:
-   - Manager can view all candidates assigned to them
-   - Manager can reassign candidates to any recruiter in their team
-   - Original assignment remains visible to manager for oversight
+2. **Team Lead Reassignment**:
+   - Team Lead can view all candidates assigned to them
+   - Team Lead can reassign candidates to any recruiter in their team
+   - Original assignment remains visible to team lead for oversight
    
 3. **Recruiter View**:
    - Recruiter sees candidates assigned directly by HR
-   - Recruiter sees candidates reassigned by their manager
+   - Recruiter sees candidates reassigned by their team lead
    - Both appear in "Your Candidates" page with `ACTIVE` status
 
 **Key Endpoints**:
-- `POST /api/candidate-assignments` - Create assignment (HR or Manager)
+- `POST /api/candidate-assignments` - Create assignment (HR or Team Lead)
 - `GET /api/candidate-assignments/my-assigned?user_id={id}&status_filter={status}` - Get user's assigned candidates
 - `PUT /api/candidate-assignments/{assignment_id}` - Update assignment (for reassignment)
 - `DELETE /api/candidate-assignments/{assignment_id}` - Remove assignment
@@ -233,13 +233,13 @@ flask run                         # Development server with hot-reload
 - **TENANT_ADMIN**: Full access to all tenant features, user management, settings
   - Permissions: All candidates.*, invitations.*, assignments.*, users.*, settings.*
   
-- **HIRING_MANAGER**: Can manage candidates, send invitations, approve onboarding, assign candidates
+- **MANAGER**: Can manage candidates, send invitations, approve onboarding, assign candidates
   - Permissions: candidates.view, candidates.create, candidates.update, candidates.delete
   - invitations.view, invitations.create, invitations.resend
   - onboarding.view, onboarding.approve, onboarding.reject
   - assignments.view, assignments.create, assignments.update
   
-- **MANAGER**: Similar to HIRING_MANAGER but may have team-specific restrictions
+- **TEAM_LEAD**: Similar to MANAGER but may have team-specific restrictions
   - Permissions: candidates.view, candidates.create, candidates.update
   - invitations.view, invitations.create
   - assignments.view, assignments.create

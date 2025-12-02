@@ -691,7 +691,7 @@ class CandidateService:
         
         Args:
             candidate_id: Candidate ID
-            approved_by_user_id: ID of user approving (must be HIRING_MANAGER)
+            approved_by_user_id: ID of user approving (must be MANAGER)
             tenant_id: Tenant ID (for access control)
         
         Returns:
@@ -740,7 +740,7 @@ class CandidateService:
         
         Args:
             candidate_id: Candidate ID
-            rejected_by_user_id: ID of user rejecting (must be HIRING_MANAGER)
+            rejected_by_user_id: ID of user rejecting (must be MANAGER)
             rejection_reason: Reason for rejection
             tenant_id: Tenant ID (for access control)
         

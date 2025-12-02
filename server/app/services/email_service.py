@@ -734,7 +734,7 @@ class EmailService:
                 <h3 style="color: #1e40af;">Getting Started:</h3>
                 <ul style="padding-left: 20px;">
                     <li>Login and change your password</li>
-                    <li>Set up your team by inviting Hiring Managers and Recruiters</li>
+                    <li>Set up your team by inviting Managers and Recruiters</li>
                     <li>Start adding candidates or send onboarding invitations</li>
                     <li>Configure your organization's settings</li>
                 </ul>
@@ -775,7 +775,7 @@ class EmailService:
         
         Getting Started:
         - Login and change your password
-        - Set up your team by inviting Hiring Managers and Recruiters
+        - Set up your team by inviting Managers and Recruiters
         - Start adding candidates or send onboarding invitations
         - Configure your organization's settings
         

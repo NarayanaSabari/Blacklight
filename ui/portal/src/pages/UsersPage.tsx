@@ -38,7 +38,7 @@ export function UsersPage() {
     total: users.length,
     active: users.filter((u) => u.is_active).length,
     recruiters: users.filter((u) => u.roles?.some(r => r.name === 'RECRUITER')).length,
-    hiring_managers: users.filter((u) => u.roles?.some(r => r.name === 'HIRING_MANAGER')).length,
+    managers: users.filter((u) => u.roles?.some(r => r.name === 'MANAGER')).length,
   };
 
   return (
@@ -104,12 +104,12 @@ export function UsersPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Hiring Managers</CardDescription>
+            <CardDescription>Managers</CardDescription>
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <CardTitle className="text-3xl">
-              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.hiring_managers}
+              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.managers}
             </CardTitle>
           </CardContent>
         </Card>

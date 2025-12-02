@@ -79,7 +79,7 @@ def get_managers_list():
     Get list of all managers (users who have team members).
     
     Query Parameters:
-        role_name (optional): Filter by role name (e.g., MANAGER, HIRING_MANAGER)
+        role_name (optional): Filter by role name (e.g., TEAM_LEAD, MANAGER)
     
     Returns: List of managers with team member counts
     Permissions: users.view_team
@@ -197,7 +197,7 @@ def assign_manager():
     
     Request Body: AssignManagerSchema
     Returns: AssignManagerResponseSchema
-    Permissions: users.assign_manager (HIRING_MANAGER only)
+    Permissions: users.assign_manager (MANAGER only)
     """
     try:
         tenant_id = g.tenant_id
@@ -240,7 +240,7 @@ def remove_manager():
     
     Request Body: RemoveManagerSchema
     Returns: RemoveManagerResponseSchema
-    Permissions: users.assign_manager (HIRING_MANAGER only)
+    Permissions: users.assign_manager (MANAGER only)
     """
     try:
         tenant_id = g.tenant_id

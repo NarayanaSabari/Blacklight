@@ -180,7 +180,7 @@ def list_users():
         - page: Page number (default: 1)
         - per_page: Items per page (default: 20, max: 100)
         - search: Search in email, first_name, last_name
-        - role: Filter by role (TENANT_ADMIN, RECRUITER, HIRING_MANAGER)
+        - role: Filter by role (TENANT_ADMIN, RECRUITER, MANAGER, TEAM_LEAD)
         - is_active: Filter by active status (true/false)
     
     Returns:

@@ -14,7 +14,7 @@ export interface Role {
   updated_at: string;
 }
 
-export type PortalUserRole = 'TENANT_ADMIN' | 'RECRUITER' | 'HIRING_MANAGER';
+export type PortalUserRole = 'TENANT_ADMIN' | 'RECRUITER' | 'MANAGER' | 'TEAM_LEAD';
 
 export interface PortalUser {
   id: number;

@@ -1,12 +1,12 @@
 # Portal UI
 
-Tenant-specific portal for recruiters, hiring managers, and tenant administrators.
+Tenant-specific portal for recruiters, managers, team leads, and tenant administrators.
 
 ## Features
 
 - **Authentication**: Secure login with JWT tokens
 - **Multi-tenant**: Each user sees only their organization's data
-- **Role-based Access**: Different permissions for Tenant Admins, Recruiters, and Hiring Managers
+- **Role-based Access**: Different permissions for Tenant Admins, Managers, Team Leads, and Recruiters
 - **Modern UI**: Built with React, TypeScript, shadcn/ui, and Tailwind CSS
 
 ## Getting Started

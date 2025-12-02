@@ -30,16 +30,16 @@ def seed_roles_and_permissions():
             "tenant_id": None
         },
         {
-            "name": "HIRING_MANAGER",
-            "display_name": "Hiring Manager / HR",
-            "description": "Manages candidate onboarding, approvals, and team structure. Can assign candidates to managers, assign recruiters to managers, and participate in hiring decisions.",
+            "name": "MANAGER",
+            "display_name": "Manager",
+            "description": "Manages candidate onboarding, approvals, and team structure. Can assign candidates to team leads, assign recruiters to team leads, and participate in hiring decisions.",
             "is_system_role": True,
             "is_active": True,
             "tenant_id": None
         },
         {
-            "name": "MANAGER",
-            "display_name": "Manager",
+            "name": "TEAM_LEAD",
+            "display_name": "Team Lead",
             "description": "Oversee team activities, manage jobs, and view reports. Can view and edit users, but not manage roles or tenant settings.",
             "is_system_role": True,
             "is_active": True,
@@ -221,10 +221,10 @@ def seed_roles_and_permissions():
                 print(f"    ⏭️  RECRUITER already has {perm_name}")
 
 
-    # HIRING_MANAGER (HR role - candidate onboarding and team management)
-    hiring_manager_role = created_roles.get("HIRING_MANAGER")
-    if hiring_manager_role:
-        hiring_manager_perms_names = [
+    # MANAGER (HR role - candidate onboarding and team management)
+    manager_role = created_roles.get("MANAGER")
+    if manager_role:
+        manager_perms_names = [
             # Candidate management
             'candidates.view', 'candidates.create', 'candidates.edit', 'candidates.delete',
             'candidates.view_all', 'candidates.view_assigned', 'candidates.assign', 'candidates.reassign', 'candidates.approve',
@@ -245,19 +245,19 @@ def seed_roles_and_permissions():
             'jobs.view', 'interviews.view', 'interviews.feedback',
             'clients.view', 'reports.view'
         ]
-        for perm_name in hiring_manager_perms_names:
+        for perm_name in manager_perms_names:
             perm_obj = created_permissions.get(perm_name)
-            if perm_obj and perm_obj not in hiring_manager_role.permissions:
-                hiring_manager_role.permissions.append(perm_obj)
-                print(f"    ✅ Assigned {perm_name} to HIRING_MANAGER")
+            if perm_obj and perm_obj not in manager_role.permissions:
+                manager_role.permissions.append(perm_obj)
+                print(f"    ✅ Assigned {perm_name} to MANAGER")
             else:
-                print(f"    ⏭️  HIRING_MANAGER already has {perm_name}")
+                print(f"    ⏭️  MANAGER already has {perm_name}")
 
 
-    # MANAGER (team manager - assigns candidates to recruiters)
-    manager_role = created_roles.get("MANAGER")
-    if manager_role:
-        manager_perms_names = [
+    # TEAM_LEAD (team lead - assigns candidates to recruiters)
+    team_lead_role = created_roles.get("TEAM_LEAD")
+    if team_lead_role:
+        team_lead_perms_names = [
             # Candidate assignment permissions
             'candidates.view', 'candidates.view_all', 'candidates.view_assigned',
             'candidates.assign', 'candidates.reassign', 'candidates.view_history',
@@ -275,13 +275,13 @@ def seed_roles_and_permissions():
             # Reporting
             'reports.view', 'reports.export'
         ]
-        for perm_name in manager_perms_names:
+        for perm_name in team_lead_perms_names:
             perm_obj = created_permissions.get(perm_name)
-            if perm_obj and perm_obj not in manager_role.permissions:
-                manager_role.permissions.append(perm_obj)
-                print(f"    ✅ Assigned {perm_name} to MANAGER")
+            if perm_obj and perm_obj not in team_lead_role.permissions:
+                team_lead_role.permissions.append(perm_obj)
+                print(f"    ✅ Assigned {perm_name} to TEAM_LEAD")
             else:
-                print(f"    ⏭️  MANAGER already has {perm_name}")
+                print(f"    ⏭️  TEAM_LEAD already has {perm_name}")
 
 
     db.session.commit()

@@ -74,7 +74,7 @@ export function CandidateAssignmentDialog({
   // Filter users to show only MANAGER and RECRUITER roles
   const assignableUsers = usersData?.items?.filter((user) => {
     const roleNames = user.roles?.map((r) => r.name) || [];
-    return roleNames.includes('MANAGER') || roleNames.includes('RECRUITER');
+    return roleNames.includes('TEAM_LEAD') || roleNames.includes('RECRUITER');
   }) || [];
 
   // Assignment mutation (single user)
@@ -176,7 +176,7 @@ export function CandidateAssignmentDialog({
 
   const getUserRoleLabel = (user: PortalUserFull): string => {
     const roleNames = user.roles?.map((r) => r.name) || [];
-    if (roleNames.includes('MANAGER')) return 'Manager';
+    if (roleNames.includes('TEAM_LEAD')) return 'Team Lead';
     if (roleNames.includes('RECRUITER')) return 'Recruiter';
     return 'User';
   };

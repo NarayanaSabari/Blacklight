@@ -288,8 +288,8 @@ export function RolesPage() {
   // Role hierarchy for sorting (System Roles)
   const ROLE_ORDER: Record<string, number> = {
     'TENANT_ADMIN': 1,
-    'HIRING_MANAGER': 2,
-    'MANAGER': 3,
+    'MANAGER': 2,
+    'TEAM_LEAD': 3,
     'RECRUITER': 4,
   };
 

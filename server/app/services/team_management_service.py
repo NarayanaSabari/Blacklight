@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 # Role Hierarchy for Manager Assignment (System Roles Only)
 # Higher level can manage lower levels (skip-level allowed)
 ROLE_HIERARCHY = {
-    'TENANT_ADMIN': 1,     # Can manage: HIRING_MANAGER, MANAGER, RECRUITER
-    'HIRING_MANAGER': 2,   # Can manage: MANAGER, RECRUITER  
-    'MANAGER': 3,          # Can manage: RECRUITER only
+    'TENANT_ADMIN': 1,     # Can manage: MANAGER, TEAM_LEAD, RECRUITER
+    'MANAGER': 2,          # Can manage: TEAM_LEAD, RECRUITER  
+    'TEAM_LEAD': 3,        # Can manage: RECRUITER only
     'RECRUITER': 4,        # Cannot manage anyone
 }
 
@@ -53,9 +53,9 @@ class TeamManagementService:
         Check if manager's role allows them to manage subordinate's role.
         
         Hierarchy Rules (System Roles Only):
-        - TENANT_ADMIN (1) can manage: HIRING_MANAGER (2), MANAGER (3), RECRUITER (4)
-        - HIRING_MANAGER (2) can manage: MANAGER (3), RECRUITER (4)
-        - MANAGER (3) can manage: RECRUITER (4) only
+        - TENANT_ADMIN (1) can manage: MANAGER (2), TEAM_LEAD (3), RECRUITER (4)
+        - MANAGER (2) can manage: TEAM_LEAD (3), RECRUITER (4)
+        - TEAM_LEAD (3) can manage: RECRUITER (4) only
         - RECRUITER (4) cannot manage anyone
         
         Args:
@@ -103,7 +103,7 @@ class TeamManagementService:
         Args:
             user_id: ID of user to assign manager to
             manager_id: ID of manager to assign
-            assigned_by_user_id: ID of user performing assignment (must be HIRING_MANAGER)
+            assigned_by_user_id: ID of user performing assignment (must be MANAGER)
             changed_by: Identifier for audit log (format: "portal_user:123")
             tenant_id: Optional tenant ID for validation
 
@@ -123,12 +123,12 @@ class TeamManagementService:
         if not manager:
             raise ValueError(f"Manager with ID {manager_id} not found")
 
-        # Get the assigner (must be HIRING_MANAGER)
+        # Get the assigner (must be MANAGER)
         assigner = db.session.get(PortalUser, assigned_by_user_id)
         if not assigner:
             raise ValueError("Assigner user not found")
 
-        # Verify assigner has HIRING_MANAGER role
+        # Verify assigner has MANAGER role
         if not assigner.has_permission("users.assign_manager"):
             raise ValueError("Only users with 'users.assign_manager' permission can assign managers")
 
@@ -236,7 +236,7 @@ class TeamManagementService:
 
         Args:
             user_id: ID of user to remove manager from
-            removed_by_user_id: ID of user performing removal (must be HIRING_MANAGER)
+            removed_by_user_id: ID of user performing removal (must be MANAGER)
             changed_by: Identifier for audit log (format: "portal_user:123")
 
         Returns:
@@ -250,7 +250,7 @@ class TeamManagementService:
         if not user:
             raise ValueError(f"User with ID {user_id} not found")
 
-        # Get the remover (must be HIRING_MANAGER)
+        # Get the remover (must be MANAGER)
         remover = db.session.get(PortalUser, removed_by_user_id)
         if not remover:
             raise ValueError("Remover user not found")
@@ -433,7 +433,7 @@ class TeamManagementService:
 
         Args:
             tenant_id: Tenant ID
-            role_name: Optional filter by role name (e.g., "MANAGER", "HIRING_MANAGER")
+            role_name: Optional filter by role name (e.g., "TEAM_LEAD", "MANAGER")
 
         Returns:
             List of manager dictionaries with team_member_count
@@ -514,8 +514,8 @@ class TeamManagementService:
         for user in all_users:
             user_roles = [role.name for role in user.roles]
             
-            # Must have MANAGER, HIRING_MANAGER, or TENANT_ADMIN role
-            if not any(role in ['MANAGER', 'HIRING_MANAGER', 'TENANT_ADMIN'] for role in user_roles):
+            # Must have TEAM_LEAD, MANAGER, or TENANT_ADMIN role
+            if not any(role in ['TEAM_LEAD', 'MANAGER', 'TENANT_ADMIN'] for role in user_roles):
                 continue
             
             # If target user specified and has system role, check hierarchy
@@ -537,7 +537,7 @@ class TeamManagementService:
         Get current user's direct team members with candidate and sub-team counts.
         Used for hierarchical "Your Candidates" drill-down view.
         
-        For TENANT_ADMIN: Returns all HR/HIRING_MANAGER users (top-level users without a manager)
+        For TENANT_ADMIN: Returns all MANAGER users (top-level users without a manager)
         For other roles: Returns direct reports (users where manager_id = current user)
         
         Args:
@@ -568,17 +568,17 @@ class TeamManagementService:
         is_tenant_admin = any(role.name == 'TENANT_ADMIN' for role in current_user.roles)
         
         if is_tenant_admin:
-            # TENANT_ADMIN sees all top-level users (HR/HIRING_MANAGER without managers)
-            # Get HIRING_MANAGER role ID
-            hiring_manager_role = db.session.scalar(
+            # TENANT_ADMIN sees all top-level users (MANAGER without managers)
+            # Get MANAGER role ID
+            manager_role = db.session.scalar(
                 select(Role).where(
-                    Role.name == 'HIRING_MANAGER',
+                    Role.name == 'MANAGER',
                     Role.tenant_id == tenant_id
                 )
             )
             
-            if hiring_manager_role:
-                # Get all HR users (HIRING_MANAGER role) who have no manager
+            if manager_role:
+                # Get all Manager users (MANAGER role) who have no manager
                 direct_reports_query = select(PortalUser).where(
                     PortalUser.tenant_id == tenant_id,
                     PortalUser.is_active == True,
@@ -587,7 +587,7 @@ class TeamManagementService:
                         PortalUser.manager_id == user_id
                     )
                 ).join(PortalUser.roles).where(
-                    Role.id == hiring_manager_role.id
+                    Role.id == manager_role.id
                 )
             else:
                 # Fallback: get all users without a manager

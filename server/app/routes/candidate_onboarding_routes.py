@@ -166,7 +166,7 @@ def approve_candidate():
     
     Request Body: ApproveCandidateSchema
     Returns: ApproveCandidateResponseSchema
-    Permissions: candidates.approve (HIRING_MANAGER only)
+    Permissions: candidates.approve (MANAGER only)
     """
     try:
         tenant_id = g.tenant_id
@@ -214,7 +214,7 @@ def reject_candidate():
     
     Request Body: RejectCandidateSchema
     Returns: RejectCandidateResponseSchema
-    Permissions: candidates.approve (HIRING_MANAGER only)
+    Permissions: candidates.approve (MANAGER only)
     """
     try:
         tenant_id = g.tenant_id
@@ -264,7 +264,7 @@ def update_onboarding_status():
     
     Request Body: UpdateOnboardingStatusSchema
     Returns: Updated candidate info
-    Permissions: candidates.update (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.update (MANAGER, TEAM_LEAD)
     """
     try:
         tenant_id = g.tenant_id

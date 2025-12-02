@@ -15,8 +15,8 @@ export function usePermissions() {
 
   const isTenantAdmin = hasRole('TENANT_ADMIN');
   const isRecruiter = hasRole('RECRUITER');
-  const isHiringManager = hasRole('HIRING_MANAGER');
-  const isManager = hasRole('MANAGER'); // New Manager role check
+  const isManager = hasRole('MANAGER');
+  const isTeamLead = hasRole('TEAM_LEAD');
 
   /**
    * Check if user has a specific permission
@@ -97,8 +97,8 @@ export function usePermissions() {
     user,
     isTenantAdmin,
     isRecruiter,
-    isHiringManager,
     isManager,
+    isTeamLead,
     hasPermission,
     canManageUsers,
     canManageRoles,

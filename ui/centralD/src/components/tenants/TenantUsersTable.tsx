@@ -57,7 +57,9 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
         return 'default';
       case 'RECRUITER':
         return 'secondary';
-      case 'HIRING_MANAGER':
+      case 'MANAGER':
+        return 'outline';
+      case 'TEAM_LEAD':
         return 'outline';
       default:
         return 'outline';
@@ -70,8 +72,10 @@ export function TenantUsersTable({ tenantId, users, isLoading }: TenantUsersTabl
         return 'Admin';
       case 'RECRUITER':
         return 'Recruiter';
-      case 'HIRING_MANAGER':
-        return 'Hiring Manager';
+      case 'MANAGER':
+        return 'Manager';
+      case 'TEAM_LEAD':
+        return 'Team Lead';
       default:
         return roleName;
     }

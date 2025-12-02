@@ -50,7 +50,7 @@ def assign_candidate():
     
     Request Body: AssignCandidateSchema
     Returns: AssignCandidateResponseSchema
-    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.assign (MANAGER, TEAM_LEAD)
     """
     try:
         tenant_id = g.tenant_id
@@ -96,7 +96,7 @@ def broadcast_assign_candidate():
     
     Request Body: { candidate_id: int, assignment_reason?: string }
     Returns: { message, candidate_id, is_visible_to_all_team, current_team_count }
-    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.assign (MANAGER, TEAM_LEAD)
     """
     try:
         tenant_id = g.tenant_id
@@ -144,7 +144,7 @@ def set_candidate_visibility(candidate_id):
         
     Request Body: { is_visible_to_all_team: bool }
     Returns: { message, candidate_id, is_visible_to_all_team }
-    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.assign (MANAGER, TEAM_LEAD)
     """
     try:
         user_id = g.user_id
@@ -186,7 +186,7 @@ def reassign_candidate():
     
     Request Body: ReassignCandidateSchema
     Returns: ReassignCandidateResponseSchema
-    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.assign (MANAGER, TEAM_LEAD)
     """
     try:
         tenant_id = g.tenant_id
@@ -229,7 +229,7 @@ def unassign_candidate():
     
     Request Body: UnassignCandidateSchema
     Returns: UnassignCandidateResponseSchema
-    Permissions: candidates.assign (HIRING_MANAGER, MANAGER)
+    Permissions: candidates.assign (MANAGER, TEAM_LEAD)
     """
     try:
         tenant_id = g.tenant_id
@@ -380,7 +380,7 @@ def get_assignment_history():
         assigned_by_user_id (optional): Filter by assigning user
     
     Returns: List of recent assignments
-    Permissions: candidates.view_all (HIRING_MANAGER only)
+    Permissions: candidates.view_all (MANAGER only)
     """
     try:
         tenant_id = g.tenant_id
