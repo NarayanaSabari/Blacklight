@@ -170,6 +170,25 @@ rebuild_all() {
     log_info "All services rebuilt."
 }
 
+create_inngest_db() {
+    log_info "Creating inngest database..."
+    
+    # Check if db container is running (check for "Up" in status)
+    if ! docker compose -f $COMPOSE_FILE ps db 2>/dev/null | grep -q "Up"; then
+        log_error "Database container is not running. Start services first with './deploy.sh start'"
+        exit 1
+    fi
+    
+    # Create inngest database if it doesn't exist
+    docker compose -f $COMPOSE_FILE exec -T db psql -U blacklight -d blacklight -tc "SELECT 1 FROM pg_database WHERE datname = 'inngest'" | grep -q 1 || \
+        docker compose -f $COMPOSE_FILE exec -T db psql -U blacklight -d blacklight -c "CREATE DATABASE inngest;"
+    
+    # Grant privileges
+    docker compose -f $COMPOSE_FILE exec -T db psql -U blacklight -d blacklight -c "GRANT ALL PRIVILEGES ON DATABASE inngest TO blacklight;" 2>/dev/null || true
+    
+    log_info "Inngest database created/verified successfully."
+}
+
 # Main command handler
 case "$1" in
     start)
@@ -211,6 +230,9 @@ case "$1" in
     rebuild)
         rebuild_all
         ;;
+    create-inngest-db)
+        create_inngest_db
+        ;;
     *)
         echo "Blacklight Production Deployment Script"
         echo ""
@@ -229,6 +251,7 @@ case "$1" in
         echo "  rebuild-frontend   Rebuild frontend containers (portal/central)"
         echo "  rebuild-backend    Rebuild backend container"
         echo "  rebuild            Rebuild all containers"
+        echo "  create-inngest-db  Create inngest database in PostgreSQL"
         echo "  clean              Remove all containers and volumes (DESTRUCTIVE!)"
         echo ""
         echo "Services: db, redis, backend, portal, central"
