@@ -73,10 +73,17 @@ start_services() {
     log_info "Services started! Waiting for health checks..."
     sleep 10
     docker compose -f $COMPOSE_FILE ps
+    
+    # Auto-sync Inngest functions
+    log_info "Syncing Inngest functions..."
+    sleep 5  # Give backend a moment to fully initialize
+    sync_inngest 2>/dev/null || log_warn "Inngest sync may need manual trigger. Run './deploy.sh sync-inngest' if functions don't appear."
+    
     log_info "Deployment complete!"
     log_info "Portal (HR): http://localhost:5174"
     log_info "Central (Admin): http://localhost:5173"
     log_info "Backend API: http://localhost:5000"
+    log_info "Inngest Dashboard: http://localhost:8288"
 }
 
 stop_services() {
@@ -189,6 +196,30 @@ create_inngest_db() {
     log_info "Inngest database created/verified successfully."
 }
 
+sync_inngest() {
+    log_info "Syncing Inngest functions with backend..."
+    
+    # Check if inngest container is running
+    if ! docker compose -f $COMPOSE_FILE ps inngest 2>/dev/null | grep -q "Up"; then
+        log_error "Inngest container is not running. Start services first with './deploy.sh start'"
+        exit 1
+    fi
+    
+    # Check if backend container is running
+    if ! docker compose -f $COMPOSE_FILE ps backend 2>/dev/null | grep -q "Up"; then
+        log_error "Backend container is not running. Start services first with './deploy.sh start'"
+        exit 1
+    fi
+    
+    # Wait a moment for services to be ready
+    sleep 2
+    
+    # Trigger sync by making a PUT request to the backend's inngest endpoint from within the network
+    docker compose -f $COMPOSE_FILE exec -T backend curl -s -X PUT http://localhost:5000/api/inngest > /dev/null 2>&1 || true
+    
+    log_info "Inngest sync triggered. Check Inngest dashboard at http://localhost:8288 to verify functions are registered."
+}
+
 # Main command handler
 case "$1" in
     start)
@@ -233,6 +264,9 @@ case "$1" in
     create-inngest-db)
         create_inngest_db
         ;;
+    sync-inngest)
+        sync_inngest
+        ;;
     *)
         echo "Blacklight Production Deployment Script"
         echo ""
@@ -252,6 +286,7 @@ case "$1" in
         echo "  rebuild-backend    Rebuild backend container"
         echo "  rebuild            Rebuild all containers"
         echo "  create-inngest-db  Create inngest database in PostgreSQL"
+        echo "  sync-inngest       Sync Inngest functions with backend"
         echo "  clean              Remove all containers and volumes (DESTRUCTIVE!)"
         echo ""
         echo "Services: db, redis, backend, portal, central"

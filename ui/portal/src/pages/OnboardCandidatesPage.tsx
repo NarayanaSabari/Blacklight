@@ -115,6 +115,7 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
     queryKey: ['submitted-invitations', page],
     queryFn: () => invitationApi.getSubmittedInvitations({ page, per_page: 20 }),
     enabled: canViewCandidates && activeTab === 'review-submissions',
+    staleTime: 0, // Always refetch to ensure fresh data
   });
 
   // Fetch candidates with status='pending_review' (async resume uploads)
@@ -125,6 +126,7 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
     queryKey: ['candidates-pending-review', page],
     queryFn: () => candidateApi.getPendingReview(),
     enabled: canViewCandidates && activeTab === 'review-submissions',
+    staleTime: 0, // Always refetch to ensure fresh data
   });
 
   // Fetch all candidates (for all-candidates tab)
@@ -443,10 +445,19 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                   {/* Combine candidates and invitations */}
                   {(() => {
                     const allCandidates = pendingReviewCandidatesData?.candidates || [];
-                    // Filter out candidates created from email invitations to avoid duplicates
-                    // These candidates will be shown in the "Email Invitation" section instead
-                    const candidates = allCandidates.filter(c => c.source !== 'email_invitation');
                     const invitations = submittedInvitationsData?.items || [];
+                    
+                    // Get candidate IDs that are linked to pending invitations
+                    // to avoid showing duplicates (invitation + candidate for same person)
+                    const invitationCandidateIds = new Set(
+                      invitations
+                        .filter((inv: { candidate_id?: number }) => inv.candidate_id)
+                        .map((inv: { candidate_id?: number }) => inv.candidate_id)
+                    );
+                    
+                    // Show all candidates EXCEPT those already linked to a pending invitation
+                    // (those will be shown in the invitations section)
+                    const candidates = allCandidates.filter(c => !invitationCandidateIds.has(c.id));
                     const hasPendingReviews = candidates.length > 0 || invitations.length > 0;
 
                     if (!hasPendingReviews) {
@@ -486,12 +497,12 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {/* Resume Upload Candidates (without invitation_id) */}
+                              {/* All pending review candidates */}
                               {candidates.map((candidate) => (
                                 <TableRow key={`candidate-${candidate.id}`}>
                                   <TableCell>
                                     <div className="flex items-center gap-3">
-                                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold border-2 border-black">
+                                      <div className={`flex-shrink-0 w-10 h-10 rounded-full ${candidate.source === 'email_invitation' ? 'bg-blue-500' : 'bg-primary'} text-primary-foreground flex items-center justify-center text-sm font-bold border-2 border-black`}>
                                         {candidate.first_name?.[0]}{candidate.last_name?.[0]}
                                       </div>
                                       <div className="font-medium text-slate-900">
@@ -501,10 +512,17 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                                   </TableCell>
                                   <TableCell className="text-slate-600">{candidate.email || '—'}</TableCell>
                                   <TableCell>
-                                    <Badge variant="outline" className="bg-yellow-50 border-yellow-300 text-yellow-800">
-                                      <Upload className="h-3 w-3 mr-1" />
-                                      Resume Upload
-                                    </Badge>
+                                    {candidate.source === 'email_invitation' ? (
+                                      <Badge variant="outline" className="bg-blue-50 border-blue-300 text-blue-800">
+                                        <Mail className="h-3 w-3 mr-1" />
+                                        Email Invitation
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="bg-yellow-50 border-yellow-300 text-yellow-800">
+                                        <Upload className="h-3 w-3 mr-1" />
+                                        Resume Upload
+                                      </Badge>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-sm text-slate-600">
                                     {candidate.created_at ? new Date(candidate.created_at).toLocaleDateString('en-US', {

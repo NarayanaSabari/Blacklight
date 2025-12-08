@@ -65,7 +65,7 @@ class InvitationService:
         duplicate = InvitationService.check_duplicate(tenant_id, email)
         
         # If there's an active invitation, reject
-        if duplicate and duplicate.status in ['sent', 'opened', 'in_progress', 'submitted']:
+        if duplicate and duplicate.status in ['sent', 'opened', 'in_progress', 'pending_review']:
             raise ValueError(f"Invitation already exists with status: {duplicate.status}. Use resend instead.")
         
         # Calculate expiry
@@ -419,7 +419,7 @@ class InvitationService:
                 "invited": 0,
                 "opened": 0,
                 "in_progress": 0,
-                "submitted": 0,
+                "pending_review": 0,
                 "approved": 0,
                 "rejected": 0,
                 "cancelled": 0,
@@ -503,7 +503,7 @@ class InvitationService:
         
         # Update invitation
         invitation.invitation_data = invitation_data
-        invitation.status = 'submitted'
+        invitation.status = 'pending_review'
         invitation.submitted_at = datetime.utcnow()
         invitation.updated_at = datetime.utcnow()
         
@@ -623,11 +623,11 @@ class InvitationService:
             
             candidate_name = f"{invitation.first_name} {invitation.last_name}".strip() if invitation.first_name else "Candidate"
             
-            logger.info(f"[INNGEST] Attempting to send event 'email/submission.confirmation' for invitation {invitation.id}")
+            logger.info(f"[INNGEST] Attempting to send event 'email/submission-confirmation' for invitation {invitation.id}")
             
             event_result = inngest_client.send_sync(
                 inngest.Event(
-                    name="email/submission.confirmation",
+                    name="email/submission-confirmation",
                     data={
                         "invitation_id": invitation.id,
                         "tenant_id": invitation.tenant_id,
@@ -663,11 +663,11 @@ class InvitationService:
             if hr_emails:
                 review_url = f"{settings.frontend_base_url}/invitations/{invitation.id}"
                 
-                logger.info(f"[INNGEST] Attempting to send event 'email/hr.notification' for invitation {invitation.id}")
+                logger.info(f"[INNGEST] Attempting to send event 'email/hr-notification' for invitation {invitation.id}")
                 
                 event_result = inngest_client.send_sync(
                     inngest.Event(
-                        name="email/hr.notification",
+                        name="email/hr-notification",
                         data={
                             "invitation_id": invitation.id,
                             "tenant_id": invitation.tenant_id,
@@ -719,8 +719,8 @@ class InvitationService:
         if not invitation:
             raise ValueError("Invitation not found")
         
-        if invitation.status != 'submitted':
-            raise ValueError(f"Only submitted invitations can be approved (current status: {invitation.status})")
+        if invitation.status != 'pending_review':
+            raise ValueError(f"Only pending_review invitations can be approved (current status: {invitation.status})")
         
         if not invitation.invitation_data:
             raise ValueError("No invitation data to create candidate from")
@@ -1038,8 +1038,8 @@ class InvitationService:
         if not invitation:
             raise ValueError("Invitation not found")
         
-        if invitation.status != 'submitted':
-            raise ValueError(f"Only submitted invitations can be rejected (current status: {invitation.status})")
+        if invitation.status != 'pending_review':
+            raise ValueError(f"Only pending_review invitations can be rejected (current status: {invitation.status})")
         
         # Update invitation
         invitation.status = 'rejected'
@@ -1068,11 +1068,11 @@ class InvitationService:
             
             candidate_name = f"{invitation.first_name} {invitation.last_name}".strip() if invitation.first_name else "Candidate"
             
-            logger.info(f"[INNGEST] Attempting to send event 'email/invitation.rejected' for invitation {invitation.id}")
+            logger.info(f"[INNGEST] Attempting to send event 'email/rejection' for invitation {invitation.id}")
             
             event_result = inngest_client.send_sync(
                 inngest.Event(
-                    name="email/invitation.rejected",
+                    name="email/rejection",
                     data={
                         "invitation_id": invitation.id,
                         "tenant_id": invitation.tenant_id,

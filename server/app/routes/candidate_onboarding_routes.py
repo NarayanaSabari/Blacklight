@@ -49,7 +49,7 @@ def list_submitted_invitations():
     Query Parameters:
         page (optional): Page number (default: 1)
         per_page (optional): Results per page (default: 20, max: 100)
-        status (optional): Filter by invitation status (should be 'submitted')
+        status (optional): Filter by invitation status (should be 'pending_review')
         search (optional): Search by candidate name or email
     
     Returns: InvitationListResponseSchema
@@ -61,11 +61,11 @@ def list_submitted_invitations():
         # Parse query parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        status_filter = request.args.get('status', 'submitted') # Default to 'submitted'
+        status_filter = request.args.get('status', 'pending_review') # Default to 'pending_review'
         search_query = request.args.get('search')
         
-        if status_filter != 'submitted':
-            return error_response("This endpoint only supports 'submitted' status filter", 400)
+        if status_filter != 'pending_review':
+            return error_response("This endpoint only supports 'pending_review' status filter", 400)
         
         invitations, total = InvitationService.list_invitations(
             tenant_id=tenant_id,

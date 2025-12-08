@@ -61,9 +61,8 @@ const STATUS_CONFIG: Record<
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Mail }
 > = {
   sent: { label: 'Sent', variant: 'default', icon: Mail },
-  opened: { label: 'Opened', variant: 'secondary', icon: Mail }, // Added
-  in_progress: { label: 'In Progress', variant: 'secondary', icon: Clock }, // Added
-  submitted: { label: 'Submitted', variant: 'default', icon: CheckCircle2 }, // Added
+  opened: { label: 'Opened', variant: 'secondary', icon: Mail },
+  in_progress: { label: 'In Progress', variant: 'secondary', icon: Clock },
   pending_review: { label: 'Pending Review', variant: 'secondary', icon: Clock },
   approved: { label: 'Approved', variant: 'outline', icon: CheckCircle2 },
   rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },

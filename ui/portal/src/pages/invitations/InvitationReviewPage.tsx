@@ -155,7 +155,7 @@ export default function InvitationReviewPage() {
     );
   }
 
-  if (invitation.status !== 'submitted') {
+  if (invitation.status !== 'pending_review') {
     return (
       <div className="p-6">
         <Alert>

@@ -218,11 +218,11 @@ class InvitationAuditLogResponseSchema(BaseModel):
     id: int
     invitation_id: int
     action: str
-    performed_by_id: Optional[int]
-    performed_at: datetime
-    ip_address: Optional[str]
-    user_agent: Optional[str]
-    metadata: Optional[Dict[str, Any]]
+    performed_by: Optional[str] = None
+    timestamp: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
     
     class Config:
         from_attributes = True

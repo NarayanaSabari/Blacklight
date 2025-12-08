@@ -10,9 +10,8 @@ export type InvitationStatus =
   | 'rejected'
   | 'cancelled'
   | 'expired'
-  | 'submitted' // Added
-  | 'opened' // Added
-  | 'in_progress'; // Added
+  | 'opened'
+  | 'in_progress';
 
 export type OnboardingType =
   | 'email_invitation'

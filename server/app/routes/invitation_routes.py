@@ -138,6 +138,8 @@ def list_invitations():
         status = request.args.get("status")  # Optional filter
         email = request.args.get("email")    # Optional filter
         
+        logger.info(f"[LIST_INVITATIONS] tenant_id={tenant_id}, status={status}, page={page}, per_page={per_page}")
+        
         # Get invitations
         invitations, total = InvitationService.list_invitations(
             tenant_id=tenant_id,
@@ -146,6 +148,8 @@ def list_invitations():
             page=page,
             per_page=per_page
         )
+        
+        logger.info(f"[LIST_INVITATIONS] Found {total} invitations with status={status}")
         
         # Calculate pagination
         pages = (total + per_page - 1) // per_page if total > 0 else 0
@@ -513,15 +517,7 @@ def submit_invitation():
         )
         logger.info(f"[SUBMIT] Invitation {invitation.id} submitted successfully")
         
-        # Send confirmation email to candidate
-        EmailService.send_submission_confirmation(
-            tenant_id=invitation.tenant_id,
-            to_email=data.email,
-            candidate_name=f"{data.first_name} {data.last_name}"
-        )
-        
-        # TODO: Send notification to HR team
-        # EmailService.send_hr_notification(...)
+        # Note: Confirmation email is sent via Inngest in the service layer
         
         return jsonify({
             "message": "Submission received successfully",

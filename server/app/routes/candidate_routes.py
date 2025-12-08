@@ -453,7 +453,7 @@ def approve_candidate(candidate_id: int):
         )
         invitation = db.session.scalar(invitation_stmt)
         
-        if invitation and invitation.status == 'submitted':
+        if invitation and invitation.status == 'pending_review':
             invitation.status = 'approved'
             invitation.reviewed_by_id = g.user_id
             invitation.reviewed_at = datetime.utcnow()
@@ -475,6 +475,41 @@ def approve_candidate(candidate_id: int):
         db.session.commit()
         
         logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: onboarded")
+        
+        # Send approval email to candidate via Inngest
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            
+            candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
+            
+            # Build candidate data for email
+            candidate_data = {
+                "full_name": candidate.full_name or candidate_name,
+                "email": candidate.email,
+                "phone": candidate.phone,
+                "current_title": candidate.current_title,
+                "experience_years": candidate.experience_years,
+                "skills": candidate.skills or [],
+                "preferred_roles": candidate.preferred_roles or [],
+            }
+            
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="email/approval",
+                    data={
+                        "candidate_id": candidate.id,
+                        "tenant_id": tenant_id,
+                        "to_email": candidate.email,
+                        "candidate_name": candidate_name,
+                        "candidate_data": candidate_data,
+                        "hr_edited_fields": []
+                    }
+                )
+            )
+            logger.info(f"Triggered approval email for candidate {candidate_id}")
+        except Exception as e:
+            logger.warning(f"Failed to send approval email for candidate {candidate_id}: {str(e)}")
         
         # Trigger job matching workflow
         try:

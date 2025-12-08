@@ -141,8 +141,8 @@ export const invitationApi = {
 
     if (params?.page) queryParams.append('page', String(params.page));
     if (params?.per_page) queryParams.append('per_page', String(params.per_page));
-    // Always filter by status=submitted for this endpoint
-    queryParams.append('status', 'submitted');
+    // Always filter by status=pending_review for this endpoint
+    queryParams.append('status', 'pending_review');
     if (params?.search) queryParams.append('search', params.search);
     if (params?.sort_by) queryParams.append('sort_by', params.sort_by);
     if (params?.sort_order) queryParams.append('sort_order', params.sort_order);

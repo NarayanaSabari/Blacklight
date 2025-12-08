@@ -172,7 +172,7 @@ def calculate_daily_stats_step() -> dict:
         submissions = db.session.scalar(
             select(func.count()).select_from(CandidateInvitation).where(
                 CandidateInvitation.tenant_id == tenant.id,
-                CandidateInvitation.status == 'submitted',
+                CandidateInvitation.status == 'pending_review',
                 CandidateInvitation.submitted_at >= yesterday,
                 CandidateInvitation.submitted_at < today
             )

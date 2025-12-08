@@ -73,9 +73,8 @@ const STATUS_CONFIG: Record<
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: typeof Mail }
 > = {
   sent: { label: 'Sent', variant: 'default', icon: Mail },
-  opened: { label: 'Opened', variant: 'secondary', icon: Mail }, // Added
-  in_progress: { label: 'In Progress', variant: 'secondary', icon: Clock }, // Added
-  submitted: { label: 'Submitted', variant: 'default', icon: FileText }, // Added
+  opened: { label: 'Opened', variant: 'secondary', icon: Mail },
+  in_progress: { label: 'In Progress', variant: 'secondary', icon: Clock },
   pending_review: { label: 'Pending Review', variant: 'secondary', icon: Clock },
   approved: { label: 'Approved', variant: 'outline', icon: CheckCircle2 },
   rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },
@@ -116,8 +115,8 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
   const StatusIcon = config.icon;
   const isExpired = new Date(invitation.expires_at) < new Date();
   const canResend = ['sent', 'opened', 'in_progress', 'expired', 'cancelled'].includes(invitation.status);
-  const canCancel = ['sent', 'pending_review', 'submitted'].includes(invitation.status);
-  const canReview = invitation.status === 'pending_review' || invitation.status === 'submitted';
+  const canCancel = ['sent', 'pending_review'].includes(invitation.status);
+  const canReview = invitation.status === 'pending_review';
 
   const invitationData = (invitation.invitation_data || undefined) as InvitationSubmissionData | undefined;
 
@@ -196,7 +195,7 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
               </div>
 
               {/* Submitted Data */}
-              {invitationData && invitation.status === 'submitted' && (
+              {invitationData && invitation.status === 'pending_review' && (
                 <div>
                   <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                     <FileText className="h-4 w-4" />
@@ -274,7 +273,7 @@ export function InvitationDetails({ invitationId, onClose }: InvitationDetailsPr
             </div>
 
             {/* Work Experience & Education */}
-            {invitationData && invitation.status === 'submitted' && (
+            {invitationData && invitation.status === 'pending_review' && (
               <div className="space-y-4">
                 {invitationData.work_experience && (
                   <div>

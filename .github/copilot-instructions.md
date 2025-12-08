@@ -29,7 +29,7 @@ The platform includes two web applications:
 2. System triggers Inngest background job `email/invitation` to send email with unique token
 3. Candidate receives email with onboarding link: `{FRONTEND_URL}/onboarding?token={token}`
 4. Candidate fills out profile, uploads resume and documents at public onboarding portal
-5. On submission, status changes to `submitted` and HR receives notification email
+5. On submission, status changes to `pending_review` and HR receives notification email
 6. Invitation marked as `completed` after successful submission
 
 **Key Endpoints**:
@@ -51,7 +51,7 @@ The platform includes two web applications:
 6. Approved candidates appear in "All Candidates" tab and available for assignment
 
 **Key Endpoints**:
-- `GET /api/candidate-onboarding/invitations?status=submitted` - Get pending submissions
+- `GET /api/candidate-onboarding/invitations?status=pending_review` - Get pending submissions
 - `POST /api/candidate-onboarding/invitations/{invitation_id}/approve` - Approve candidate
 - `POST /api/candidate-onboarding/invitations/{invitation_id}/reject` - Reject with reason
 - `GET /api/candidate-onboarding/stats` - Get workflow statistics (pending, approved, rejected)
