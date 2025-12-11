@@ -404,9 +404,10 @@ def approve_candidate(candidate_id: int):
     """
     Approve candidate after review
     
-    Changes status: 'pending_review' -> 'onboarded'
+    Changes status: 'pending_review' -> 'ready_for_assignment'
+    Validates preferred_roles (required for job scraping)
+    Normalizes preferred roles -> global_roles table
     Triggers job matching workflow
-    After job matching -> status becomes 'ready_for_assignment'
     
     Returns: Approved candidate
     """
@@ -425,7 +426,7 @@ def approve_candidate(candidate_id: int):
             return error_response("Candidate not found", 404)
         
         # Make endpoint idempotent - if already approved, return success
-        if candidate.status in ['onboarded', 'ready_for_assignment']:
+        if candidate.status == 'ready_for_assignment':
             logger.info(f"Candidate {candidate_id} already approved with status '{candidate.status}'")
             return jsonify({
                 "message": "Candidate already approved",
@@ -440,9 +441,17 @@ def approve_candidate(candidate_id: int):
                 400
             )
         
-        # Update status to 'onboarded'
-        candidate.status = 'onboarded'
-        candidate.onboarding_status = 'PENDING_ASSIGNMENT'  # For assignment workflow
+        # VALIDATION: Check preferred_roles is filled (required for job scraping)
+        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
+            return error_response(
+                "Preferred roles are required for approval. "
+                "Please add at least one preferred role for the candidate.",
+                400
+            )
+        
+        # Update status to 'ready_for_assignment'
+        candidate.status = 'ready_for_assignment'
+        candidate.onboarding_status = 'APPROVED'  # For tracking
         
         # Also update associated invitation status if exists
         from app.models.candidate_invitation import CandidateInvitation
@@ -474,7 +483,7 @@ def approve_candidate(candidate_id: int):
         
         db.session.commit()
         
-        logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: onboarded")
+        logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: ready_for_assignment")
         
         # Send approval email to candidate via Inngest
         try:
@@ -511,10 +520,47 @@ def approve_candidate(candidate_id: int):
         except Exception as e:
             logger.warning(f"Failed to send approval email for candidate {candidate_id}: {str(e)}")
         
-        # Trigger job matching workflow
+        # Normalize preferred roles FIRST, then trigger job matching
+        # Role normalization adds to global_roles table for job scraping
+        normalization_results = []
+        if candidate.preferred_roles:
+            try:
+                from app.services.ai_role_normalization_service import AIRoleNormalizationService
+                
+                logger.info(f"Starting role normalization for candidate {candidate_id} with roles: {candidate.preferred_roles}")
+                
+                for raw_role in candidate.preferred_roles:
+                    if raw_role and raw_role.strip():
+                        try:
+                            global_role, similarity, method = AIRoleNormalizationService.normalize_candidate_role(
+                                raw_role=raw_role.strip(),
+                                candidate_id=candidate.id
+                            )
+                            normalization_results.append({
+                                'raw_role': raw_role,
+                                'normalized_title': global_role.normalized_title,
+                                'similarity': similarity,
+                                'method': method,
+                                'global_role_id': global_role.id
+                            })
+                            logger.info(
+                                f"Normalized role '{raw_role}' -> '{global_role.normalized_title}' "
+                                f"(similarity: {similarity:.2%}, method: {method}, role_id: {global_role.id})"
+                            )
+                        except Exception as role_error:
+                            logger.error(f"Failed to normalize role '{raw_role}' for candidate {candidate_id}: {role_error}")
+                
+                logger.info(f"Completed role normalization: {len(normalization_results)} roles normalized for candidate {candidate_id}")
+            except Exception as norm_error:
+                # Log but don't fail - role normalization is non-critical
+                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
+        
+        # Trigger job matching workflow AFTER role normalization
         try:
             from app.inngest import inngest_client
             import inngest
+            
+            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
             
             inngest_client.send_sync(
                 inngest.Event(
@@ -522,30 +568,15 @@ def approve_candidate(candidate_id: int):
                     data={
                         "candidate_id": candidate.id,
                         "tenant_id": tenant_id,
-                        "min_score": 50.0,
-                        "trigger": "onboarding_approval"
+                        "trigger_source": "candidate_approval",
+                        "preferred_roles": candidate.preferred_roles or []
                     }
                 )
             )
-            logger.info(f"Triggered job matching for approved candidate {candidate_id}")
+            logger.info(f"[INNGEST] ✅ Job matching event sent for candidate {candidate_id}")
         except Exception as e:
             # Log but don't fail
             logger.warning(f"Failed to trigger job matching for candidate {candidate_id}: {str(e)}")
-        
-        # Normalize preferred roles and link to GlobalRole for queue-based matching
-        normalization_results = []
-        if candidate.preferred_roles:
-            try:
-                from app.services.ai_role_normalization_service import AIRoleNormalizationService
-                normalization_service = AIRoleNormalizationService()
-                normalization_results = normalization_service.normalize_candidate_roles(
-                    candidate_id=candidate.id,
-                    preferred_roles=candidate.preferred_roles
-                )
-                logger.info(f"Normalized {len(normalization_results)} roles for approved candidate {candidate_id}")
-            except Exception as norm_error:
-                # Log but don't fail - role normalization is non-critical
-                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
         
         # Return approved candidate using to_dict() to handle None values
         return jsonify(candidate.to_dict()), 200

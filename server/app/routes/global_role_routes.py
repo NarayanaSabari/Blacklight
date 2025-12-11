@@ -89,16 +89,30 @@ def list_roles():
         
         roles_data = []
         for role in pagination.items:
+            # Get job count for this role
+            from app.models.role_job_mapping import RoleJobMapping
+            job_count = db.session.scalar(
+                db.select(func.count(RoleJobMapping.id))
+                .where(RoleJobMapping.global_role_id == role.id)
+            ) or 0
+            
             roles_data.append({
                 "id": role.id,
                 "name": role.name,
+                "normalized_name": role.name,  # Same as name for now (normalized form)
                 "aliases": role.aliases or [],
                 "category": role.category,
+                "seniority_level": None,  # Not stored in model yet, can be derived from name
                 "candidate_count": role.candidate_count,
-                "queue_status": role.queue_status,
-                "priority": role.priority,
+                "job_count": job_count,
+                # Frontend expects 'status' and 'queue_priority' (aliases for backend fields)
+                "status": role.queue_status,  # pending, processing, completed
+                "queue_status": role.queue_status,  # Keep original for backward compatibility
+                "queue_priority": role.priority,  # urgent, high, normal, low
+                "priority": role.priority,  # Keep original for backward compatibility
                 "last_scraped_at": role.last_scraped_at.isoformat() if role.last_scraped_at else None,
-                "created_at": role.created_at.isoformat()
+                "created_at": role.created_at.isoformat(),
+                "similar_roles": None  # Can be computed on demand if needed
             })
         
         return jsonify({
@@ -223,6 +237,185 @@ def update_priority(role_id: int):
     except Exception as e:
         logger.error(f"Error updating priority for role {role_id}: {e}")
         db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@global_role_bp.route('/<int:role_id>/approve', methods=['POST'])
+@require_pm_admin
+def approve_role(role_id: int):
+    """
+    Approve a pending role for scraping.
+    
+    Changes queue_status from 'pending' to 'approved' (ready for scraping).
+    """
+    try:
+        role = db.session.get(GlobalRole, role_id)
+        
+        if not role:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Role {role_id} not found"
+            }), 404
+        
+        # Set status to pending (ready for scrape queue)
+        # In our system, 'pending' means approved and waiting in the scrape queue
+        role.queue_status = 'pending'
+        db.session.commit()
+        
+        # Get job count for response
+        from app.models.role_job_mapping import RoleJobMapping
+        job_count = db.session.scalar(
+            db.select(func.count(RoleJobMapping.id))
+            .where(RoleJobMapping.global_role_id == role.id)
+        ) or 0
+        
+        logger.info(f"Role {role_id} ({role.name}) approved by PM_ADMIN")
+        
+        return jsonify({
+            "role": {
+                "id": role.id,
+                "name": role.name,
+                "normalized_name": role.name,
+                "aliases": role.aliases or [],
+                "category": role.category,
+                "seniority_level": None,
+                "candidate_count": role.candidate_count,
+                "job_count": job_count,
+                "status": role.queue_status,
+                "queue_status": role.queue_status,
+                "queue_priority": role.priority,
+                "priority": role.priority,
+                "last_scraped_at": role.last_scraped_at.isoformat() if role.last_scraped_at else None,
+                "created_at": role.created_at.isoformat(),
+                "similar_roles": None
+            },
+            "message": f"Role '{role.name}' approved and added to scrape queue"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error approving role {role_id}: {e}")
+        db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@global_role_bp.route('/<int:role_id>/reject', methods=['POST'])
+@require_pm_admin
+def reject_role(role_id: int):
+    """
+    Reject a role (remove from queue).
+    
+    This will soft-delete the role by setting queue_status to 'rejected'.
+    The role remains in the database for audit purposes.
+    """
+    data = request.get_json() or {}
+    reason = data.get('reason', 'No reason provided')
+    
+    try:
+        role = db.session.get(GlobalRole, role_id)
+        
+        if not role:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Role {role_id} not found"
+            }), 404
+        
+        # Set status to rejected (removed from queue)
+        role.queue_status = 'rejected'
+        db.session.commit()
+        
+        logger.info(f"Role {role_id} ({role.name}) rejected by PM_ADMIN. Reason: {reason}")
+        
+        return jsonify({
+            "message": f"Role '{role.name}' rejected",
+            "reason": reason
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error rejecting role {role_id}: {e}")
+        db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@global_role_bp.route('/<int:role_id>/merge', methods=['POST'])
+@require_pm_admin
+def merge_single_role(role_id: int):
+    """
+    Merge this role into another role.
+    
+    Request body:
+    {
+        "target_role_id": 1
+    }
+    
+    All candidates linked to this role will be relinked to target role.
+    This role will be deleted after merge.
+    """
+    data = request.get_json()
+    
+    if not data or 'target_role_id' not in data:
+        return jsonify({
+            "error": "Bad Request",
+            "message": "target_role_id required"
+        }), 400
+    
+    target_id = data['target_role_id']
+    
+    if target_id == role_id:
+        return jsonify({
+            "error": "Bad Request",
+            "message": "Cannot merge role into itself"
+        }), 400
+    
+    try:
+        result = AIRoleNormalizationService.merge_roles([role_id], target_id)
+        
+        # Get updated target role for response
+        target_role = db.session.get(GlobalRole, target_id)
+        
+        from app.models.role_job_mapping import RoleJobMapping
+        job_count = db.session.scalar(
+            db.select(func.count(RoleJobMapping.id))
+            .where(RoleJobMapping.global_role_id == target_id)
+        ) or 0
+        
+        return jsonify({
+            "role": {
+                "id": target_role.id,
+                "name": target_role.name,
+                "normalized_name": target_role.name,
+                "aliases": target_role.aliases or [],
+                "category": target_role.category,
+                "seniority_level": None,
+                "candidate_count": target_role.candidate_count,
+                "job_count": job_count,
+                "status": target_role.queue_status,
+                "queue_status": target_role.queue_status,
+                "queue_priority": target_role.priority,
+                "priority": target_role.priority,
+                "last_scraped_at": target_role.last_scraped_at.isoformat() if target_role.last_scraped_at else None,
+                "created_at": target_role.created_at.isoformat(),
+                "similar_roles": None
+            },
+            "message": result.get('message', 'Roles merged successfully'),
+            "candidates_moved": result.get('candidates_moved', 0)
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error merging role {role_id}: {e}")
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)

@@ -105,10 +105,10 @@ export const dashboardApi = {
     const data = response.data;
     
     return {
-      pendingQueue: data.queue_stats?.by_status?.pending || 0,
-      activeScrapers: data.active_sessions?.length || 0,
-      newRoles: data.pending_roles_count || 0,
-      jobsImported: data.jobs_imported_today || 0,
+      pendingQueue: data.pending_queue || 0,
+      activeScrapers: data.active_scrapers || 0,
+      newRoles: data.pending_roles_count || data.pending_queue || 0,
+      jobsImported: data.jobs_imported_today || data.jobs_imported_24h || 0,
       activeApiKeys: data.active_api_keys || 0,
     };
   },
@@ -171,7 +171,7 @@ export const globalRolesApi = {
     page?: number;
     perPage?: number;
   }): Promise<{ roles: GlobalRole[]; total: number }> => {
-    const response = await apiClient.get('/api/global-roles', { params });
+    const response = await apiClient.get('/api/roles', { params });
     return {
       roles: response.data.roles.map(mapRole),
       total: response.data.total,
@@ -182,7 +182,7 @@ export const globalRolesApi = {
    * Get pending roles for review
    */
   getPendingRoles: async (): Promise<GlobalRole[]> => {
-    const response = await apiClient.get('/api/global-roles', {
+    const response = await apiClient.get('/api/roles', {
       params: { status: 'pending' }
     });
     return response.data.roles.map(mapRole);
@@ -192,7 +192,7 @@ export const globalRolesApi = {
    * Approve a pending role
    */
   approveRole: async (roleId: number): Promise<GlobalRole> => {
-    const response = await apiClient.post(`/api/global-roles/${roleId}/approve`);
+    const response = await apiClient.post(`/api/roles/${roleId}/approve`);
     return mapRole(response.data.role);
   },
 
@@ -200,14 +200,14 @@ export const globalRolesApi = {
    * Reject a pending role
    */
   rejectRole: async (roleId: number, reason?: string): Promise<void> => {
-    await apiClient.post(`/api/global-roles/${roleId}/reject`, { reason });
+    await apiClient.post(`/api/roles/${roleId}/reject`, { reason });
   },
 
   /**
    * Merge one role into another
    */
   mergeRoles: async (sourceRoleId: number, targetRoleId: number): Promise<GlobalRole> => {
-    const response = await apiClient.post(`/api/global-roles/${sourceRoleId}/merge`, {
+    const response = await apiClient.post(`/api/roles/${sourceRoleId}/merge`, {
       target_role_id: targetRoleId
     });
     return mapRole(response.data.role);
@@ -217,7 +217,7 @@ export const globalRolesApi = {
    * Update role priority
    */
   updatePriority: async (roleId: number, priority: string): Promise<GlobalRole> => {
-    const response = await apiClient.patch(`/api/global-roles/${roleId}`, {
+    const response = await apiClient.patch(`/api/roles/${roleId}`, {
       queue_priority: priority
     });
     return mapRole(response.data.role);
@@ -232,7 +232,7 @@ export const globalRolesApi = {
     seniorityLevel?: string;
     aliases?: string[];
   }): Promise<GlobalRole> => {
-    const response = await apiClient.post('/api/global-roles', {
+    const response = await apiClient.post('/api/roles', {
       name: data.name,
       category: data.category,
       seniority_level: data.seniorityLevel,
@@ -346,14 +346,16 @@ function mapRole(data: Record<string, unknown>): GlobalRole {
   return {
     id: data.id as number,
     name: data.name as string,
-    normalizedName: data.normalized_name as string,
+    normalizedName: (data.normalized_name || data.name) as string,
     category: data.category as string | null,
     seniorityLevel: data.seniority_level as string | null,
     aliases: (data.aliases as string[]) || [],
     candidateCount: data.candidate_count as number,
-    jobCount: data.job_count as number,
-    status: data.status as GlobalRole['status'],
-    queuePriority: data.queue_priority as GlobalRole['queuePriority'],
+    jobCount: (data.job_count || 0) as number,
+    // Handle both 'status' and 'queue_status' field names from backend
+    status: (data.status || data.queue_status) as GlobalRole['status'],
+    // Handle both 'queue_priority' and 'priority' field names from backend
+    queuePriority: (data.queue_priority || data.priority || 'normal') as GlobalRole['queuePriority'],
     lastScrapedAt: data.last_scraped_at as string | null,
     createdAt: data.created_at as string,
     similarRoles: data.similar_roles as GlobalRole['similarRoles'],

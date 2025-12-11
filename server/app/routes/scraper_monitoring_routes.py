@@ -106,10 +106,17 @@ def get_scraper_stats():
             .where(ScraperApiKey.is_active == True)
         ) or 0
         
+        # Count of roles that need PM_ADMIN review (newly normalized, awaiting approval)
+        # These are roles with queue_status='pending' that were recently created
+        # For the dashboard, we show all pending roles as "Roles to Review"
+        pending_roles_count = pending_queue  # Same as pending queue for now
+        
         return jsonify({
             "active_scrapers": active_scrapers,
             "pending_queue": pending_queue,
+            "pending_roles_count": pending_roles_count,  # For dashboard "Roles to Review" card
             "jobs_imported_24h": jobs_imported,
+            "jobs_imported_today": jobs_imported,  # Alias for frontend compatibility
             "sessions_24h": {
                 "total": sum(sessions_by_status.values()),
                 "completed": sessions_by_status.get('completed', 0),

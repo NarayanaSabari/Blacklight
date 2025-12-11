@@ -275,10 +275,10 @@ class CandidateService:
             # Store full parsed data
             parsed_resume_data=parsed_data,
             
-            # Default values
-            status='new',
+            # Default values - all sources start as 'pending_review' for HR approval
+            status='pending_review',
             source='resume_upload',
-            onboarding_status='PENDING_ASSIGNMENT',  # Ready for HR to assign
+            onboarding_status='PENDING_REVIEW',  # Waiting for HR to review and approve
         )
         
         print(f"[DEBUG] Candidate object created with work_experience: {len(candidate.work_experience or [])} items")

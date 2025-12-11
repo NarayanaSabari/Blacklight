@@ -725,6 +725,18 @@ class InvitationService:
         if not invitation.invitation_data:
             raise ValueError("No invitation data to create candidate from")
         
+        # VALIDATION: Check preferred_roles is filled (required for job scraping)
+        data_for_validation = invitation.invitation_data.copy()
+        if edited_data:
+            data_for_validation.update(edited_data)
+        
+        preferred_roles = data_for_validation.get('preferred_roles', [])
+        if not preferred_roles or len(preferred_roles) == 0:
+            raise ValueError(
+                "Preferred roles are required for approval. "
+                "Please add at least one preferred role for the candidate."
+            )
+        
         # Extract data from invitation_data and merge with HR edits
         data = invitation.invitation_data.copy()
         if edited_data:
@@ -905,6 +917,9 @@ class InvitationService:
             preferred_roles = preferred_roles[:10]
         candidate.preferred_roles = preferred_roles
         
+        # Set status to ready_for_assignment (approval means ready for job matching)
+        candidate.status = 'ready_for_assignment'
+        
         candidate.education = education_data
         candidate.work_experience = work_exp_data
         candidate.parsed_resume_data = parsed_resume if parsed_resume else candidate.parsed_resume_data
@@ -1004,6 +1019,54 @@ class InvitationService:
             logger.info(f"Triggered async resume parsing for candidate {candidate.id}")
         except Exception as e:
             logger.error(f"Failed to trigger async resume parsing for candidate {candidate.id}: {e}")
+        
+        # Normalize preferred roles and add to global_roles table for job scraping
+        if candidate.preferred_roles:
+            try:
+                from app.services.ai_role_normalization_service import AIRoleNormalizationService
+                
+                logger.info(f"Starting role normalization for candidate {candidate.id} with roles: {candidate.preferred_roles}")
+                
+                for raw_role in candidate.preferred_roles:
+                    if raw_role and raw_role.strip():
+                        try:
+                            global_role, similarity, method = AIRoleNormalizationService.normalize_candidate_role(
+                                raw_role=raw_role.strip(),
+                                candidate_id=candidate.id
+                            )
+                            logger.info(
+                                f"Normalized role '{raw_role}' -> '{global_role.normalized_title}' "
+                                f"(similarity: {similarity:.2%}, method: {method}, role_id: {global_role.id})"
+                            )
+                        except Exception as role_error:
+                            logger.error(f"Failed to normalize role '{raw_role}' for candidate {candidate.id}: {role_error}")
+                            # Continue with other roles even if one fails
+                
+                logger.info(f"Completed role normalization for candidate {candidate.id}")
+            except Exception as e:
+                logger.error(f"Failed to normalize roles for candidate {candidate.id}: {e}")
+        
+        # Trigger job matching workflow via Inngest
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            
+            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate.id}")
+            
+            event_result = inngest_client.send_sync(
+                inngest.Event(
+                    name="job-match/generate-candidate",
+                    data={
+                        "candidate_id": candidate.id,
+                        "tenant_id": tenant_id,
+                        "trigger_source": "invitation_approval",
+                        "preferred_roles": candidate.preferred_roles or []
+                    }
+                )
+            )
+            logger.info(f"[INNGEST] ✅ Job matching event sent for candidate {candidate.id}. Result: {event_result}")
+        except Exception as e:
+            logger.error(f"Failed to trigger job matching for candidate {candidate.id}: {e}")
         
         return candidate
     

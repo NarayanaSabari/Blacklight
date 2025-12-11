@@ -42,8 +42,8 @@ class CandidateCreateSchema(BaseModel):
     education: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     work_experience: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     
-    # Metadata
-    status: Optional[str] = Field(default='processing', max_length=50)  # Default for manual upload
+    # Metadata - all sources start as 'pending_review' for HR approval workflow
+    status: Optional[str] = Field(default='pending_review', max_length=50)
     source: Optional[str] = Field(default='manual', max_length=100)
     
     model_config = ConfigDict(from_attributes=True)
