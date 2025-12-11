@@ -15,6 +15,9 @@ from app.inngest import inngest_client
 from app.models.tenant import Tenant
 from app.models.candidate import Candidate
 from app.models.job_posting import JobPosting
+from app.models.global_role import GlobalRole
+from app.models.candidate_global_role import CandidateGlobalRole
+from app.models.candidate_job_match import CandidateJobMatch
 from app.services.job_matching_service import JobMatchingService
 from app.services.embedding_service import EmbeddingService
 
@@ -188,6 +191,190 @@ async def generate_candidate_matches_workflow(ctx: inngest.Context):
         "total_matches": match_result["total_matches"],
         "trigger": trigger,
         "final_status": "ready_for_assignment" if trigger == "onboarding_approval" else None
+    }
+
+
+@inngest_client.create_function(
+    fn_id="match-jobs-to-candidates",
+    trigger=inngest.TriggerEvent(event="jobs/imported"),
+    retries=3,
+    name="Match New Jobs to Candidates"
+)
+async def match_jobs_to_candidates_workflow(ctx, step):
+    """
+    Match newly imported jobs to candidates with matching preferred roles.
+    
+    This is the PRIMARY matching workflow - triggered by scraper job imports.
+    
+    Event data:
+    {
+        "job_ids": [1, 2, 3],           - IDs of newly imported jobs
+        "global_role_id": 5,            - Role that triggered the scrape
+        "role_name": "Python Developer", - Role name for logging
+        "session_id": "uuid",           - Scrape session ID
+        "source": "scraper"             - Import source
+    }
+    """
+    event_data = ctx.event.data
+    job_ids = event_data.get("job_ids", [])
+    global_role_id = event_data.get("global_role_id")
+    role_name = event_data.get("role_name", "Unknown")
+    source = event_data.get("source", "unknown")
+    
+    if not job_ids:
+        logger.info("[INNGEST] No jobs to process in jobs/imported event")
+        return {"status": "completed", "matches_created": 0, "message": "No jobs to process"}
+    
+    logger.info(
+        f"[INNGEST] Processing {len(job_ids)} jobs for role '{role_name}' "
+        f"(role_id={global_role_id}, source={source})"
+    )
+    
+    # Step 1: Get jobs and ensure they have embeddings
+    def ensure_job_embeddings():
+        embedding_service = EmbeddingService()
+        jobs_processed = 0
+        embeddings_generated = 0
+        
+        for job_id in job_ids:
+            job = db.session.get(JobPosting, job_id)
+            if not job:
+                continue
+            
+            jobs_processed += 1
+            
+            if job.embedding is None:
+                try:
+                    embedding = embedding_service.generate_job_embedding(job)
+                    if embedding:
+                        job.embedding = embedding
+                        embeddings_generated += 1
+                except Exception as e:
+                    logger.error(f"[INNGEST] Failed to generate embedding for job {job_id}: {e}")
+        
+        db.session.commit()
+        return {
+            "jobs_processed": jobs_processed,
+            "embeddings_generated": embeddings_generated
+        }
+    
+    embedding_result = await step.run("ensure-job-embeddings", ensure_job_embeddings)
+    
+    # Step 2: Find candidates with matching preferred roles
+    def find_matching_candidates():
+        if not global_role_id:
+            logger.warning("[INNGEST] No global_role_id in event, cannot find candidates")
+            return []
+        
+        # Find all candidates linked to this global role
+        candidate_links = CandidateGlobalRole.query.filter_by(
+            global_role_id=global_role_id
+        ).all()
+        
+        candidates_info = []
+        for link in candidate_links:
+            candidate = link.candidate
+            # Only match approved/ready candidates with embeddings
+            if candidate and candidate.status in ['approved', 'ready_for_assignment']:
+                if candidate.embedding is not None:
+                    candidates_info.append({
+                        "id": candidate.id,
+                        "tenant_id": candidate.tenant_id,
+                        "first_name": candidate.first_name,
+                        "last_name": candidate.last_name
+                    })
+        
+        return candidates_info
+    
+    matching_candidates = await step.run("find-matching-candidates", find_matching_candidates)
+    
+    if not matching_candidates:
+        logger.info(f"[INNGEST] No candidates found for role '{role_name}'")
+        return {
+            "status": "completed",
+            "role_name": role_name,
+            "jobs_processed": embedding_result["jobs_processed"],
+            "candidates_found": 0,
+            "matches_created": 0
+        }
+    
+    logger.info(f"[INNGEST] Found {len(matching_candidates)} candidates for role '{role_name}'")
+    
+    # Step 3: Generate matches for each candidate
+    def generate_matches_for_candidates():
+        total_matches = 0
+        
+        for candidate_info in matching_candidates:
+            candidate_id = candidate_info["id"]
+            tenant_id = candidate_info["tenant_id"]
+            
+            candidate = db.session.get(Candidate, candidate_id)
+            if not candidate or candidate.embedding is None:
+                continue
+            
+            service = JobMatchingService(tenant_id=tenant_id)
+            
+            for job_id in job_ids:
+                job = db.session.get(JobPosting, job_id)
+                if not job or job.embedding is None:
+                    continue
+                
+                # Check if match already exists
+                existing = CandidateJobMatch.query.filter_by(
+                    candidate_id=candidate_id,
+                    job_posting_id=job_id
+                ).first()
+                
+                if existing:
+                    continue
+                
+                # Calculate match score
+                try:
+                    match_result = service.calculate_match_score(candidate, job)
+                    
+                    # Only create match if score is above threshold
+                    if match_result['overall_score'] >= 50:
+                        match = CandidateJobMatch(
+                            candidate_id=candidate_id,
+                            job_posting_id=job_id,
+                            match_score=match_result['overall_score'],
+                            skill_match_score=match_result['skill_match_score'],
+                            experience_match_score=match_result['experience_match_score'],
+                            location_match_score=match_result['location_match_score'],
+                            salary_match_score=match_result['salary_match_score'],
+                            semantic_similarity=match_result['semantic_similarity'],
+                            matched_skills=match_result['matched_skills'],
+                            missing_skills=match_result['missing_skills'],
+                            match_reasons=match_result.get('explanation', []),
+                            is_recommended=match_result['overall_score'] >= 70
+                        )
+                        db.session.add(match)
+                        total_matches += 1
+                except Exception as e:
+                    logger.error(
+                        f"[INNGEST] Failed to calculate match for candidate {candidate_id}, "
+                        f"job {job_id}: {e}"
+                    )
+        
+        db.session.commit()
+        return total_matches
+    
+    matches_created = await step.run("generate-matches", generate_matches_for_candidates)
+    
+    logger.info(
+        f"[INNGEST] Job import matching complete: "
+        f"role='{role_name}', jobs={len(job_ids)}, "
+        f"candidates={len(matching_candidates)}, matches={matches_created}"
+    )
+    
+    return {
+        "status": "completed",
+        "role_name": role_name,
+        "global_role_id": global_role_id,
+        "jobs_processed": embedding_result["jobs_processed"],
+        "embeddings_generated": embedding_result["embeddings_generated"],
+        "candidates_found": len(matching_candidates),
+        "matches_created": matches_created
     }
 
 

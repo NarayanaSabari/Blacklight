@@ -209,3 +209,142 @@ def store_stats_step(stats: dict) -> None:
         )
     
     logger.info(f"[INNGEST] Stored daily stats for {len(stats)} tenants in Redis")
+
+
+# ============================================================================
+# SCRAPE QUEUE SCHEDULED TASKS
+# ============================================================================
+
+@inngest_client.create_function(
+    fn_id="cleanup-stale-scrape-sessions",
+    trigger=inngest.TriggerCron(cron="*/15 * * * *"),  # Every 15 minutes
+    name="Cleanup Stale Scrape Sessions"
+)
+async def cleanup_stale_sessions_workflow(ctx: inngest.Context) -> dict:
+    """
+    Cleanup scrape sessions stuck in 'processing' state.
+    Runs every 15 minutes.
+    
+    Sessions older than 1 hour in processing state are:
+    1. Marked as 'timeout'
+    2. Role is reset to 'pending' for retry
+    """
+    logger.info("[INNGEST] Running stale scrape session cleanup")
+    
+    # Step 1: Cleanup stale sessions
+    cleanup_count = await ctx.step.run(
+        "cleanup-stale-sessions",
+        cleanup_stale_sessions_step
+    )
+    
+    logger.info(f"[INNGEST] Cleaned up {cleanup_count} stale sessions")
+    
+    return {
+        "sessions_cleaned": cleanup_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@inngest_client.create_function(
+    fn_id="reset-completed-roles",
+    trigger=inngest.TriggerCron(cron="0 0 * * *"),  # Midnight daily
+    name="Reset Completed Roles for New Scraping"
+)
+async def reset_completed_roles_workflow(ctx: inngest.Context) -> dict:
+    """
+    Reset completed roles back to pending for daily fresh scraping.
+    Runs daily at midnight.
+    
+    This ensures:
+    1. Jobs are refreshed daily with new postings
+    2. Roles with active candidates are prioritized
+    """
+    logger.info("[INNGEST] Running completed roles reset")
+    
+    # Step 1: Reset completed roles
+    reset_count = await ctx.step.run(
+        "reset-completed-roles",
+        reset_completed_roles_step
+    )
+    
+    logger.info(f"[INNGEST] Reset {reset_count} roles back to pending")
+    
+    return {
+        "roles_reset": reset_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@inngest_client.create_function(
+    fn_id="update-role-candidate-counts",
+    trigger=inngest.TriggerCron(cron="0 */6 * * *"),  # Every 6 hours
+    name="Update Role Candidate Counts"
+)
+async def update_role_candidate_counts_workflow(ctx: inngest.Context) -> dict:
+    """
+    Recalculate candidate counts for all global roles.
+    Runs every 6 hours.
+    
+    This ensures accurate priority-based queue ordering.
+    """
+    logger.info("[INNGEST] Updating role candidate counts")
+    
+    # Step 1: Update counts
+    updated_count = await ctx.step.run(
+        "update-candidate-counts",
+        update_candidate_counts_step
+    )
+    
+    logger.info(f"[INNGEST] Updated candidate counts for {updated_count} roles")
+    
+    return {
+        "roles_updated": updated_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+# Step Functions for Scrape Queue Tasks
+
+def cleanup_stale_sessions_step() -> int:
+    """Cleanup stale scrape sessions"""
+    from app.services.scrape_queue_service import ScrapeQueueService
+    return ScrapeQueueService.cleanup_stale_sessions()
+
+
+def reset_completed_roles_step() -> int:
+    """Reset completed roles back to pending"""
+    from app.services.scrape_queue_service import ScrapeQueueService
+    return ScrapeQueueService.reset_completed_roles()
+
+
+def update_candidate_counts_step() -> int:
+    """Update candidate counts for all roles"""
+    from app import db
+    from app.models.global_role import GlobalRole
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from sqlalchemy import select, func
+    
+    # Get count per role
+    counts_query = (
+        select(
+            CandidateGlobalRole.global_role_id,
+            func.count(CandidateGlobalRole.candidate_id).label('count')
+        )
+        .group_by(CandidateGlobalRole.global_role_id)
+    )
+    
+    counts = {row[0]: row[1] for row in db.session.execute(counts_query).all()}
+    
+    # Update all roles
+    roles = db.session.execute(select(GlobalRole)).scalars().all()
+    
+    for role in roles:
+        new_count = counts.get(role.id, 0)
+        if role.candidate_count != new_count:
+            role.candidate_count = new_count
+    
+    db.session.commit()
+    
+    logger.info(f"[INNGEST] Updated candidate counts for {len(roles)} roles")
+    return len(roles)
+

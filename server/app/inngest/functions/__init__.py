@@ -12,12 +12,16 @@ from .email_sending import (
 )
 from .scheduled_tasks import (
     check_expiring_invitations_workflow,
-    generate_daily_stats_workflow
+    generate_daily_stats_workflow,
+    cleanup_stale_sessions_workflow,
+    reset_completed_roles_workflow,
+    update_role_candidate_counts_workflow
 )
 from .job_matching_tasks import (
     nightly_match_refresh_workflow,
     generate_candidate_matches_workflow,
-    update_job_embeddings_workflow
+    update_job_embeddings_workflow,
+    match_jobs_to_candidates_workflow
 )
 from .resume_parsing import (
     parse_resume_workflow
@@ -36,11 +40,15 @@ INNGEST_FUNCTIONS = [
     # Scheduled Tasks
     check_expiring_invitations_workflow,
     generate_daily_stats_workflow,
+    cleanup_stale_sessions_workflow,
+    reset_completed_roles_workflow,
+    update_role_candidate_counts_workflow,
     
     # Job Matching Tasks
     nightly_match_refresh_workflow,
     generate_candidate_matches_workflow,
     update_job_embeddings_workflow,
+    match_jobs_to_candidates_workflow,
     
     # Resume Parsing
     parse_resume_workflow,

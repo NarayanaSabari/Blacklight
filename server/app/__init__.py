@@ -156,6 +156,9 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import job_match_routes
     from app.routes import job_posting_routes
     from app.routes import embedding_routes
+    from app.routes import scraper_routes
+    from app.routes import global_role_routes
+    from app.routes import scraper_monitoring_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -202,6 +205,15 @@ def register_blueprints(app: Flask) -> None:
     
     # Embedding Management routes (PM_ADMIN only)
     app.register_blueprint(embedding_routes.embedding_bp)
+    
+    # Scraper API routes (for external job scrapers)
+    app.register_blueprint(scraper_routes.scraper_bp)
+    
+    # Global Role Management routes (PM_ADMIN only)
+    app.register_blueprint(global_role_routes.global_role_bp)
+    
+    # Scraper Monitoring routes (PM_ADMIN dashboard)
+    app.register_blueprint(scraper_monitoring_routes.scraper_monitoring_bp)
 
 
 def register_inngest(app: Flask) -> None:

@@ -10,6 +10,7 @@ import { PMAdminAuthProvider } from '@/contexts/PMAdminAuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
+import { DashboardPage } from '@/pages/Dashboard';
 import { TenantsPage } from '@/pages/TenantsPage';
 import { CreateTenantPage } from '@/pages/CreateTenantPage';
 import { TenantDetailPage } from '@/pages/TenantDetailPage';
@@ -41,7 +42,8 @@ function App() {
             {/* Protected routes */}
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route path="/" element={<Navigate to="/tenants" replace />} />
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/tenants" element={<TenantsPage />} />
                 <Route path="/tenants/new" element={<CreateTenantPage />} />
                 <Route path="/tenants/:slug" element={<TenantDetailPage />} />

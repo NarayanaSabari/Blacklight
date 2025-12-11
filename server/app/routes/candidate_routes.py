@@ -532,6 +532,21 @@ def approve_candidate(candidate_id: int):
             # Log but don't fail
             logger.warning(f"Failed to trigger job matching for candidate {candidate_id}: {str(e)}")
         
+        # Normalize preferred roles and link to GlobalRole for queue-based matching
+        normalization_results = []
+        if candidate.preferred_roles:
+            try:
+                from app.services.ai_role_normalization_service import AIRoleNormalizationService
+                normalization_service = AIRoleNormalizationService()
+                normalization_results = normalization_service.normalize_candidate_roles(
+                    candidate_id=candidate.id,
+                    preferred_roles=candidate.preferred_roles
+                )
+                logger.info(f"Normalized {len(normalization_results)} roles for approved candidate {candidate_id}")
+            except Exception as norm_error:
+                # Log but don't fail - role normalization is non-critical
+                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
+        
         # Return approved candidate using to_dict() to handle None values
         return jsonify(candidate.to_dict()), 200
     
@@ -764,12 +779,17 @@ def update_preferred_roles(candidate_id: int):
     """
     Update candidate's preferred roles.
     
+    This endpoint:
+    1. Updates the preferred_roles array on the candidate
+    2. Normalizes each role using AI Role Normalization (Option B)
+    3. Links candidate to GlobalRole for queue-based job matching
+    
     Request Body:
         {
             "preferred_roles": ["Software Engineer", "Tech Lead", "Solutions Architect"]
         }
     
-    Returns: Updated candidate
+    Returns: Updated candidate with normalization results
     Permissions: candidates.edit
     """
     try:
@@ -802,9 +822,25 @@ def update_preferred_roles(candidate_id: int):
         
         logger.info(f"Updated preferred roles for candidate {candidate_id}: {len(preferred_roles)} roles")
         
+        # Normalize roles and link to GlobalRole for job matching queue
+        normalization_results = []
+        if preferred_roles:
+            try:
+                from app.services.ai_role_normalization_service import AIRoleNormalizationService
+                normalization_service = AIRoleNormalizationService()
+                normalization_results = normalization_service.normalize_candidate_roles(
+                    candidate_id=candidate_id,
+                    preferred_roles=preferred_roles
+                )
+                logger.info(f"Normalized {len(normalization_results)} roles for candidate {candidate_id}")
+            except Exception as norm_error:
+                # Log but don't fail the request - role normalization is non-critical
+                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
+        
         return jsonify({
             'message': 'Preferred roles updated successfully',
-            'candidate': candidate.to_dict()
+            'candidate': candidate.to_dict(),
+            'normalization_results': normalization_results
         }), 200
         
     except Exception as e:
@@ -891,3 +927,326 @@ def generate_role_suggestions(candidate_id: int):
             )
         
         return error_response(f"Failed to generate role suggestions: {error_msg}", 500)
+
+
+# ==================== Job Access Endpoints (Scrape Queue Mode) ====================
+
+@candidate_bp.route('/<int:candidate_id>/jobs', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_candidate_jobs(candidate_id: int):
+    """
+    Get jobs for candidate's preferred roles WITHOUT scoring.
+    
+    In scrape queue mode, jobs are scraped once per role and made available
+    to ALL candidates with that role. This endpoint returns all jobs associated
+    with the candidate's global roles.
+    
+    GET /api/candidates/:id/jobs?page=1&per_page=50
+    
+    Query params:
+    - page: Page number (default 1)
+    - per_page: Jobs per page (default 50, max 100)
+    - platform: Filter by job platform (optional)
+    - location: Filter by location (optional)
+    
+    Permissions: candidates.view
+    
+    Returns all jobs for candidate's preferred roles without calculating scores.
+    Use /api/candidates/:id/job-matches for scored results.
+    """
+    from sqlalchemy import select
+    from app.models.candidate import Candidate
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.job_posting import JobPosting
+    from app.models.role_job_mapping import RoleJobMapping
+    
+    try:
+        tenant_id = g.tenant_id
+        
+        # Verify candidate exists and belongs to tenant
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            return error_response(f"Candidate {candidate_id} not found", 404)
+        
+        if candidate.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        # Parse query parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        platform = request.args.get('platform')
+        location = request.args.get('location')
+        
+        # Validate parameters
+        if per_page < 1 or per_page > 100:
+            return error_response("per_page must be between 1 and 100")
+        if page < 1:
+            return error_response("page must be >= 1")
+        
+        # Get candidate's global roles
+        global_role_query = select(CandidateGlobalRole.global_role_id).where(
+            CandidateGlobalRole.candidate_id == candidate_id
+        )
+        global_role_ids = [row[0] for row in db.session.execute(global_role_query).all()]
+        
+        if not global_role_ids:
+            # No assigned roles - return empty result
+            return jsonify({
+                'candidate_id': candidate_id,
+                'preferred_roles': candidate.preferred_roles or [],
+                'total_jobs': 0,
+                'jobs': [],
+                'page': page,
+                'per_page': per_page,
+                'message': 'No global roles assigned to this candidate'
+            }), 200
+        
+        # Get all job IDs mapped to these roles
+        job_mapping_query = select(RoleJobMapping.job_posting_id).where(
+            RoleJobMapping.global_role_id.in_(global_role_ids)
+        ).distinct()
+        job_ids = [row[0] for row in db.session.execute(job_mapping_query).all()]
+        
+        if not job_ids:
+            return jsonify({
+                'candidate_id': candidate_id,
+                'preferred_roles': candidate.preferred_roles or [],
+                'total_jobs': 0,
+                'jobs': [],
+                'page': page,
+                'per_page': per_page,
+                'message': 'No jobs found for assigned roles'
+            }), 200
+        
+        # Build job query
+        from sqlalchemy import func
+        count_query = select(func.count(JobPosting.id)).where(
+            JobPosting.id.in_(job_ids),
+            JobPosting.status == 'active'
+        )
+        
+        if platform:
+            count_query = count_query.where(JobPosting.platform == platform)
+        if location:
+            count_query = count_query.where(JobPosting.location.ilike(f"%{location}%"))
+        
+        total_jobs = db.session.execute(count_query).scalar()
+        
+        # Fetch jobs
+        job_query = select(JobPosting).where(
+            JobPosting.id.in_(job_ids),
+            JobPosting.status == 'active'
+        )
+        
+        if platform:
+            job_query = job_query.where(JobPosting.platform == platform)
+        if location:
+            job_query = job_query.where(JobPosting.location.ilike(f"%{location}%"))
+        
+        offset = (page - 1) * per_page
+        job_query = job_query.order_by(JobPosting.posted_date.desc().nullslast()).offset(offset).limit(per_page)
+        
+        jobs = db.session.execute(job_query).scalars().all()
+        
+        # Get role names for response
+        from app.models.global_role import GlobalRole
+        role_names = []
+        for role_id in global_role_ids:
+            role = db.session.get(GlobalRole, role_id)
+            if role:
+                role_names.append(role.name)
+        
+        return jsonify({
+            'candidate_id': candidate_id,
+            'preferred_roles': role_names,
+            'total_jobs': total_jobs,
+            'jobs': [
+                {
+                    'id': job.id,
+                    'title': job.title,
+                    'company': job.company,
+                    'location': job.location,
+                    'salary_range': job.salary_range,
+                    'salary_min': job.salary_min,
+                    'salary_max': job.salary_max,
+                    'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                    'is_remote': job.is_remote,
+                    'job_url': job.job_url,
+                    'platform': job.platform,
+                    'skills': job.skills or []
+                }
+                for job in jobs
+            ],
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total_jobs + per_page - 1) // per_page if total_jobs > 0 else 0
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching jobs for candidate {candidate_id}: {str(e)}")
+        return error_response("Failed to fetch jobs", 500)
+
+
+@candidate_bp.route('/<int:candidate_id>/job-matches', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_candidate_job_matches(candidate_id: int):
+    """
+    Get matched jobs for candidate WITH scoring calculated on-the-fly.
+    
+    This endpoint calculates match scores between the candidate and jobs
+    associated with their global roles. Scores are computed dynamically.
+    
+    GET /api/candidates/:id/job-matches?min_score=0&sort_by=match_score&page=1&per_page=50
+    
+    Query params:
+    - min_score: Minimum match score filter (default 0)
+    - sort_by: Sort field (match_score, posted_date, default: match_score)
+    - page: Page number (default 1)
+    - per_page: Matches per page (default 50, max 100)
+    
+    Permissions: candidates.view
+    
+    Returns jobs with match scores calculated on-the-fly.
+    """
+    from sqlalchemy import select
+    from app.models.candidate import Candidate
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.job_posting import JobPosting
+    from app.models.role_job_mapping import RoleJobMapping
+    from app.services.job_matching_service import JobMatchingService
+    
+    try:
+        tenant_id = g.tenant_id
+        
+        # Verify candidate exists and belongs to tenant
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            return error_response(f"Candidate {candidate_id} not found", 404)
+        
+        if candidate.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        # Parse query parameters
+        min_score = request.args.get('min_score', 0, type=float)
+        sort_by = request.args.get('sort_by', 'match_score')
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Validate parameters
+        if per_page < 1 or per_page > 100:
+            return error_response("per_page must be between 1 and 100")
+        if page < 1:
+            return error_response("page must be >= 1")
+        
+        # Get candidate's global roles
+        global_role_query = select(CandidateGlobalRole.global_role_id).where(
+            CandidateGlobalRole.candidate_id == candidate_id
+        )
+        global_role_ids = [row[0] for row in db.session.execute(global_role_query).all()]
+        
+        if not global_role_ids:
+            return jsonify({
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'matches': [],
+                'page': page,
+                'per_page': per_page,
+                'message': 'No global roles assigned to this candidate'
+            }), 200
+        
+        # Get all job IDs mapped to these roles
+        job_mapping_query = select(RoleJobMapping.job_posting_id).where(
+            RoleJobMapping.global_role_id.in_(global_role_ids)
+        ).distinct()
+        job_ids = [row[0] for row in db.session.execute(job_mapping_query).all()]
+        
+        if not job_ids:
+            return jsonify({
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'matches': [],
+                'page': page,
+                'per_page': per_page,
+                'message': 'No jobs found for assigned roles'
+            }), 200
+        
+        # Initialize matching service
+        service = JobMatchingService(tenant_id=tenant_id)
+        
+        # Calculate scores for all jobs (we need to score all to filter/sort properly)
+        # Fetch jobs
+        job_query = select(JobPosting).where(
+            JobPosting.id.in_(job_ids),
+            JobPosting.status == 'active'
+        )
+        jobs = db.session.execute(job_query).scalars().all()
+        
+        # Calculate match scores
+        scored_matches = []
+        for job in jobs:
+            match_result = service.calculate_match_score(candidate, job)
+            overall_score = match_result.get('overall_score', 0)
+            
+            # Apply min_score filter
+            if overall_score >= min_score:
+                scored_matches.append({
+                    'job': job,
+                    'match_result': match_result
+                })
+        
+        # Sort matches
+        if sort_by == 'match_score':
+            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=True)
+        elif sort_by == 'posted_date':
+            scored_matches.sort(key=lambda x: x['job'].posted_date or datetime.min, reverse=True)
+        
+        # Total count (after filtering)
+        total_matches = len(scored_matches)
+        
+        # Pagination
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated_matches = scored_matches[start:end]
+        
+        return jsonify({
+            'candidate_id': candidate_id,
+            'total_matches': total_matches,
+            'matches': [
+                {
+                    'job': {
+                        'id': m['job'].id,
+                        'title': m['job'].title,
+                        'company': m['job'].company,
+                        'location': m['job'].location,
+                        'salary_range': m['job'].salary_range,
+                        'salary_min': m['job'].salary_min,
+                        'salary_max': m['job'].salary_max,
+                        'skills': m['job'].skills or [],
+                        'job_url': m['job'].job_url,
+                        'platform': m['job'].platform,
+                        'posted_date': m['job'].posted_date.isoformat() if m['job'].posted_date else None
+                    },
+                    'match_score': round(m['match_result']['overall_score'], 2),
+                    'grade': m['match_result']['match_grade'],
+                    'skill_match_score': round(m['match_result']['skill_match_score'], 2),
+                    'experience_match_score': round(m['match_result']['experience_match_score'], 2),
+                    'location_match_score': round(m['match_result']['location_match_score'], 2),
+                    'salary_match_score': round(m['match_result']['salary_match_score'], 2),
+                    'semantic_similarity': round(m['match_result']['semantic_similarity'], 2),
+                    'matched_skills': m['match_result']['matched_skills'],
+                    'missing_skills': m['match_result']['missing_skills']
+                }
+                for m in paginated_matches
+            ],
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total_matches + per_page - 1) // per_page if total_matches > 0 else 0
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching job matches for candidate {candidate_id}: {str(e)}")
+        return error_response("Failed to fetch job matches", 500)

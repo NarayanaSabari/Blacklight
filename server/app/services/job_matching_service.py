@@ -48,56 +48,190 @@ class JobMatchingService:
     GRADE_D = 50       # Poor match
     
     # Skill synonyms dictionary for flexible matching
+    # Complete dictionary as documented in 06-SKILL-MATCHING.md
     SKILL_SYNONYMS = {
-        # Cloud Platforms
-        'aws': ['amazon web services', 'amazon aws'],
-        'gcp': ['google cloud platform', 'google cloud'],
-        'azure': ['microsoft azure', 'ms azure'],
+        # ===================
+        # CLOUD PLATFORMS
+        # ===================
+        'aws': [
+            'amazon web services', 
+            'amazon aws', 
+            'ec2', 
+            's3', 
+            'lambda', 
+            'cloudwatch',
+            'aws lambda'
+        ],
+        'gcp': [
+            'google cloud', 
+            'google cloud platform', 
+            'gce', 
+            'bigquery', 
+            'google compute engine'
+        ],
+        'azure': [
+            'microsoft azure', 
+            'azure cloud', 
+            'azure devops',
+            'azure functions'
+        ],
         
-        # Programming Languages
-        'js': ['javascript'],
-        'ts': ['typescript'],
-        'py': ['python'],
-        'golang': ['go'],
-        'c#': ['csharp', 'c sharp'],
+        # ===================
+        # PROGRAMMING LANGUAGES
+        # ===================
+        'javascript': ['js', 'es6', 'es2015', 'ecmascript', 'es5', 'es7'],
+        'typescript': ['ts'],
+        'python': ['py', 'python3', 'python2', 'cpython'],
+        'golang': ['go', 'go lang', 'go-lang'],
+        'c++': ['cpp', 'cplusplus', 'c plus plus'],
+        'c#': ['csharp', 'c sharp', 'dotnet'],
+        '.net': ['dotnet', 'dot net', '.net core', 'dotnet core'],
+        'ruby': ['rb'],
+        'rust': ['rustlang'],
+        'scala': ['scala lang'],
+        'kotlin': ['kt'],
+        'swift': ['swift lang', 'swiftui'],
+        'objective-c': ['objc', 'objective c'],
+        'php': ['php7', 'php8'],
+        'perl': ['perl5', 'perl6'],
         
-        # Frameworks
-        'react': ['reactjs', 'react.js'],
-        'vue': ['vuejs', 'vue.js'],
-        'angular': ['angularjs', 'angular.js'],
-        'node': ['nodejs', 'node.js'],
+        # ===================
+        # FRONTEND FRAMEWORKS
+        # ===================
+        'react': ['reactjs', 'react.js', 'react native', 'react-native'],
+        'vue': ['vuejs', 'vue.js', 'vue3', 'nuxt', 'nuxtjs'],
+        'angular': ['angularjs', 'angular.js', 'angular2', 'angular 2'],
+        'svelte': ['sveltejs', 'sveltekit'],
+        'next.js': ['nextjs', 'next'],
+        'gatsby': ['gatsbyjs'],
+        'ember': ['emberjs', 'ember.js'],
+        'backbone': ['backbonejs', 'backbone.js'],
+        'jquery': ['jq'],
+        
+        # ===================
+        # BACKEND FRAMEWORKS
+        # ===================
+        'node': ['nodejs', 'node.js', 'express', 'expressjs'],
         'express': ['expressjs', 'express.js'],
-        'django': ['python django'],
-        'flask': ['python flask'],
-        'spring': ['spring boot', 'spring framework'],
-        'dotnet': ['.net', 'asp.net'],
+        'django': ['django rest framework', 'drf', 'django-rest'],
+        'flask': ['flask api'],
+        'fastapi': ['fast api', 'fast-api'],
+        'rails': ['ruby on rails', 'ror', 'ruby rails'],
+        'spring': ['spring boot', 'springboot', 'spring framework'],
+        'laravel': ['laravel php'],
+        'asp.net': ['asp net', 'aspnet'],
+        'nestjs': ['nest.js', 'nest'],
+        'koa': ['koajs', 'koa.js'],
+        'hapi': ['hapijs'],
+        'gin': ['gin-gonic', 'gin golang'],
+        'fiber': ['gofiber', 'fiber golang'],
         
-        # Databases
-        'postgres': ['postgresql', 'pg'],
-        'mongo': ['mongodb'],
-        'mysql': ['my sql'],
-        'mssql': ['sql server', 'microsoft sql server'],
+        # ===================
+        # DATABASES
+        # ===================
+        'postgresql': ['postgres', 'pg', 'psql', 'pgsql'],
+        'mysql': ['mariadb', 'maria db', 'mysql server'],
+        'mongodb': ['mongo', 'mongo db', 'mongoose'],
+        'redis': ['redis cache', 'redis db'],
+        'elasticsearch': ['elastic search', 'elastic', 'es'],
+        'cassandra': ['apache cassandra'],
         'dynamodb': ['dynamo db', 'amazon dynamodb'],
+        'oracle': ['oracle db', 'oracle database', 'plsql', 'pl/sql'],
+        'sql server': ['mssql', 'ms sql', 'microsoft sql'],
+        'sqlite': ['sqlite3'],
+        'couchdb': ['couch db', 'apache couchdb'],
+        'neo4j': ['neo 4j'],
+        'firestore': ['firebase firestore', 'cloud firestore'],
         
-        # DevOps/Tools
-        'k8s': ['kubernetes'],
-        'docker': ['containerization'],
-        'ci/cd': ['cicd', 'continuous integration', 'continuous deployment'],
-        'jenkins': ['jenkins ci'],
-        'terraform': ['iac', 'infrastructure as code'],
-        'ansible': ['configuration management'],
+        # ===================
+        # DEVOPS & INFRASTRUCTURE
+        # ===================
+        'kubernetes': ['k8s', 'kube', 'kubectl'],
+        'docker': ['docker compose', 'docker-compose', 'containerization', 'containers'],
+        'terraform': ['tf', 'infrastructure as code', 'iac', 'hcl'],
+        'ansible': ['ansible playbook'],
+        'puppet': ['puppet enterprise'],
+        'chef': ['chef infra'],
+        'jenkins': ['jenkins ci', 'jenkinsfile'],
+        'gitlab ci': ['gitlab-ci', 'gitlab ci/cd'],
+        'github actions': ['gh actions'],
+        'circle ci': ['circleci'],
+        'travis ci': ['travis-ci', 'travisci'],
+        'ci/cd': ['cicd', 'continuous integration', 'continuous delivery', 'continuous deployment'],
+        'nginx': ['nginx server'],
+        'apache': ['apache server', 'httpd'],
+        'linux': ['unix', 'ubuntu', 'centos', 'debian', 'rhel'],
+        'bash': ['shell', 'shell script', 'sh', 'zsh'],
+        'prometheus': ['prometheus monitoring'],
+        'grafana': ['grafana dashboard'],
+        'datadog': ['data dog'],
         
-        # Methodologies
-        'agile': ['scrum', 'kanban'],
-        'tdd': ['test driven development'],
-        'bdd': ['behavior driven development'],
+        # ===================
+        # MESSAGE QUEUES
+        # ===================
+        'kafka': ['apache kafka'],
+        'rabbitmq': ['rabbit mq', 'amqp'],
+        'sqs': ['amazon sqs', 'aws sqs'],
+        'pubsub': ['google pubsub', 'gcp pubsub', 'pub/sub'],
         
-        # AI/ML
-        'ml': ['machine learning'],
-        'ai': ['artificial intelligence'],
-        'nlp': ['natural language processing'],
-        'cv': ['computer vision'],
-        'dl': ['deep learning'],
+        # ===================
+        # DATA & ML
+        # ===================
+        'machine learning': ['ml'],
+        'artificial intelligence': ['ai'],
+        'deep learning': ['dl'],
+        'natural language processing': ['nlp'],
+        'computer vision': ['cv'],
+        'tensorflow': ['tf', 'tf2'],
+        'pytorch': ['torch'],
+        'scikit-learn': ['sklearn', 'scikit learn'],
+        'pandas': ['pd'],
+        'numpy': ['np'],
+        'spark': ['apache spark', 'pyspark'],
+        'hadoop': ['apache hadoop', 'hdfs'],
+        
+        # ===================
+        # API & PROTOCOLS
+        # ===================
+        'rest api': ['restful', 'rest', 'restful api'],
+        'graphql': ['graph ql'],
+        'grpc': ['g rpc', 'google rpc'],
+        'websocket': ['websockets', 'ws'],
+        'oauth': ['oauth2', 'oauth 2.0'],
+        'jwt': ['json web token'],
+        
+        # ===================
+        # TESTING
+        # ===================
+        'unit testing': ['unit tests'],
+        'jest': ['jestjs'],
+        'pytest': ['py.test'],
+        'mocha': ['mochajs'],
+        'cypress': ['cypress.io'],
+        'selenium': ['selenium webdriver'],
+        'playwright': ['playwright testing'],
+        
+        # ===================
+        # VERSION CONTROL
+        # ===================
+        'git': ['github', 'gitlab', 'bitbucket', 'version control'],
+        
+        # ===================
+        # AGILE & PROJECT
+        # ===================
+        'agile': ['scrum', 'kanban', 'agile methodology'],
+        'jira': ['atlassian jira'],
+        
+        # ===================
+        # OTHER
+        # ===================
+        'html': ['html5'],
+        'css': ['css3', 'scss', 'sass', 'less'],
+        'tailwind': ['tailwindcss', 'tailwind css'],
+        'bootstrap': ['bootstrap css', 'bootstrap 5'],
+        'webpack': ['webpackjs'],
+        'vite': ['vitejs'],
+        'babel': ['babeljs'],
     }
     
     # Fuzzy match threshold (0-1, higher = stricter)

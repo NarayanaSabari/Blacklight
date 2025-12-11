@@ -158,6 +158,13 @@ class Candidate(BaseModel):
 
     # Relationships
     tenant = db.relationship("Tenant", back_populates="candidates")
+    
+    # Global roles (for role-based scrape queue)
+    global_roles = db.relationship(
+        "CandidateGlobalRole",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+    )
 
     # Onboarding relationships
     assignments = db.relationship(

@@ -3,8 +3,8 @@ Job Posting Model
 Stores external job listings from various platforms (GLOBAL - not tenant-specific)
 """
 from datetime import datetime
-from sqlalchemy import String, Integer, Text, DateTime, Boolean, Date, ARRAY, Index, DECIMAL
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import String, Integer, Text, DateTime, Boolean, Date, ARRAY, Index, DECIMAL, ForeignKey
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from pgvector.sqlalchemy import Vector
 from app import db
 
@@ -68,6 +68,21 @@ class JobPosting(db.Model):
     last_synced_at = db.Column(DateTime)
     import_batch_id = db.Column(String(255), index=True)
     
+    # Scraper Tracking (for observability)
+    scraped_by_key_id = db.Column(
+        Integer,
+        ForeignKey('scraper_api_keys.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )  # Which API key imported this
+    scrape_session_id = db.Column(UUID(as_uuid=True), nullable=True, index=True)  # Links to scrape_sessions.session_id
+    normalized_role_id = db.Column(
+        Integer,
+        ForeignKey('global_roles.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )  # Links to queued role that triggered this job import
+    
     # Audit Timestamps
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -75,6 +90,9 @@ class JobPosting(db.Model):
     # Relationships
     matches = db.relationship('CandidateJobMatch', back_populates='job_posting', cascade='all, delete-orphan')
     applications = db.relationship('JobApplication', back_populates='job_posting', cascade='all, delete-orphan')
+    role_job_mappings = db.relationship('RoleJobMapping', back_populates='job_posting', cascade='all, delete-orphan')
+    scraped_by_key = db.relationship('ScraperApiKey', backref='imported_jobs')
+    normalized_role = db.relationship('GlobalRole', backref='jobs')
     
     # Indexes
     __table_args__ = (

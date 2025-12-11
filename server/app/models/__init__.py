@@ -77,3 +77,10 @@ from app.models.job_posting import JobPosting
 from app.models.candidate_job_match import CandidateJobMatch
 from app.models.job_application import JobApplication
 from app.models.job_import_batch import JobImportBatch
+
+# Import scrape queue models (role-based job scraping)
+from app.models.global_role import GlobalRole
+from app.models.candidate_global_role import CandidateGlobalRole
+from app.models.scrape_session import ScrapeSession
+from app.models.scraper_api_key import ScraperApiKey
+from app.models.role_job_mapping import RoleJobMapping
