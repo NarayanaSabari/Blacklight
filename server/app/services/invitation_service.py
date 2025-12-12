@@ -1025,25 +1025,32 @@ class InvitationService:
             try:
                 from app.services.ai_role_normalization_service import AIRoleNormalizationService
                 
+                # Instantiate the service (required - normalize_candidate_role is an instance method)
+                role_normalizer = AIRoleNormalizationService()
+                
                 logger.info(f"Starting role normalization for candidate {candidate.id} with roles: {candidate.preferred_roles}")
                 
                 for raw_role in candidate.preferred_roles:
                     if raw_role and raw_role.strip():
                         try:
-                            global_role, similarity, method = AIRoleNormalizationService.normalize_candidate_role(
+                            global_role, similarity, method = role_normalizer.normalize_candidate_role(
                                 raw_role=raw_role.strip(),
                                 candidate_id=candidate.id
                             )
                             logger.info(
-                                f"Normalized role '{raw_role}' -> '{global_role.normalized_title}' "
+                                f"Normalized role '{raw_role}' -> '{global_role.name}' "
                                 f"(similarity: {similarity:.2%}, method: {method}, role_id: {global_role.id})"
                             )
                         except Exception as role_error:
+                            # Rollback to clear failed transaction state
+                            db.session.rollback()
                             logger.error(f"Failed to normalize role '{raw_role}' for candidate {candidate.id}: {role_error}")
                             # Continue with other roles even if one fails
                 
                 logger.info(f"Completed role normalization for candidate {candidate.id}")
             except Exception as e:
+                # Rollback to clear failed transaction state
+                db.session.rollback()
                 logger.error(f"Failed to normalize roles for candidate {candidate.id}: {e}")
         
         # Trigger job matching workflow via Inngest

@@ -66,28 +66,31 @@ class ScrapeQueueService:
             ).group_by(GlobalRole.queue_status)
         ).fetchall()
         
-        # Count by priority (for pending only)
+        # Count by priority (for pending and approved - roles in the scrape queue)
         priority_counts = db.session.execute(
             select(
                 GlobalRole.priority,
                 func.count(GlobalRole.id)
             ).where(
-                GlobalRole.queue_status == 'pending'
+                GlobalRole.queue_status.in_(['pending', 'approved'])
             ).group_by(GlobalRole.priority)
         ).fetchall()
         
-        # Total candidates waiting
+        # Total candidates waiting (pending and approved roles)
         total_candidates = db.session.execute(
             select(func.sum(GlobalRole.candidate_count)).where(
-                GlobalRole.queue_status == 'pending'
+                GlobalRole.queue_status.in_(['pending', 'approved'])
             )
         ).scalar() or 0
+        
+        # Queue depth = pending + approved roles
+        queue_depth = sum(row[1] for row in status_counts if row[0] in ['pending', 'approved'])
         
         return {
             "by_status": {row[0]: row[1] for row in status_counts},
             "by_priority": {row[0]: row[1] for row in priority_counts},
             "total_pending_candidates": total_candidates,
-            "queue_depth": sum(row[1] for row in status_counts if row[0] == 'pending')
+            "queue_depth": queue_depth
         }
     
     @staticmethod
@@ -103,9 +106,11 @@ class ScrapeQueueService:
         Returns:
             Dict with session_id and role details, or None if queue empty
         """
-        # Find next pending role, prioritized by priority + candidate_count
-        role = GlobalRole.query.filter_by(
-            queue_status="pending"
+        # Find next pending or approved role, prioritized by priority + candidate_count
+        # 'pending' = newly created, needs review but can be scraped
+        # 'approved' = reviewed by PM_ADMIN, ready for scraping
+        role = GlobalRole.query.filter(
+            GlobalRole.queue_status.in_(["pending", "approved"])
         ).order_by(
             case(
                 (GlobalRole.priority == "urgent", 4),

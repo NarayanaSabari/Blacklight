@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi, type DashboardStats } from "@/lib/dashboard-api";
+import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   ListTodo, 
   Wifi, 
@@ -26,10 +27,13 @@ interface StatCard {
 }
 
 export function StatsCards() {
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
+  
   const { data: stats, isLoading, error } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: dashboardApi.getStats,
     refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !authLoading && isAuthenticated, // Only fetch when auth is complete and user is authenticated
   });
 
   const cards: StatCard[] = [

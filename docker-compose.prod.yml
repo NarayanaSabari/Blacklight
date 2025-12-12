@@ -246,14 +246,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      backend:
+        condition: service_healthy
     ports:
       - "8288:8288"
       - "8289:8289"
     environment:
+      # Core Inngest keys (must match backend config)
       - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY}
       - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY}
+      # Storage backends for Inngest server
       - INNGEST_POSTGRES_URI=postgresql://${POSTGRES_USER:-blacklight}:${POSTGRES_PASSWORD:-blacklight_secure_password}@db:5432/inngest
       - INNGEST_REDIS_URI=redis://redis:6379
+      # CRITICAL: Tell Inngest where to discover app functions
+      # This is the URL Inngest server will call to sync function definitions
+      - INNGEST_DEV_SERVER_URL=http://backend:5000/api/inngest
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8288/health"]
       interval: 30s

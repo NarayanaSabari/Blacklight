@@ -39,17 +39,18 @@ class AIRoleNormalizationService:
     
     SIMILARITY_THRESHOLD = 0.85  # 85% similarity for auto-match
     
-    # AI model for role normalization
-    GEMINI_MODEL = "gemini-1.5-flash"
-    
     def __init__(self):
         """Initialize service with embedding service and Gemini API."""
         self.embedding_service = EmbeddingService()
         
+        # Use Gemini model from config (defaults to gemini-2.5-flash)
+        self.gemini_model_name = settings.gemini_model
+        
         # Configure Gemini for AI normalization
         if settings.google_api_key:
             genai.configure(api_key=settings.google_api_key)
-            self.ai_model = genai.GenerativeModel(self.GEMINI_MODEL)
+            self.ai_model = genai.GenerativeModel(self.gemini_model_name)
+            logger.info(f"AI Role Normalization using model: {self.gemini_model_name}")
         else:
             self.ai_model = None
             logger.warning("Google API key not configured - AI normalization disabled")
@@ -150,29 +151,37 @@ class AIRoleNormalizationService:
         Returns:
             Dict with "role" and "similarity" if found, None otherwise
         """
-        # Convert embedding to PostgreSQL array format
-        embedding_str = '[' + ','.join(map(str, embedding)) + ']'
-        
-        # Use pgvector cosine similarity (1 - distance gives similarity)
-        query = text("""
-            SELECT id, name, 
-                   1 - (embedding <=> :embedding::vector) as similarity
-            FROM global_roles
-            WHERE embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
-            LIMIT 1
-        """)
-        
-        result = db.session.execute(query, {"embedding": embedding_str}).fetchone()
-        
-        if result and result.similarity >= self.SIMILARITY_THRESHOLD:
-            role = db.session.get(GlobalRole, result.id)
-            return {
-                "role": role,
-                "similarity": result.similarity
-            }
-        
-        return None
+        try:
+            # Convert embedding to PostgreSQL array format
+            embedding_str = '[' + ','.join(map(str, embedding)) + ']'
+            
+            # Use pgvector cosine similarity (1 - distance gives similarity)
+            # Note: Use CAST() instead of :: to avoid SQLAlchemy parameter parsing issues
+            query = text("""
+                SELECT id, name, 
+                       1 - (embedding <=> CAST(:embedding AS vector)) as similarity
+                FROM global_roles
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <=> CAST(:embedding AS vector)
+                LIMIT 1
+            """)
+            
+            result = db.session.execute(query, {"embedding": embedding_str}).fetchone()
+            
+            if result and result.similarity >= self.SIMILARITY_THRESHOLD:
+                role = db.session.get(GlobalRole, result.id)
+                return {
+                    "role": role,
+                    "similarity": result.similarity
+                }
+            
+            return None
+        except Exception as e:
+            # If vector search fails (e.g., table doesn't exist, pgvector not installed),
+            # rollback and return None to fall back to AI normalization
+            logger.warning(f"Vector similarity search failed, falling back to AI: {e}")
+            db.session.rollback()
+            return None
     
     def _ai_normalize_role(self, raw_role: str) -> str:
         """
@@ -367,12 +376,13 @@ Return ONLY the normalized job title, nothing else."""
         embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
         
         # Find similar roles
+        # Note: Use CAST() instead of :: to avoid SQLAlchemy parameter parsing issues
         sql = text("""
             SELECT id, name, category, candidate_count,
-                   1 - (embedding <=> :embedding::vector) as similarity
+                   1 - (embedding <=> CAST(:embedding AS vector)) as similarity
             FROM global_roles
             WHERE embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :limit
         """)
         

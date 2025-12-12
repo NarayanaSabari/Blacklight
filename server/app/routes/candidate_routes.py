@@ -498,7 +498,7 @@ def approve_candidate(candidate_id: int):
                 "email": candidate.email,
                 "phone": candidate.phone,
                 "current_title": candidate.current_title,
-                "experience_years": candidate.experience_years,
+                "experience_years": candidate.total_experience_years,
                 "skills": candidate.skills or [],
                 "preferred_roles": candidate.preferred_roles or [],
             }
@@ -520,48 +520,29 @@ def approve_candidate(candidate_id: int):
         except Exception as e:
             logger.warning(f"Failed to send approval email for candidate {candidate_id}: {str(e)}")
         
-        # Normalize preferred roles FIRST, then trigger job matching
-        # Role normalization adds to global_roles table for job scraping
-        normalization_results = []
-        if candidate.preferred_roles:
-            try:
-                from app.services.ai_role_normalization_service import AIRoleNormalizationService
-                
-                logger.info(f"Starting role normalization for candidate {candidate_id} with roles: {candidate.preferred_roles}")
-                
-                for raw_role in candidate.preferred_roles:
-                    if raw_role and raw_role.strip():
-                        try:
-                            global_role, similarity, method = AIRoleNormalizationService.normalize_candidate_role(
-                                raw_role=raw_role.strip(),
-                                candidate_id=candidate.id
-                            )
-                            normalization_results.append({
-                                'raw_role': raw_role,
-                                'normalized_title': global_role.normalized_title,
-                                'similarity': similarity,
-                                'method': method,
-                                'global_role_id': global_role.id
-                            })
-                            logger.info(
-                                f"Normalized role '{raw_role}' -> '{global_role.normalized_title}' "
-                                f"(similarity: {similarity:.2%}, method: {method}, role_id: {global_role.id})"
-                            )
-                        except Exception as role_error:
-                            logger.error(f"Failed to normalize role '{raw_role}' for candidate {candidate_id}: {role_error}")
-                
-                logger.info(f"Completed role normalization: {len(normalization_results)} roles normalized for candidate {candidate_id}")
-            except Exception as norm_error:
-                # Log but don't fail - role normalization is non-critical
-                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
-        
-        # Trigger job matching workflow AFTER role normalization
+        # Trigger Inngest workflows for role normalization and job matching
         try:
             from app.inngest import inngest_client
             import inngest
             
-            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
+            # 1. Trigger role normalization workflow (async, visible in Inngest dashboard)
+            if candidate.preferred_roles:
+                logger.info(f"[INNGEST] Triggering role normalization for candidate {candidate_id}")
+                inngest_client.send_sync(
+                    inngest.Event(
+                        name="role/normalize-candidate",
+                        data={
+                            "candidate_id": candidate.id,
+                            "tenant_id": tenant_id,
+                            "preferred_roles": candidate.preferred_roles,
+                            "trigger_source": "approval"
+                        }
+                    )
+                )
+                logger.info(f"[INNGEST] ✅ Role normalization event sent for candidate {candidate_id}")
             
+            # 2. Trigger job matching workflow (async)
+            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
             inngest_client.send_sync(
                 inngest.Event(
                     name="job-match/generate-candidate",
@@ -574,14 +555,16 @@ def approve_candidate(candidate_id: int):
                 )
             )
             logger.info(f"[INNGEST] ✅ Job matching event sent for candidate {candidate_id}")
+            
         except Exception as e:
             # Log but don't fail
-            logger.warning(f"Failed to trigger job matching for candidate {candidate_id}: {str(e)}")
+            logger.warning(f"Failed to trigger Inngest workflows for candidate {candidate_id}: {str(e)}")
         
         # Return approved candidate using to_dict() to handle None values
         return jsonify(candidate.to_dict()), 200
     
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Error approving candidate {candidate_id}: {e}", exc_info=True)
         return error_response(f"Failed to approve candidate: {str(e)}", 500)
 

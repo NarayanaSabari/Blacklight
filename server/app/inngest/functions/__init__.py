@@ -26,6 +26,9 @@ from .job_matching_tasks import (
 from .resume_parsing import (
     parse_resume_workflow
 )
+from .role_normalization import (
+    normalize_candidate_roles_workflow
+)
 
 # List of all Inngest functions to be registered
 INNGEST_FUNCTIONS = [
@@ -52,6 +55,9 @@ INNGEST_FUNCTIONS = [
     
     # Resume Parsing
     parse_resume_workflow,
+    
+    # Role Normalization
+    normalize_candidate_roles_workflow,
 ]
 
 __all__ = ["INNGEST_FUNCTIONS"]

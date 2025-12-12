@@ -18,7 +18,9 @@ from app.middleware.pm_admin import require_pm_admin
 from app.middleware.portal_auth import require_portal_auth, require_tenant_admin, require_permission
 
 
-bp = Blueprint('roles', __name__, url_prefix='/api')
+# Use /api/portal prefix to avoid conflict with global_role_routes (/api/roles)
+# Portal app uses these routes for tenant-specific role management
+bp = Blueprint('roles', __name__, url_prefix='/api/portal')
 
 
 # ============================================================================

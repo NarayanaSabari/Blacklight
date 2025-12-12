@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { scraperMonitoringApi, type ScrapeSession } from "@/lib/dashboard-api";
+import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   Activity, 
   CheckCircle2, 
@@ -86,10 +87,12 @@ function SessionCard({ session }: { session: ScrapeSession }) {
 }
 
 function ActiveSessionsList() {
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
   const { data: sessions, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['active-scraper-sessions'],
     queryFn: scraperMonitoringApi.getActiveSessions,
     refetchInterval: 5000, // Refresh every 5 seconds for active sessions
+    enabled: !authLoading && isAuthenticated,
   });
 
   if (isLoading) {
@@ -156,10 +159,12 @@ function ActiveSessionsList() {
 }
 
 function RecentSessionsList() {
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
   const { data: sessions, isLoading, error } = useQuery({
     queryKey: ['recent-scraper-sessions'],
     queryFn: () => scraperMonitoringApi.getRecentSessions(20),
     refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !authLoading && isAuthenticated,
   });
 
   if (isLoading) {

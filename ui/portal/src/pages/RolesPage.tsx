@@ -55,12 +55,13 @@ interface RoleFormData {
 import { apiRequest } from '@/lib/api-client';
 
 const fetchRoles = async (_tenantId: number): Promise<Role[]> => {
-  const data = await apiRequest.get<{ roles: Role[] }>(`/api/roles?include_permissions=true&include_user_counts=true`);
+  // Using /api/portal prefix to avoid conflict with centralD's /api/roles (PM_ADMIN global roles)
+  const data = await apiRequest.get<{ roles: Role[] }>(`/api/portal/roles?include_permissions=true&include_user_counts=true`);
   return data.roles;
 };
 
 const fetchPermissions = async (): Promise<Permission[]> => {
-  const data = await apiRequest.get<{ permissions: Permission[] }>('/api/permissions');
+  const data = await apiRequest.get<{ permissions: Permission[] }>('/api/portal/permissions');
   return data.permissions;
 };
 

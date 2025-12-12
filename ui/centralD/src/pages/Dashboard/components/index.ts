@@ -7,3 +7,4 @@ export { ScraperMonitoring } from './ScraperMonitoring';
 export { RoleQueueTable } from './RoleQueueTable';
 export { ApiKeysManager } from './ApiKeysManager';
 export { JobsPreview } from './JobsPreview';
+export { GlobalRolesQueue } from './GlobalRolesQueue';

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { jobImportsApi, type JobImportBatch } from "@/lib/dashboard-api";
+import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   Briefcase, 
   CheckCircle2, 
@@ -80,10 +81,12 @@ function BatchItem({ batch }: { batch: JobImportBatch }) {
 }
 
 export function JobsPreview() {
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ['job-import-stats'],
     queryFn: jobImportsApi.getStatistics,
     refetchInterval: 60000, // Refresh every minute
+    enabled: !authLoading && isAuthenticated,
   });
 
   if (isLoading) {

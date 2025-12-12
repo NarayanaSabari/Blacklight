@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import {
   Table,
   TableBody,
@@ -200,10 +201,12 @@ export function ApiKeysManager() {
   const [newKey, setNewKey] = useState<{ name: string; rawKey: string } | null>(null);
   const [revokeKeyId, setRevokeKeyId] = useState<number | null>(null);
   const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
 
   const { data: keys, isLoading, error, refetch } = useQuery({
     queryKey: ['api-keys'],
     queryFn: apiKeysApi.getKeys,
+    enabled: !authLoading && isAuthenticated,
   });
 
   const createMutation = useMutation({

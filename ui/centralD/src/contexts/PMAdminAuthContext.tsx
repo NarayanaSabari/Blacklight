@@ -37,6 +37,14 @@ export function PMAdminAuthProvider({ children }: PMAdminAuthProviderProps) {
 
   // Check if user is authenticated by fetching current admin
   const checkAuthStatus = async () => {
+    // Only check auth status if there's a token in localStorage
+    const token = localStorage.getItem('pm_admin_token');
+    if (!token) {
+      setCurrentAdmin(null);
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       const response = await apiClient.get('/api/pm-admin/current');
       setCurrentAdmin(response.data);

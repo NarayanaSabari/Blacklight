@@ -684,15 +684,22 @@ class CandidateService:
         self,
         candidate_id: int,
         approved_by_user_id: int,
-        tenant_id: int
+        tenant_id: int,
+        changed_by: str = None
     ) -> Candidate:
         """
         Approve a candidate (HR approval after onboarding).
+        
+        This method:
+        1. Updates status to 'ready_for_assignment'
+        2. Normalizes preferred_roles to global_roles table
+        3. Triggers job matching workflow
         
         Args:
             candidate_id: Candidate ID
             approved_by_user_id: ID of user approving (must be MANAGER)
             tenant_id: Tenant ID (for access control)
+            changed_by: Identifier of who made the change
         
         Returns:
             Updated candidate
@@ -705,26 +712,76 @@ class CandidateService:
         if not candidate:
             raise ValueError(f"Candidate with ID {candidate_id} not found")
         
-        # Check if candidate is onboarded
-        if candidate.onboarding_status != 'ONBOARDED':
+        # Allow approval from multiple statuses
+        valid_statuses = ['ONBOARDED', 'pending_review']
+        if candidate.onboarding_status not in valid_statuses and candidate.status not in ['pending_review']:
             raise ValueError(
-                f"Cannot approve candidate with status '{candidate.onboarding_status}'. "
-                "Candidate must be in 'ONBOARDED' status."
+                f"Cannot approve candidate with onboarding_status='{candidate.onboarding_status}', status='{candidate.status}'. "
+                f"Candidate must be in 'ONBOARDED' or 'pending_review' status."
             )
         
         # Check if already approved or rejected
-        if candidate.approved_at:
+        if candidate.approved_at and candidate.status == 'ready_for_assignment':
             raise ValueError("Candidate has already been approved")
         
         if candidate.rejected_at:
             raise ValueError("Candidate has already been rejected. Cannot approve after rejection.")
         
+        # VALIDATION: Check preferred_roles is filled (required for job scraping)
+        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
+            raise ValueError(
+                "Preferred roles are required for approval. "
+                "Please add at least one preferred role for the candidate."
+            )
+        
         # Update approval fields
         candidate.onboarding_status = 'APPROVED'
+        candidate.status = 'ready_for_assignment'  # Critical for job matching
         candidate.approved_by_user_id = approved_by_user_id
         candidate.approved_at = datetime.utcnow()
         
         db.session.commit()
+        
+        logger.info(f"Candidate {candidate_id} approved by user {approved_by_user_id}, status: ready_for_assignment")
+        
+        # Trigger background workflows via Inngest
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            
+            # 1. Trigger role normalization workflow (async)
+            if candidate.preferred_roles:
+                logger.info(f"[INNGEST] Triggering role normalization for candidate {candidate_id}")
+                inngest_client.send_sync(
+                    inngest.Event(
+                        name="role/normalize-candidate",
+                        data={
+                            "candidate_id": candidate.id,
+                            "tenant_id": tenant_id,
+                            "preferred_roles": candidate.preferred_roles,
+                            "trigger_source": "approval"
+                        }
+                    )
+                )
+                logger.info(f"[INNGEST] ✅ Role normalization event sent for candidate {candidate_id}")
+            
+            # 2. Trigger job matching workflow (async)
+            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="job-match/generate-candidate",
+                    data={
+                        "candidate_id": candidate.id,
+                        "tenant_id": tenant_id,
+                        "trigger_source": "candidate_service_approval",
+                        "preferred_roles": candidate.preferred_roles or []
+                    }
+                )
+            )
+            logger.info(f"[INNGEST] ✅ Job matching event sent for candidate {candidate_id}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to trigger Inngest workflows for candidate {candidate_id}: {str(e)}")
         
         return candidate
     

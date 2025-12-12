@@ -41,11 +41,20 @@ apiClient.interceptors.response.use(
     const loginPath = getLoginPath();
     // Handle authentication errors
     if (error.response?.status === 401) {
-      // Clear auth state
-      localStorage.removeItem('pm_admin_token');
-      // Redirect to login if not already there
-      if (!window.location.pathname.endsWith('/login')) {
-        window.location.href = loginPath;
+      // Don't clear token or redirect for auth check endpoints
+      // These are expected to fail when not logged in
+      const requestUrl = error.config?.url || '';
+      const isAuthCheckEndpoint = requestUrl.includes('/pm-admin/current') || 
+                                   requestUrl.includes('/auth/');
+      
+      if (!isAuthCheckEndpoint) {
+        // Only clear token for non-auth-check endpoints
+        // This means a protected endpoint returned 401, so token is invalid
+        localStorage.removeItem('pm_admin_token');
+        // Redirect to login if not already there
+        if (!window.location.pathname.endsWith('/login')) {
+          window.location.href = loginPath;
+        }
       }
     }
 

@@ -37,6 +37,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { globalRolesApi, type GlobalRole } from "@/lib/dashboard-api";
+import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   Check, 
   GitMerge, 
@@ -169,11 +170,13 @@ export function RoleQueueTable() {
   const [selectedRole, setSelectedRole] = useState<GlobalRole | null>(null);
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
 
   const { data: roles, isLoading, error, refetch } = useQuery({
     queryKey: ['pending-roles'],
     queryFn: globalRolesApi.getPendingRoles,
     staleTime: 0,
+    enabled: !authLoading && isAuthenticated, // Only fetch when auth is complete and user is authenticated
   });
 
   const approveMutation = useMutation({

@@ -5,7 +5,8 @@
 import { apiClient } from '@/lib/api-client';
 import type { Role, RoleListResponse, Permission } from '@/types';
 
-const BASE_URL = '/api/roles';
+// Using /api/portal prefix to avoid conflict with centralD's /api/roles (PM_ADMIN global roles)
+const BASE_URL = '/api/portal/roles';
 
 /**
  * Get all roles for current tenant
@@ -31,7 +32,7 @@ export async function fetchRole(id: number): Promise<Role> {
  * Get all available permissions
  */
 export async function fetchPermissions(): Promise<Permission[]> {
-  const response = await apiClient.get<{ permissions: Permission[] }>('/api/permissions');
+  const response = await apiClient.get<{ permissions: Permission[] }>('/api/portal/permissions');
   return response.data.permissions;
 }
 

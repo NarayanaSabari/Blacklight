@@ -243,6 +243,22 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
         if parsed_data.get('preferred_locations'):
             candidate.preferred_locations = parsed_data['preferred_locations']
         
+        # Auto-infer preferred_roles from current_title if not already set
+        # This enables role normalization and job matching after approval
+        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
+            inferred_roles = []
+            if parsed_data.get('current_title'):
+                inferred_roles.append(parsed_data['current_title'])
+            # Also extract unique titles from work experience
+            if parsed_data.get('work_experience'):
+                for exp in parsed_data['work_experience'][:3]:  # Top 3 most recent jobs
+                    title = exp.get('title') or exp.get('job_title')
+                    if title and title not in inferred_roles:
+                        inferred_roles.append(title)
+            if inferred_roles:
+                candidate.preferred_roles = inferred_roles[:5]  # Max 5 inferred roles
+                logger.info(f"[PARSE-RESUME] Auto-inferred preferred_roles: {candidate.preferred_roles}")
+        
         # JSONB
         if parsed_data.get('education'):
             candidate.education = parsed_data['education']

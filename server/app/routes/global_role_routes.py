@@ -250,6 +250,7 @@ def approve_role(role_id: int):
     Approve a pending role for scraping.
     
     Changes queue_status from 'pending' to 'approved' (ready for scraping).
+    The scraper will pick up roles with status 'approved' or 'pending'.
     """
     try:
         role = db.session.get(GlobalRole, role_id)
@@ -260,9 +261,9 @@ def approve_role(role_id: int):
                 "message": f"Role {role_id} not found"
             }), 404
         
-        # Set status to pending (ready for scrape queue)
-        # In our system, 'pending' means approved and waiting in the scrape queue
-        role.queue_status = 'pending'
+        # Set status to 'approved' - reviewed and ready for scrape queue
+        # This removes it from the "pending review" list in the dashboard
+        role.queue_status = 'approved'
         db.session.commit()
         
         # Get job count for response
