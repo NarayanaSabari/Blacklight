@@ -1,7 +1,7 @@
 /**
  * Dashboard Page
  * Main dashboard for PM_ADMIN to monitor job matching system
- * Features 5 tabs: Overview, Scraper Monitoring, API Keys, Jobs Overview, Role Queue, Scraper Queue
+ * Features 6 tabs: Overview, Scraper Monitoring, API Keys, Jobs Overview, Role Queue, Platforms
  */
 
 import { 
@@ -10,7 +10,8 @@ import {
   RoleQueueTable, 
   ApiKeysManager,
   JobsPreview,
-  GlobalRolesQueue
+  GlobalRolesQueue,
+  PlatformManager
 } from './components';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -18,7 +19,8 @@ import {
   Activity, 
   Key, 
   Briefcase, 
-  Tags
+  Tags,
+  Globe
 } from "lucide-react";
 
 export function DashboardPage() {
@@ -58,6 +60,10 @@ export function DashboardPage() {
             <Tags className="h-4 w-4" />
             <span>Role Queue</span>
           </TabsTrigger>
+          <TabsTrigger value="platforms" className="flex items-center gap-2 px-4">
+            <Globe className="h-4 w-4" />
+            <span>Platforms</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Tab 1: Overview - Combined view */}
@@ -92,6 +98,11 @@ export function DashboardPage() {
           <RoleQueueTable />
           {/* Global Roles Queue - All roles with status */}
           <GlobalRolesQueue />
+        </TabsContent>
+
+        {/* Tab 6: Platform Manager */}
+        <TabsContent value="platforms" className="space-y-6">
+          <PlatformManager />
         </TabsContent>
       </Tabs>
     </div>

@@ -527,7 +527,7 @@ def approve_candidate(candidate_id: int):
             
             # 1. Trigger role normalization workflow (async, visible in Inngest dashboard)
             if candidate.preferred_roles:
-                logger.info(f"[INNGEST] Triggering role normalization for candidate {candidate_id}")
+                logger.info(f"[APPROVAL-ROUTE] Triggering role normalization for candidate {candidate_id}")
                 inngest_client.send_sync(
                     inngest.Event(
                         name="role/normalize-candidate",
@@ -535,11 +535,11 @@ def approve_candidate(candidate_id: int):
                             "candidate_id": candidate.id,
                             "tenant_id": tenant_id,
                             "preferred_roles": candidate.preferred_roles,
-                            "trigger_source": "approval"
+                            "trigger_source": "approval_route"
                         }
                     )
                 )
-                logger.info(f"[INNGEST] ✅ Role normalization event sent for candidate {candidate_id}")
+                logger.info(f"[APPROVAL-ROUTE] ✅ Role normalization event sent for candidate {candidate_id}")
             
             # 2. Trigger job matching workflow (async)
             logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
@@ -795,15 +795,15 @@ def update_preferred_roles(candidate_id: int):
     
     This endpoint:
     1. Updates the preferred_roles array on the candidate
-    2. Normalizes each role using AI Role Normalization (Option B)
-    3. Links candidate to GlobalRole for queue-based job matching
+    2. Triggers async workflow for AI Role Normalization
+    3. Workflow will link candidate to GlobalRole for queue-based job matching
     
     Request Body:
         {
             "preferred_roles": ["Software Engineer", "Tech Lead", "Solutions Architect"]
         }
     
-    Returns: Updated candidate with normalization results
+    Returns: Updated candidate (normalization happens in background)
     Permissions: candidates.edit
     """
     try:
@@ -823,6 +823,9 @@ def update_preferred_roles(candidate_id: int):
         if len(preferred_roles) > 10:
             return error_response("Maximum 10 preferred roles allowed", 400)
         
+        # Clean up the roles (remove empty strings)
+        preferred_roles = [r.strip() for r in preferred_roles if r and r.strip()]
+        
         # Get candidate
         from app.models.candidate import Candidate
         candidate = db.session.get(Candidate, candidate_id)
@@ -836,25 +839,39 @@ def update_preferred_roles(candidate_id: int):
         
         logger.info(f"Updated preferred roles for candidate {candidate_id}: {len(preferred_roles)} roles")
         
-        # Normalize roles and link to GlobalRole for job matching queue
-        normalization_results = []
+        # Trigger async workflow for role normalization
         if preferred_roles:
             try:
-                from app.services.ai_role_normalization_service import AIRoleNormalizationService
-                normalization_service = AIRoleNormalizationService()
-                normalization_results = normalization_service.normalize_candidate_roles(
-                    candidate_id=candidate_id,
-                    preferred_roles=preferred_roles
+                import inngest
+                from app.inngest import inngest_client
+                import hashlib
+                
+                # Create a unique key based on candidate_id and roles
+                roles_hash = hashlib.md5(','.join(sorted(preferred_roles)).encode()).hexdigest()[:8]
+                
+                logger.info(f"[PREFERRED-ROLES] Triggering normalization for candidate {candidate_id}, roles_hash={roles_hash}")
+                
+                inngest_client.send_sync(
+                    inngest.Event(
+                        name="role/normalize-candidate",
+                        data={
+                            "candidate_id": candidate_id,
+                            "tenant_id": tenant_id,
+                            "preferred_roles": preferred_roles,
+                            "trigger_source": "profile_update",
+                            "roles_hash": roles_hash
+                        }
+                    )
                 )
-                logger.info(f"Normalized {len(normalization_results)} roles for candidate {candidate_id}")
-            except Exception as norm_error:
-                # Log but don't fail the request - role normalization is non-critical
-                logger.warning(f"Role normalization failed for candidate {candidate_id}: {norm_error}")
+                logger.info(f"[PREFERRED-ROLES] ✅ Workflow triggered for candidate {candidate_id}")
+            except Exception as trigger_error:
+                # Log but don't fail - workflow trigger is non-critical
+                logger.warning(f"Failed to trigger role normalization workflow: {trigger_error}")
         
         return jsonify({
-            'message': 'Preferred roles updated successfully',
+            'message': 'Preferred roles updated successfully. Normalization in progress.',
             'candidate': candidate.to_dict(),
-            'normalization_results': normalization_results
+            'normalization_status': 'pending' if preferred_roles else 'skipped'
         }), 200
         
     except Exception as e:

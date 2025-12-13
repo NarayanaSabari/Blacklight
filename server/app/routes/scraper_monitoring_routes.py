@@ -63,10 +63,10 @@ def get_scraper_stats():
             )
         ) or 0
         
-        # Pending queue count (roles waiting to be scraped)
+        # Pending queue count (roles ready to be scraped - approved status)
         pending_queue = db.session.scalar(
             db.select(func.count(GlobalRole.id))
-            .where(GlobalRole.queue_status == 'pending')
+            .where(GlobalRole.queue_status == 'approved')
         ) or 0
         
         # Jobs imported in time period
@@ -74,6 +74,16 @@ def get_scraper_stats():
             db.select(func.count(JobPosting.id))
             .where(JobPosting.imported_at >= since)
         ) or 0
+        
+        # Jobs stats from sessions (found, imported, skipped)
+        jobs_stats = db.session.execute(
+            db.select(
+                func.coalesce(func.sum(ScrapeSession.jobs_found), 0).label('total_found'),
+                func.coalesce(func.sum(ScrapeSession.jobs_imported), 0).label('total_imported'),
+                func.coalesce(func.sum(ScrapeSession.jobs_skipped), 0).label('total_skipped')
+            )
+            .where(ScrapeSession.created_at >= since)
+        ).first()
         
         # Session statistics
         session_stats = db.session.execute(
@@ -117,6 +127,12 @@ def get_scraper_stats():
             "pending_roles_count": pending_roles_count,  # For dashboard "Roles to Review" card
             "jobs_imported_24h": jobs_imported,
             "jobs_imported_today": jobs_imported,  # Alias for frontend compatibility
+            "jobs_stats_24h": {
+                "total_found": int(jobs_stats.total_found) if jobs_stats else 0,
+                "total_imported": int(jobs_stats.total_imported) if jobs_stats else 0,
+                "total_skipped": int(jobs_stats.total_skipped) if jobs_stats else 0,
+                "success_rate": round((int(jobs_stats.total_imported) / int(jobs_stats.total_found) * 100) if jobs_stats and jobs_stats.total_found > 0 else 0, 1)
+            },
             "sessions_24h": {
                 "total": sum(sessions_by_status.values()),
                 "completed": sessions_by_status.get('completed', 0),
@@ -181,9 +197,12 @@ def get_recent_sessions():
             "started_at": s.started_at.isoformat() if s.started_at else None,
             "completed_at": s.completed_at.isoformat() if s.completed_at else None,
             "duration_seconds": s.duration_seconds,
-            "jobs_found": s.jobs_found,
-            "jobs_imported": s.jobs_imported,
-            "jobs_skipped": s.jobs_skipped,
+            "jobs_found": s.jobs_found or 0,
+            "jobs_imported": s.jobs_imported or 0,
+            "jobs_skipped": s.jobs_skipped or 0,
+            "platforms_total": s.platforms_total or 0,
+            "platforms_completed": s.platforms_completed or 0,
+            "platforms_failed": s.platforms_failed or 0,
             "error_message": s.error_message
         } for s in pagination.items]
         
@@ -214,17 +233,29 @@ def get_api_keys():
             db.select(ScraperApiKey).order_by(desc(ScraperApiKey.created_at))
         ).all()
         
+        def get_status(k):
+            if k.revoked_at:
+                return 'revoked'
+            elif not k.is_active:
+                return 'paused'
+            return 'active'
+        
         return jsonify({
             "api_keys": [{
                 "id": k.id,
                 "name": k.name,
                 "description": k.description,
+                "key_prefix": k.key_hash[:12] + "..." if k.key_hash else None,
+                "status": get_status(k),
                 "is_active": k.is_active,
                 "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
                 "total_requests": k.total_requests,
-                "total_jobs_imported": k.total_jobs_imported,
+                "total_jobs_scraped": k.total_jobs_imported or 0,
+                "total_jobs_imported": k.total_jobs_imported or 0,
+                "total_sessions_completed": k.total_requests or 0,
                 "rate_limit_per_minute": k.rate_limit_per_minute,
                 "created_at": k.created_at.isoformat(),
+                "expires_at": None,
                 "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None
             } for k in keys]
         }), 200
@@ -270,20 +301,29 @@ def create_api_key():
     
     try:
         # Create new key
-        raw_key, api_key = ScraperApiKey.create_new_key(
+        api_key, raw_key = ScraperApiKey.create_new_key(
             name=data['name'],
             description=data.get('description'),
-            created_by=getattr(g, 'pm_admin_id', None),
-            rate_limit_per_minute=data.get('rate_limit_per_minute', 60)
+            created_by_id=getattr(g, 'pm_admin_id', None),
+            rate_limit=data.get('rate_limit_per_minute', 60)
         )
         
         db.session.add(api_key)
         db.session.commit()
         
         return jsonify({
-            "id": api_key.id,
-            "name": api_key.name,
-            "api_key": raw_key,  # Only returned on create
+            "api_key": {
+                "id": api_key.id,
+                "name": api_key.name,
+                "key_prefix": api_key.key_hash[:12] + "..." if api_key.key_hash else None,
+                "status": "active",
+                "total_jobs_scraped": 0,
+                "total_sessions_completed": 0,
+                "last_used_at": None,
+                "created_at": api_key.created_at.isoformat(),
+                "expires_at": None
+            },
+            "raw_key": raw_key,
             "message": "Store this key securely - it won't be shown again"
         }), 201
         
@@ -366,6 +406,109 @@ def activate_api_key(key_id: int):
         
     except Exception as e:
         logger.error(f"Error activating API key {key_id}: {e}")
+        db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/api-keys/<int:key_id>', methods=['PATCH'])
+@require_pm_admin
+def update_api_key_status(key_id: int):
+    """
+    Update API key status (pause/activate).
+    """
+    data = request.get_json()
+    
+    if not data or 'status' not in data:
+        return jsonify({
+            "error": "Bad Request",
+            "message": "status is required"
+        }), 400
+    
+    status = data.get('status')
+    if status not in ('active', 'paused'):
+        return jsonify({
+            "error": "Bad Request",
+            "message": "status must be 'active' or 'paused'"
+        }), 400
+    
+    try:
+        api_key = db.session.get(ScraperApiKey, key_id)
+        
+        if not api_key:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"API key {key_id} not found"
+            }), 404
+        
+        if api_key.revoked_at:
+            return jsonify({
+                "error": "Bad Request",
+                "message": "Cannot update status of a revoked key"
+            }), 400
+        
+        api_key.is_active = (status == 'active')
+        db.session.commit()
+        
+        def get_status(k):
+            if k.revoked_at:
+                return 'revoked'
+            elif not k.is_active:
+                return 'paused'
+            return 'active'
+        
+        return jsonify({
+            "api_key": {
+                "id": api_key.id,
+                "name": api_key.name,
+                "key_prefix": api_key.key_hash[:12] + "..." if api_key.key_hash else None,
+                "status": get_status(api_key),
+                "total_jobs_scraped": api_key.total_jobs_imported or 0,
+                "total_sessions_completed": api_key.total_requests or 0,
+                "last_used_at": api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+                "created_at": api_key.created_at.isoformat(),
+                "expires_at": None
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating API key {key_id}: {e}")
+        db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/api-keys/<int:key_id>', methods=['DELETE'])
+@require_pm_admin
+def delete_api_key(key_id: int):
+    """
+    Revoke/delete an API key.
+    """
+    from flask import g
+    
+    try:
+        api_key = db.session.get(ScraperApiKey, key_id)
+        
+        if not api_key:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"API key {key_id} not found"
+            }), 404
+        
+        api_key.is_active = False
+        api_key.revoked_at = datetime.utcnow()
+        api_key.revoked_by = getattr(g, 'pm_admin_id', None)
+        
+        db.session.commit()
+        
+        return '', 204
+        
+    except Exception as e:
+        logger.error(f"Error deleting API key {key_id}: {e}")
         db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",

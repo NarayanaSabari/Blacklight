@@ -1,6 +1,6 @@
 /**
  * Scraper Monitoring Component
- * Shows active scraper sessions and recent activity
+ * Shows active scraper sessions and recent activity with detailed stats
  */
 
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { scraperMonitoringApi, type ScrapeSession } from "@/lib/dashboard-api";
 import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
@@ -19,69 +20,128 @@ import {
   XCircle, 
   Clock, 
   RefreshCw,
-  Loader2
+  Loader2,
+  FileText,
+  FileCheck,
+  FileX,
+  Layers,
+  Timer
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 function SessionStatusBadge({ status }: { status: ScrapeSession['status'] }) {
-  const variants: Record<ScrapeSession['status'], { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
-    in_progress: { variant: "default", label: "Running" },
-    completed: { variant: "secondary", label: "Completed" },
-    failed: { variant: "destructive", label: "Failed" },
+  const variants: Record<ScrapeSession['status'], { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className: string }> = {
+    in_progress: { variant: "default", label: "Running", className: "bg-blue-500" },
+    completed: { variant: "secondary", label: "Completed", className: "bg-green-100 text-green-800" },
+    failed: { variant: "destructive", label: "Failed", className: "" },
   };
 
-  const { variant, label } = variants[status];
-  return <Badge variant={variant}>{label}</Badge>;
+  const { variant, label, className } = variants[status];
+  return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
 function SessionCard({ session }: { session: ScrapeSession }) {
   const timeAgo = formatDistanceToNow(new Date(session.startedAt), { addSuffix: true });
+  const successRate = session.jobsFound > 0 
+    ? Math.round((session.jobsImported / session.jobsFound) * 100) 
+    : 0;
   
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-full ${
-          session.status === 'in_progress' ? 'bg-blue-100 text-blue-600' :
-          session.status === 'completed' ? 'bg-green-100 text-green-600' :
-          'bg-red-100 text-red-600'
-        }`}>
-          {session.status === 'in_progress' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : session.status === 'completed' ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : (
-            <XCircle className="h-4 w-4" />
-          )}
+    <div className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-full ${
+            session.status === 'in_progress' ? 'bg-blue-100 text-blue-600' :
+            session.status === 'completed' ? 'bg-green-100 text-green-600' :
+            'bg-red-100 text-red-600'
+          }`}>
+            {session.status === 'in_progress' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : session.status === 'completed' ? (
+              <CheckCircle2 className="h-4 w-4" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+          </div>
+          <div>
+            <p className="font-medium">{session.roleName}</p>
+            <p className="text-xs text-muted-foreground">
+              {session.scraperKeyName} • {timeAgo}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="font-medium text-sm">{session.roleName}</p>
-          <p className="text-xs text-muted-foreground">
-            {session.scraperKeyName}
-          </p>
+        <SessionStatusBadge status={session.status} />
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-4 gap-3 mb-3">
+        <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
+          <FileText className="h-4 w-4 text-blue-500" />
+          <div>
+            <p className="text-xs text-muted-foreground">Found</p>
+            <p className="font-semibold text-sm">{session.jobsFound}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
+          <FileCheck className="h-4 w-4 text-green-500" />
+          <div>
+            <p className="text-xs text-muted-foreground">Imported</p>
+            <p className="font-semibold text-sm text-green-600">{session.jobsImported}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
+          <FileX className="h-4 w-4 text-yellow-500" />
+          <div>
+            <p className="text-xs text-muted-foreground">Skipped</p>
+            <p className="font-semibold text-sm text-yellow-600">{session.jobsSkipped}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
+          <Timer className="h-4 w-4 text-purple-500" />
+          <div>
+            <p className="text-xs text-muted-foreground">Duration</p>
+            <p className="font-semibold text-sm">
+              {session.durationSeconds ? `${session.durationSeconds}s` : '-'}
+            </p>
+          </div>
         </div>
       </div>
-      <div className="text-right">
-        <div className="flex items-center gap-2">
-          <SessionStatusBadge status={session.status} />
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          {session.status === 'in_progress' ? (
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              Started {timeAgo}
+
+      {/* Progress bar for import success rate */}
+      {session.jobsFound > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-muted-foreground">Import Success Rate</span>
+            <span className={successRate >= 80 ? 'text-green-600' : successRate >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+              {successRate}%
             </span>
-          ) : (
-            <>
-              {session.jobsImported} jobs • {session.durationSeconds}s
-            </>
-          )}
-        </p>
-        {session.errorMessage && (
-          <p className="text-xs text-destructive mt-1 max-w-[200px] truncate">
-            {session.errorMessage}
-          </p>
-        )}
-      </div>
+          </div>
+          <Progress value={successRate} className="h-2" />
+        </div>
+      )}
+
+      {/* Platforms Progress */}
+      {session.platformsTotal > 0 && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Layers className="h-3 w-3" />
+          <span>
+            Platforms: {session.platformsCompleted}/{session.platformsTotal} completed
+            {session.platformsFailed > 0 && (
+              <span className="text-destructive ml-1">
+                ({session.platformsFailed} failed)
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Error message */}
+      {session.errorMessage && (
+        <div className="mt-2 p-2 rounded bg-destructive/10 border border-destructive/20">
+          <p className="text-xs text-destructive">{session.errorMessage}</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -211,6 +271,116 @@ function RecentSessionsList() {
   );
 }
 
+function StatsSummary() {
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['scraper-stats'],
+    queryFn: scraperMonitoringApi.getStats,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !authLoading && isAuthenticated,
+  });
+
+  if (isLoading || !stats) {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  const jobSuccessRate = stats.jobsStats24h.successRate;
+
+  return (
+    <div className="mb-6">
+      {/* Job Stats Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-blue-600" />
+            <span className="text-xs text-blue-600 font-medium">Jobs Found</span>
+          </div>
+          <p className="text-2xl font-bold text-blue-700 mt-1">
+            {stats.jobsStats24h.totalFound.toLocaleString()}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-green-600" />
+            <span className="text-xs text-green-600 font-medium">Imported</span>
+          </div>
+          <p className="text-2xl font-bold text-green-700 mt-1">
+            {stats.jobsStats24h.totalImported.toLocaleString()}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
+          <div className="flex items-center gap-2">
+            <FileX className="h-4 w-4 text-yellow-600" />
+            <span className="text-xs text-yellow-600 font-medium">Skipped</span>
+          </div>
+          <p className="text-2xl font-bold text-yellow-700 mt-1">
+            {stats.jobsStats24h.totalSkipped.toLocaleString()}
+          </p>
+        </div>
+        <div className={`p-3 rounded-lg border ${
+          jobSuccessRate >= 80 ? 'bg-green-50 border-green-200' : 
+          jobSuccessRate >= 50 ? 'bg-yellow-50 border-yellow-200' : 
+          'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <Activity className={`h-4 w-4 ${
+              jobSuccessRate >= 80 ? 'text-green-600' : 
+              jobSuccessRate >= 50 ? 'text-yellow-600' : 
+              'text-red-600'
+            }`} />
+            <span className={`text-xs font-medium ${
+              jobSuccessRate >= 80 ? 'text-green-600' : 
+              jobSuccessRate >= 50 ? 'text-yellow-600' : 
+              'text-red-600'
+            }`}>Success Rate</span>
+          </div>
+          <p className={`text-2xl font-bold mt-1 ${
+            jobSuccessRate >= 80 ? 'text-green-700' : 
+            jobSuccessRate >= 50 ? 'text-yellow-700' : 
+            'text-red-700'
+          }`}>
+            {jobSuccessRate}%
+          </p>
+        </div>
+      </div>
+
+      {/* Session Stats */}
+      <div className="flex flex-wrap gap-2 text-xs">
+        <Badge variant="outline" className="gap-1">
+          <Activity className="h-3 w-3" />
+          {stats.sessions24h.total} sessions today
+        </Badge>
+        <Badge variant="secondary" className="gap-1 bg-green-100 text-green-800">
+          <CheckCircle2 className="h-3 w-3" />
+          {stats.sessions24h.completed} completed
+        </Badge>
+        {stats.sessions24h.failed > 0 && (
+          <Badge variant="destructive" className="gap-1">
+            <XCircle className="h-3 w-3" />
+            {stats.sessions24h.failed} failed
+          </Badge>
+        )}
+        {stats.sessions24h.inProgress > 0 && (
+          <Badge variant="default" className="gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {stats.sessions24h.inProgress} running
+          </Badge>
+        )}
+        <Badge variant="outline" className="gap-1">
+          <Timer className="h-3 w-3" />
+          Avg: {stats.avgDurationSeconds}s
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
 export function ScraperMonitoring() {
   const [activeTab, setActiveTab] = useState("active");
 
@@ -222,10 +392,13 @@ export function ScraperMonitoring() {
           Scraper Monitoring
         </CardTitle>
         <CardDescription>
-          Real-time scraper session tracking and observability
+          Real-time scraper session tracking and job import statistics (Last 24 hours)
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Stats Summary */}
+        <StatsSummary />
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="active">

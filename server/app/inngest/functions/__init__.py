@@ -29,6 +29,10 @@ from .resume_parsing import (
 from .role_normalization import (
     normalize_candidate_roles_workflow
 )
+from .job_import import (
+    import_platform_jobs_fn,
+    complete_scrape_session_fn
+)
 
 # List of all Inngest functions to be registered
 INNGEST_FUNCTIONS = [
@@ -58,6 +62,10 @@ INNGEST_FUNCTIONS = [
     
     # Role Normalization
     normalize_candidate_roles_workflow,
+    
+    # Job Import (Multi-Platform)
+    import_platform_jobs_fn,
+    complete_scrape_session_fn,
 ]
 
 __all__ = ["INNGEST_FUNCTIONS"]

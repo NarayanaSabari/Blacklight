@@ -751,7 +751,7 @@ class CandidateService:
             
             # 1. Trigger role normalization workflow (async)
             if candidate.preferred_roles:
-                logger.info(f"[INNGEST] Triggering role normalization for candidate {candidate_id}")
+                logger.info(f"[APPROVAL-SERVICE] Triggering role normalization for candidate {candidate_id}")
                 inngest_client.send_sync(
                     inngest.Event(
                         name="role/normalize-candidate",
@@ -759,11 +759,11 @@ class CandidateService:
                             "candidate_id": candidate.id,
                             "tenant_id": tenant_id,
                             "preferred_roles": candidate.preferred_roles,
-                            "trigger_source": "approval"
+                            "trigger_source": "approval_service"
                         }
                     )
                 )
-                logger.info(f"[INNGEST] ✅ Role normalization event sent for candidate {candidate_id}")
+                logger.info(f"[APPROVAL-SERVICE] ✅ Role normalization event sent for candidate {candidate_id}")
             
             # 2. Trigger job matching workflow (async)
             logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")

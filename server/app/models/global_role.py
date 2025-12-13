@@ -45,9 +45,10 @@ class GlobalRole(db.Model):
     # Queue Management (ROLE-BASED, not candidate-based)
     candidate_count = db.Column(Integer, default=0)  # Number of candidates wanting this role
     queue_status = db.Column(String(20), default='pending', index=True)
-    # pending: waiting to be scraped
+    # pending: new role, needs PM_ADMIN approval
+    # approved: ready for scraping (stays here after scraping)
     # processing: currently being scraped by external scraper
-    # completed: recently scraped (within 24h)
+    # rejected: manually rejected by PM_ADMIN
     
     priority = db.Column(String(20), default='normal')
     # urgent: High-value roles, manual escalation
@@ -115,9 +116,10 @@ class GlobalRole(db.Model):
     def increment_candidate_count(self):
         """Increment candidate count and reset queue status if needed."""
         self.candidate_count += 1
-        # If role was completed, reset to pending for next scrape cycle
-        if self.queue_status == 'completed':
-            self.queue_status = 'pending'
+        # If role was completed/rejected, reset to approved for next scrape cycle
+        # (role was already approved once, no need to re-review)
+        if self.queue_status in ['completed', 'rejected']:
+            self.queue_status = 'approved'
     
     def decrement_candidate_count(self):
         """Decrement candidate count (when candidate is removed)."""

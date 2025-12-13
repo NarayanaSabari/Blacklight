@@ -153,6 +153,21 @@ export const candidateApi = {
   generateRoleSuggestions: async (id: number): Promise<any> => {
     return apiRequest.post<any>(`/api/candidates/${id}/suggest-roles`);
   },
+
+  /**
+   * Update preferred roles with normalization
+   * Triggers async workflow to normalize roles and add them to the global scraping queue
+   */
+  updatePreferredRoles: async (id: number, roles: string[]): Promise<{
+    message: string;
+    candidate: Candidate;
+    normalization_status: 'pending' | 'skipped';
+  }> => {
+    return apiRequest.put(`/api/candidates/${id}/preferred-roles`, {
+      preferred_roles: roles
+    });
+  },
+
   /**
    * Generate a signed/resumable URL to download a candidate's resume
    * Server returns { signed_url: string }

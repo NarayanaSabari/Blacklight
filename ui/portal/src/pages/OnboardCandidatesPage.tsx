@@ -136,10 +136,10 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
     enabled: canViewCandidates && activeTab === 'all-candidates',
   });
 
-  // Fetch ready-to-assign candidates
+  // Fetch ready-to-assign candidates (APPROVED status = approved by HR, ready to assign to recruiter)
   const { data: readyToAssignData, isLoading: isLoadingReadyToAssign } = useQuery({
     queryKey: ['ready-to-assign', page],
-    queryFn: () => onboardingApi.getPendingCandidates({ page, per_page: 20, status: 'PENDING_ASSIGNMENT' }),
+    queryFn: () => onboardingApi.getPendingCandidates({ page, per_page: 20, status: 'APPROVED' }),
     enabled: canViewCandidates && activeTab === 'ready-to-assign',
   });
 
@@ -275,8 +275,8 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
   const getActionButtons = (candidate: CandidateOnboardingInfo) => {
     const actions = [];
 
-    // Assign action (PENDING_ASSIGNMENT status)
-    if (candidate.onboarding_status === 'PENDING_ASSIGNMENT' && canOnboardCandidates) {
+    // Assign action (APPROVED status = approved by HR, ready to assign to recruiter)
+    if (candidate.onboarding_status === 'APPROVED' && canOnboardCandidates) {
       actions.push(
         <DropdownMenuItem key="assign" onClick={() => handleAssign(candidate)}>
           <UserPlus className="h-4 w-4 mr-2" />
@@ -391,8 +391,8 @@ export function OnboardCandidatesPage({ defaultTab, hideTabNavigation = false }:
                 <TabsTrigger value="ready-to-assign" className="gap-2">
                   <UserPlus className="h-3.5 w-3.5" />
                   Ready to Assign
-                  {stats.pending_assignment > 0 && (
-                    <Badge variant="secondary" className="ml-1">{stats.pending_assignment}</Badge>
+                  {stats.approved > 0 && (
+                    <Badge variant="secondary" className="ml-1">{stats.approved}</Badge>
                   )}
                 </TabsTrigger>
                 <TabsTrigger value="email-invitations" className="gap-2">

@@ -35,7 +35,8 @@ import {
   Clock,
   XCircle,
   PlayCircle,
-  ListFilter
+  ListFilter,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -120,6 +121,22 @@ export function GlobalRolesQueue() {
     },
     onError: () => {
       toast.error("Failed to update priority");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (roleId: number) => globalRolesApi.deleteRole(roleId),
+    onSuccess: () => {
+      queryClient.refetchQueries({ queryKey: ['all-roles'] });
+      queryClient.refetchQueries({ queryKey: ['dashboard-stats'] });
+      toast.success("Role deleted successfully");
+    },
+    onError: (error: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const axiosError = error as any;
+      const message = axiosError?.response?.data?.message || "Failed to delete role";
+      toast.error(message);
+      console.error("Delete role error:", error);
     },
   });
 
@@ -251,6 +268,7 @@ export function GlobalRolesQueue() {
                   <TableHead className="text-right">Jobs</TableHead>
                   <TableHead>Last Scraped</TableHead>
                   <TableHead className="w-[120px]">Set Priority</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -308,6 +326,27 @@ export function GlobalRolesQueue() {
                           <SelectItem value="low">Low</SelectItem>
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          console.log("Deleting role:", role.id, role.name);
+                          deleteMutation.mutate(role.id);
+                        }}
+                        disabled={deleteMutation.isPending || (role.candidateCount ?? 0) > 0}
+                        title={(role.candidateCount ?? 0) > 0 
+                          ? `Cannot delete: ${role.candidateCount} candidate(s) linked` 
+                          : "Delete role"}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        {deleteMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -12,7 +12,7 @@
 
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   Download,
@@ -255,10 +255,15 @@ export function CandidateDetailPage() {
   // Update Preferred Roles Mutation
   const updatePreferredRolesMutation = useMutation({
     mutationFn: (roles: string[]) =>
-      candidateApi.updateCandidate(Number(id), { preferred_roles: roles } as any),
-    onSuccess: () => {
+      candidateApi.updatePreferredRoles(Number(id), roles),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
-      toast.success('Preferred roles updated');
+      // Normalization happens in background
+      if (data.normalization_status === 'pending') {
+        toast.success('Preferred roles updated. Job queue sync in progress...');
+      } else {
+        toast.success('Preferred roles updated');
+      }
     },
     onError: (error: Error) => {
       toast.error(`Failed to update preferred roles: ${error.message}`);
@@ -293,14 +298,45 @@ export function CandidateDetailPage() {
     },
   });
 
-  // Handle preferred roles update
+  // Handle preferred roles update with debounce protection
+  const pendingRolesRef = useRef<string[] | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMutatingRef = useRef<boolean>(false);
+  
   const handleUpdatePreferredRoles = (roles: string[]) => {
     if (roles.length > 10) {
       toast.error('Maximum 10 preferred roles allowed');
       return;
     }
+    
+    // Update UI immediately
     setPreferredRoles(roles);
-    updatePreferredRolesMutation.mutate(roles);
+    
+    // Don't trigger if mutation is already in progress
+    if (isMutatingRef.current || updatePreferredRolesMutation.isPending) {
+      return;
+    }
+    
+    // Store pending roles
+    pendingRolesRef.current = roles;
+    
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    // Debounce API call - wait 500ms after last change
+    debounceTimerRef.current = setTimeout(() => {
+      if (pendingRolesRef.current && !isMutatingRef.current) {
+        isMutatingRef.current = true;
+        updatePreferredRolesMutation.mutate(pendingRolesRef.current, {
+          onSettled: () => {
+            isMutatingRef.current = false;
+            pendingRolesRef.current = null;
+          }
+        });
+      }
+    }, 500);
   };
 
 

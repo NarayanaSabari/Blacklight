@@ -311,10 +311,11 @@ def cleanup_stale_sessions_step() -> int:
     return ScrapeQueueService.cleanup_stale_sessions()
 
 
-def reset_completed_roles_step() -> int:
+def reset_completed_roles_step() -> dict:
     """Reset completed roles back to pending"""
     from app.services.scrape_queue_service import ScrapeQueueService
-    return ScrapeQueueService.reset_completed_roles()
+    result = ScrapeQueueService.reset_completed_roles()
+    return result.get("reset_count", 0)
 
 
 def update_candidate_counts_step() -> int:

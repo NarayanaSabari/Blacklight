@@ -309,10 +309,10 @@ def approve_role(role_id: int):
 @require_pm_admin
 def reject_role(role_id: int):
     """
-    Reject a role (remove from queue).
+    Reject a role - permanently delete from database.
     
-    This will soft-delete the role by setting queue_status to 'rejected'.
-    The role remains in the database for audit purposes.
+    This will hard-delete the role from the database.
+    Use this to reject pending roles that should not be scraped.
     """
     data = request.get_json() or {}
     reason = data.get('reason', 'No reason provided')
@@ -326,19 +326,90 @@ def reject_role(role_id: int):
                 "message": f"Role {role_id} not found"
             }), 404
         
-        # Set status to rejected (removed from queue)
-        role.queue_status = 'rejected'
+        role_name = role.name
+        
+        # Delete any candidate links first
+        from app.models.candidate_global_role import CandidateGlobalRole
+        db.session.query(CandidateGlobalRole).filter(
+            CandidateGlobalRole.global_role_id == role_id
+        ).delete()
+        
+        # Delete any job mappings
+        from app.models.role_job_mapping import RoleJobMapping
+        db.session.query(RoleJobMapping).filter(
+            RoleJobMapping.global_role_id == role_id
+        ).delete()
+        
+        # Hard delete the role
+        db.session.delete(role)
         db.session.commit()
         
-        logger.info(f"Role {role_id} ({role.name}) rejected by PM_ADMIN. Reason: {reason}")
+        logger.info(f"Role {role_id} ({role_name}) rejected and deleted by PM_ADMIN. Reason: {reason}")
         
         return jsonify({
-            "message": f"Role '{role.name}' rejected",
+            "message": f"Role '{role_name}' rejected and deleted",
             "reason": reason
         }), 200
         
     except Exception as e:
         logger.error(f"Error rejecting role {role_id}: {e}")
+        db.session.rollback()
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@global_role_bp.route('/<int:role_id>', methods=['DELETE'])
+@require_pm_admin
+def delete_role(role_id: int):
+    """
+    Delete a role from the database.
+    
+    Only allowed if no candidates are linked to this role (candidate_count = 0).
+    Use this to clean up approved roles that are no longer needed.
+    """
+    try:
+        role = db.session.get(GlobalRole, role_id)
+        
+        if not role:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Role {role_id} not found"
+            }), 404
+        
+        # Check if any candidates are linked
+        from app.models.candidate_global_role import CandidateGlobalRole
+        linked_candidates = db.session.query(CandidateGlobalRole).filter(
+            CandidateGlobalRole.global_role_id == role_id
+        ).count()
+        
+        if linked_candidates > 0:
+            return jsonify({
+                "error": "Cannot Delete",
+                "message": f"Role '{role.name}' has {linked_candidates} candidate(s) linked. Remove candidate links first."
+            }), 400
+        
+        role_name = role.name
+        
+        # Delete any job mappings
+        from app.models.role_job_mapping import RoleJobMapping
+        db.session.query(RoleJobMapping).filter(
+            RoleJobMapping.global_role_id == role_id
+        ).delete()
+        
+        # Hard delete the role
+        db.session.delete(role)
+        db.session.commit()
+        
+        logger.info(f"Role {role_id} ({role_name}) deleted by PM_ADMIN")
+        
+        return jsonify({
+            "message": f"Role '{role_name}' deleted successfully"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error deleting role {role_id}: {e}")
         db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
@@ -499,7 +570,7 @@ def add_to_queue(role_id: int):
                 "message": "Role is currently being processed"
             }), 400
         
-        role.queue_status = 'pending'
+        role.queue_status = 'approved'
         db.session.commit()
         
         return jsonify({
@@ -649,11 +720,15 @@ def cleanup_queue():
     
     Request body:
     {
-        "reset_completed": false  // Set to true to reset all completed roles to pending
+        "reset_completed": false,  // Set to true to reset completed roles to pending
+        "force_reset": false,      // Set to true to force reset ALL completed roles immediately
+        "hours_threshold": 24      // Optional: hours after which roles are considered stale
     }
     """
     data = request.get_json() or {}
     reset_completed = data.get('reset_completed', False)
+    force_reset = data.get('force_reset', False)
+    hours_threshold = data.get('hours_threshold', 24)
     
     try:
         # Cleanup stale sessions
@@ -661,12 +736,17 @@ def cleanup_queue():
         
         result = {
             "stale_sessions_cleaned": stale_cleaned,
-            "completed_roles_reset": 0
+            "completed_roles_reset": 0,
+            "reset_details": None
         }
         
-        if reset_completed:
-            reset_count = ScrapeQueueService.reset_completed_roles()
-            result["completed_roles_reset"] = reset_count
+        if reset_completed or force_reset:
+            reset_result = ScrapeQueueService.reset_completed_roles(
+                force=force_reset,
+                hours_threshold=hours_threshold
+            )
+            result["completed_roles_reset"] = reset_result.get("reset_count", 0)
+            result["reset_details"] = reset_result
         
         return jsonify(result), 200
         

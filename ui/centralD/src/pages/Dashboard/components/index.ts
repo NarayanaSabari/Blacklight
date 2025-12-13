@@ -8,3 +8,4 @@ export { RoleQueueTable } from './RoleQueueTable';
 export { ApiKeysManager } from './ApiKeysManager';
 export { JobsPreview } from './JobsPreview';
 export { GlobalRolesQueue } from './GlobalRolesQueue';
+export { PlatformManager } from './PlatformManager';

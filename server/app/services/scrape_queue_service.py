@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-from sqlalchemy import select, case, func, and_
+from sqlalchemy import select, case, func, and_, or_
 import inngest
 
 from app import db
@@ -23,6 +23,8 @@ from app.models.scrape_session import ScrapeSession
 from app.models.scraper_api_key import ScraperApiKey
 from app.models.job_posting import JobPosting
 from app.models.role_job_mapping import RoleJobMapping
+from app.models.scraper_platform import ScraperPlatform
+from app.models.session_platform_status import SessionPlatformStatus
 from app.services.job_import_service import JobImportService
 from app.inngest import inngest_client
 from config.settings import settings
@@ -66,25 +68,25 @@ class ScrapeQueueService:
             ).group_by(GlobalRole.queue_status)
         ).fetchall()
         
-        # Count by priority (for pending and approved - roles in the scrape queue)
+        # Count by priority (for approved roles in the scrape queue)
         priority_counts = db.session.execute(
             select(
                 GlobalRole.priority,
                 func.count(GlobalRole.id)
             ).where(
-                GlobalRole.queue_status.in_(['pending', 'approved'])
+                GlobalRole.queue_status == 'approved'
             ).group_by(GlobalRole.priority)
         ).fetchall()
         
-        # Total candidates waiting (pending and approved roles)
+        # Total candidates waiting (approved roles only)
         total_candidates = db.session.execute(
             select(func.sum(GlobalRole.candidate_count)).where(
-                GlobalRole.queue_status.in_(['pending', 'approved'])
+                GlobalRole.queue_status == 'approved'
             )
         ).scalar() or 0
         
-        # Queue depth = pending + approved roles
-        queue_depth = sum(row[1] for row in status_counts if row[0] in ['pending', 'approved'])
+        # Queue depth = approved roles
+        queue_depth = sum(row[1] for row in status_counts if row[0] == 'approved')
         
         return {
             "by_status": {row[0]: row[1] for row in status_counts},
@@ -106,11 +108,10 @@ class ScrapeQueueService:
         Returns:
             Dict with session_id and role details, or None if queue empty
         """
-        # Find next pending or approved role, prioritized by priority + candidate_count
-        # 'pending' = newly created, needs review but can be scraped
-        # 'approved' = reviewed by PM_ADMIN, ready for scraping
+        # Find approved roles ready for scraping, prioritized by priority + candidate_count
+        # 'approved' = auto-approved, ready for scraping
         role = GlobalRole.query.filter(
-            GlobalRole.queue_status.in_(["pending", "approved"])
+            GlobalRole.queue_status == "approved"
         ).order_by(
             case(
                 (GlobalRole.priority == "urgent", 4),
@@ -160,6 +161,103 @@ class ScrapeQueueService:
                 "category": role.category,
                 "candidate_count": role.candidate_count
             }
+        }
+    
+    @staticmethod
+    def get_next_role_with_platforms(scraper_key: ScraperApiKey) -> Optional[Dict[str, Any]]:
+        """
+        Get next role from queue with platform checklist.
+        Creates session and platform status entries for each active platform.
+        
+        Called by: GET /api/scraper/queue/next-role
+        
+        Args:
+            scraper_key: Authenticated scraper API key
+        
+        Returns:
+            Dict with session_id, role details, and platforms list, or None if queue empty
+        """
+        # Find approved roles ready for scraping, prioritized by priority + candidate_count
+        role = GlobalRole.query.filter(
+            GlobalRole.queue_status == "approved"
+        ).order_by(
+            case(
+                (GlobalRole.priority == "urgent", 4),
+                (GlobalRole.priority == "high", 3),
+                (GlobalRole.priority == "normal", 2),
+                (GlobalRole.priority == "low", 1),
+            ).desc(),
+            GlobalRole.candidate_count.desc()
+        ).first()
+        
+        if not role:
+            logger.info("Scrape queue is empty - no approved roles")
+            return None
+        
+        # Get active platforms
+        active_platforms = ScraperPlatform.get_active_platforms()
+        
+        if not active_platforms:
+            logger.warning("No active platforms configured")
+            return None
+        
+        # Mark role as processing
+        role.queue_status = "processing"
+        role.updated_at = datetime.utcnow()
+        
+        # Create session for tracking
+        session = ScrapeSession(
+            session_id=uuid.uuid4(),
+            scraper_key_id=scraper_key.id,
+            scraper_name=scraper_key.name,
+            global_role_id=role.id,
+            role_name=role.name,
+            started_at=datetime.utcnow(),
+            status="in_progress",
+            platforms_total=len(active_platforms),
+            platforms_completed=0,
+            platforms_failed=0
+        )
+        db.session.add(session)
+        db.session.flush()  # Get session_id
+        
+        # Create platform status entries for each active platform
+        platform_list = []
+        for platform in active_platforms:
+            platform_status = SessionPlatformStatus(
+                session_id=session.session_id,
+                platform_id=platform.id,
+                platform_name=platform.name,
+                status="pending"
+            )
+            db.session.add(platform_status)
+            
+            platform_list.append({
+                "id": platform.id,
+                "name": platform.name,
+                "display_name": platform.display_name
+            })
+        
+        # Record API key usage
+        scraper_key.record_usage()
+        
+        db.session.commit()
+        
+        logger.info(
+            f"Assigned role '{role.name}' (id={role.id}) to scraper '{scraper_key.name}' "
+            f"(session={session.session_id}) with {len(platform_list)} platforms"
+        )
+        
+        return {
+            "session_id": str(session.session_id),
+            "role": {
+                "id": role.id,
+                "name": role.name,
+                "aliases": role.aliases or [],
+                "category": role.category,
+                "candidate_count": role.candidate_count
+            },
+            "platforms": platform_list
         }
     
     @staticmethod
@@ -374,10 +472,10 @@ class ScrapeQueueService:
         
         session.fail(error_message)
         
-        # Reset role to pending so it can be retried
+        # Reset role to approved so it can be retried
         role = db.session.get(GlobalRole, session.global_role_id)
         if role:
-            role.queue_status = "pending"
+            role.queue_status = "approved"
         
         db.session.commit()
         
@@ -414,10 +512,10 @@ class ScrapeQueueService:
         for session in stale_sessions:
             session.timeout()
             
-            # Reset role to pending
+            # Reset role to approved
             role = db.session.get(GlobalRole, session.global_role_id)
             if role and role.queue_status == "processing":
-                role.queue_status = "pending"
+                role.queue_status = "approved"
             
             timed_out += 1
             logger.warning(f"Session {session.session_id} timed out")
@@ -427,32 +525,58 @@ class ScrapeQueueService:
         return {"timed_out": timed_out}
     
     @staticmethod
-    def reset_completed_roles() -> Dict[str, int]:
+    def reset_completed_roles(force: bool = False, hours_threshold: int = 24) -> Dict[str, int]:
         """
         Reset completed roles back to pending for fresh scraping.
         
-        Called by daily scheduled task.
-        Roles that haven't been scraped in 24+ hours go back to queue.
+        Called by daily scheduled task or manual cleanup endpoint.
+        
+        Args:
+            force: If True, reset ALL completed roles regardless of time/candidate count
+            hours_threshold: Number of hours after which roles are considered stale (default 24)
         
         Returns:
             Dict with count of reset roles
         """
-        stale_threshold = datetime.utcnow() - timedelta(hours=24)
+        if force:
+            # Force reset all completed roles back to pending
+            reset_count = GlobalRole.query.filter(
+                GlobalRole.queue_status == "completed"
+            ).update({"queue_status": "pending"})
+            
+            db.session.commit()
+            logger.info(f"Force reset {reset_count} completed roles back to pending")
+            return {"reset_count": reset_count, "mode": "force"}
         
-        # Find completed roles with stale data
+        stale_threshold = datetime.utcnow() - timedelta(hours=hours_threshold)
+        
+        # Find completed roles with stale data OR no last_scraped_at time
+        # Roles are reset if:
+        # 1. They have candidates and haven't been scraped in X hours, OR
+        # 2. They have no last_scraped_at timestamp (never scraped or no record)
         reset_count = GlobalRole.query.filter(
             and_(
                 GlobalRole.queue_status == "completed",
-                GlobalRole.candidate_count > 0,  # Only roles with active candidates
-                GlobalRole.last_scraped_at < stale_threshold
+                or_(
+                    # Roles with candidates that are stale
+                    and_(
+                        GlobalRole.candidate_count > 0,
+                        or_(
+                            GlobalRole.last_scraped_at < stale_threshold,
+                            GlobalRole.last_scraped_at.is_(None)
+                        )
+                    ),
+                    # Roles with no candidates but marked as completed (shouldn't stay completed)
+                    GlobalRole.candidate_count == 0
+                )
             )
         ).update({"queue_status": "pending"})
         
         db.session.commit()
         
-        logger.info(f"Reset {reset_count} completed roles back to pending")
+        logger.info(f"Reset {reset_count} completed roles back to pending (threshold: {hours_threshold}h)")
         
-        return {"reset_count": reset_count}
+        return {"reset_count": reset_count, "mode": "threshold", "hours": hours_threshold}
     
     @staticmethod
     def get_active_sessions() -> List[Dict[str, Any]]:
@@ -535,7 +659,7 @@ class ScrapeQueueService:
         if not role:
             raise ValueError(f"Role not found: {role_id}")
         
-        role.queue_status = "pending"
+        role.queue_status = "approved"
         role.priority = "high"  # Bump priority when manually queued
         db.session.commit()
         

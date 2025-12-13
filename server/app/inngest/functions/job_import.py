@@ -1,24 +1,22 @@
 """
-Job Import Inngest Workflow
+Job Import Inngest Workflows
 
-Handles asynchronous job importing from external scrapers.
+Handles asynchronous job importing from external scrapers with multi-platform support.
 
-Triggered by: jobs/scraper.import event
-Steps:
-1. Validate session and scraper key
-2. Import jobs with deduplication
-3. Update session and role status
-4. Trigger job matching workflow
+Workflows:
+1. jobs/scraper.platform-import - Import jobs for a single platform
+2. jobs/scraper.complete - Finalize session and trigger matching
 
 Benefits:
 - Non-blocking API response
+- Per-platform import tracking
 - Retryable with exponential backoff
 - Better error handling and observability
 - Can handle large job batches without timeout
 """
 import logging
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from uuid import UUID
 import inngest
 
@@ -28,66 +26,70 @@ from app.models.scraper_api_key import ScraperApiKey
 from app.models.global_role import GlobalRole
 from app.models.job_posting import JobPosting
 from app.models.role_job_mapping import RoleJobMapping
+from app.models.session_platform_status import SessionPlatformStatus
+from app.models.scraper_platform import ScraperPlatform
 from app.inngest import inngest_client
 
 logger = logging.getLogger(__name__)
 
 
+# ============================================================================
+# WORKFLOW 1: Platform Import (per-platform job import)
+# ============================================================================
+
 @inngest_client.create_function(
-    fn_id="job-import-scraper",
-    trigger=inngest.TriggerEvent(event="jobs/scraper.import"),
-    name="Import Scraped Jobs",
+    fn_id="job-import-platform",
+    trigger=inngest.TriggerEvent(event="jobs/scraper.platform-import"),
+    name="Import Jobs for Platform",
     retries=3
 )
-async def import_scraped_jobs_fn(ctx: inngest.Context, step):
+async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
     """
-    Import jobs from scraper submission.
+    Import jobs for a single platform within a session.
     
     Event data:
     {
         "session_id": "uuid",
         "scraper_key_id": 123,
-        "jobs": [...],  # List of job objects
+        "platform_name": "linkedin",
+        "platform_status_id": 456,
+        "jobs": [...],
         "jobs_count": 47
     }
-    
-    Steps:
-    1. Validate session
-    2. Import jobs with deduplication
-    3. Update session completion
-    4. Update role status
-    5. Trigger job matching
     """
     event_data = ctx.event.data
     session_id = event_data["session_id"]
     scraper_key_id = event_data["scraper_key_id"]
+    platform_name = event_data["platform_name"]
+    platform_status_id = event_data["platform_status_id"]
     jobs_data = event_data["jobs"]
     
     logger.info(
-        f"[JOB-IMPORT] Starting import for session {session_id} "
-        f"with {len(jobs_data)} jobs"
+        f"[JOB-IMPORT] Starting import for platform '{platform_name}' "
+        f"in session {session_id} with {len(jobs_data)} jobs"
     )
     
-    # Step 1: Validate session
-    session_data = await step.run(
+    # Step 1: Validate session and platform status
+    session_data = await ctx.step.run(
         "validate-session",
-        lambda: validate_session(session_id, scraper_key_id)
+        lambda: validate_session_for_platform(session_id, scraper_key_id, platform_status_id)
     )
     
     if not session_data:
-        logger.error(f"[JOB-IMPORT] ❌ Session {session_id} not found or invalid")
-        return {"status": "error", "message": "Invalid session"}
+        logger.error(f"[JOB-IMPORT] ❌ Session {session_id} or platform status not found")
+        return {"status": "error", "message": "Invalid session or platform"}
     
-    # Step 2: Import jobs
-    import_result = await step.run(
+    # Step 2: Import jobs for this platform
+    import_result = await ctx.step.run(
         "import-jobs",
-        lambda: import_jobs_batch(jobs_data, session_data)
+        lambda: import_jobs_batch_for_platform(jobs_data, session_data, platform_name)
     )
     
-    # Step 3: Update session
-    await step.run(
-        "complete-session",
-        lambda: complete_session(
+    # Step 3: Update platform status to completed
+    await ctx.step.run(
+        "complete-platform",
+        lambda: complete_platform_status(
+            platform_status_id,
             session_id,
             scraper_key_id,
             len(jobs_data),
@@ -96,40 +98,101 @@ async def import_scraped_jobs_fn(ctx: inngest.Context, step):
         )
     )
     
-    # Step 4: Update role status
-    await step.run(
-        "update-role-status",
-        lambda: update_role_status(session_data["global_role_id"], import_result["imported"])
-    )
-    
-    # Step 5: Trigger job matching if jobs imported
-    if import_result["job_ids"]:
-        await step.run(
-            "trigger-job-matching",
-            lambda: trigger_job_matching(
-                job_ids=import_result["job_ids"],
-                global_role_id=session_data["global_role_id"],
-                role_name=session_data["role_name"],
-                session_id=session_id
-            )
-        )
-    
     logger.info(
-        f"[JOB-IMPORT] ✅ Completed: {import_result['imported']} imported, "
-        f"{import_result['skipped']} skipped"
+        f"[JOB-IMPORT] ✅ Platform '{platform_name}' completed: "
+        f"{import_result['imported']} imported, {import_result['skipped']} skipped"
     )
     
     return {
         "status": "success",
-        "session_id": session_id,
+        "platform": platform_name,
         "jobs_imported": import_result["imported"],
         "jobs_skipped": import_result["skipped"],
         "job_ids": import_result["job_ids"]
     }
 
 
-def validate_session(session_id: str, scraper_key_id: int) -> Dict[str, Any]:
-    """Validate session exists and is in correct state."""
+# ============================================================================
+# WORKFLOW 2: Session Complete (finalize and trigger matching)
+# ============================================================================
+
+@inngest_client.create_function(
+    fn_id="job-import-complete",
+    trigger=inngest.TriggerEvent(event="jobs/scraper.complete"),
+    name="Complete Scrape Session",
+    retries=3
+)
+async def complete_scrape_session_fn(ctx: inngest.Context) -> dict:
+    """
+    Finalize a scrape session and trigger job matching.
+    
+    Event data:
+    {
+        "session_id": "uuid",
+        "scraper_key_id": 123
+    }
+    """
+    event_data = ctx.event.data
+    session_id = event_data["session_id"]
+    scraper_key_id = event_data["scraper_key_id"]
+    
+    logger.info(f"[JOB-IMPORT] Completing session {session_id}")
+    
+    # Step 1: Aggregate platform results
+    session_stats = await ctx.step.run(
+        "aggregate-stats",
+        lambda: aggregate_session_stats(session_id)
+    )
+    
+    # Step 2: Update session to completed
+    await ctx.step.run(
+        "finalize-session",
+        lambda: finalize_session(session_id, scraper_key_id, session_stats)
+    )
+    
+    # Step 3: Update role status
+    await ctx.step.run(
+        "update-role-status",
+        lambda: update_role_status(session_stats["global_role_id"], session_stats["total_imported"])
+    )
+    
+    # Step 4: Trigger job matching if jobs were imported
+    if session_stats["total_imported"] > 0:
+        await ctx.step.run(
+            "trigger-job-matching",
+            lambda: trigger_job_matching(
+                job_ids=session_stats["job_ids"],
+                global_role_id=session_stats["global_role_id"],
+                role_name=session_stats["role_name"],
+                session_id=session_id
+            )
+        )
+    
+    logger.info(
+        f"[JOB-IMPORT] ✅ Session {session_id} completed: "
+        f"{session_stats['total_imported']} jobs imported from "
+        f"{session_stats['successful_platforms']}/{session_stats['total_platforms']} platforms"
+    )
+    
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "total_imported": session_stats["total_imported"],
+        "platforms_successful": session_stats["successful_platforms"],
+        "platforms_failed": session_stats["failed_platforms"]
+    }
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Session Validation
+# ============================================================================
+
+def validate_session_for_platform(
+    session_id: str,
+    scraper_key_id: int,
+    platform_status_id: int
+) -> Optional[Dict[str, Any]]:
+    """Validate session and platform status exist and are in correct state."""
     session = ScrapeSession.query.filter_by(
         session_id=UUID(session_id),
         scraper_key_id=scraper_key_id
@@ -139,8 +202,14 @@ def validate_session(session_id: str, scraper_key_id: int) -> Dict[str, Any]:
         logger.error(f"Session {session_id} not found")
         return None
     
-    if session.status != "in_progress":
+    if session.status not in ("in_progress", "pending"):
         logger.error(f"Session {session_id} has invalid status: {session.status}")
+        return None
+    
+    # Validate platform status exists
+    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    if not platform_status:
+        logger.error(f"Platform status {platform_status_id} not found")
         return None
     
     # Return serializable dict (not ORM object)
@@ -148,16 +217,22 @@ def validate_session(session_id: str, scraper_key_id: int) -> Dict[str, Any]:
         "session_id": str(session.session_id),
         "scraper_key_id": session.scraper_key_id,
         "global_role_id": session.global_role_id,
-        "role_name": session.role_name
+        "role_name": session.role_name,
+        "platform_status_id": platform_status_id
     }
 
 
-def import_jobs_batch(
+# ============================================================================
+# HELPER FUNCTIONS - Job Import
+# ============================================================================
+
+def import_jobs_batch_for_platform(
     jobs_data: List[Dict],
-    session_data: Dict[str, Any]
+    session_data: Dict[str, Any],
+    platform_name: str
 ) -> Dict[str, Any]:
     """
-    Import batch of jobs with deduplication.
+    Import batch of jobs for a specific platform with deduplication.
     
     Your job schema fields:
     - platform: "linkedin" | "indeed" | "monster" | "dice" | "glassdoor" | "techfetch"
@@ -189,24 +264,36 @@ def import_jobs_batch(
     skipped_count = 0
     job_ids = []
     
-    logger.info(f"[JOB-IMPORT] Processing {len(jobs_data)} jobs for role '{session_data['role_name']}'")
+    logger.info(
+        f"[JOB-IMPORT] Processing {len(jobs_data)} jobs from {platform_name} "
+        f"for role '{session_data['role_name']}'"
+    )
     
     for idx, job_data in enumerate(jobs_data):
         try:
             # Map your schema field names to our internal names
-            external_id = job_data.get("jobId") or job_data.get("job_id") or job_data.get("external_job_id")
-            platform = job_data.get("platform", "scraper")
+            external_id = job_data.get("jobId") or job_data.get("job_id") or job_data.get("external_job_id") or job_data.get("external_id")
+            platform = job_data.get("platform", platform_name)
             
             # Validate required fields
             title = job_data.get("title")
             company = job_data.get("company")
+            location = job_data.get("location", "")
+            description = job_data.get("description", "")
             
             if not title or not company:
                 logger.warning(f"[JOB-IMPORT] Skipping job {idx+1}: Missing title or company")
                 skipped_count += 1
                 continue
             
-            # Check for duplicate by platform + external_job_id
+            # =================================================================
+            # DEDUPLICATION STRATEGY (in order of priority):
+            # 1. Same platform + external_job_id = exact duplicate
+            # 2. Same title + company + location = likely same job
+            # 3. Same title + company + similar description = same job different platform
+            # =================================================================
+            
+            # Check 1: Exact duplicate by platform + external_job_id
             if external_id:
                 existing = JobPosting.query.filter_by(
                     platform=platform,
@@ -214,7 +301,41 @@ def import_jobs_batch(
                 ).first()
                 
                 if existing:
-                    logger.debug(f"[JOB-IMPORT] Skipping duplicate: {external_id}")
+                    logger.debug(f"[JOB-IMPORT] Skipping duplicate (same platform+id): {external_id}")
+                    skipped_count += 1
+                    continue
+            
+            # Check 2: Duplicate by title + company + location (case-insensitive)
+            # This catches the same job posted on different platforms
+            existing_by_content = JobPosting.query.filter(
+                db.func.lower(JobPosting.title) == title.lower().strip(),
+                db.func.lower(JobPosting.company) == company.lower().strip(),
+                db.func.lower(JobPosting.location) == location.lower().strip() if location else True
+            ).first()
+            
+            if existing_by_content:
+                logger.debug(
+                    f"[JOB-IMPORT] Skipping duplicate (same title+company+location): "
+                    f"'{title}' at '{company}'"
+                )
+                skipped_count += 1
+                continue
+            
+            # Check 3: Similar job by title + company (even if location differs)
+            # Use first 100 chars of description for comparison
+            if description:
+                desc_prefix = description[:100].lower().strip()
+                existing_similar = JobPosting.query.filter(
+                    db.func.lower(JobPosting.title) == title.lower().strip(),
+                    db.func.lower(JobPosting.company) == company.lower().strip(),
+                    db.func.left(db.func.lower(JobPosting.description), 100) == desc_prefix
+                ).first()
+                
+                if existing_similar:
+                    logger.debug(
+                        f"[JOB-IMPORT] Skipping duplicate (same title+company+description): "
+                        f"'{title}' at '{company}'"
+                    )
                     skipped_count += 1
                     continue
             
@@ -224,7 +345,6 @@ def import_jobs_batch(
             
             # Parse experience
             experience_str = job_data.get("experience", "")
-            description = job_data.get("description", "")
             exp_min, exp_max = job_import_service.parse_experience(experience_str, description)
             
             # Parse and normalize skills
@@ -253,7 +373,7 @@ def import_jobs_batch(
             
             # Create job posting
             job = JobPosting(
-                external_job_id=str(external_id) if external_id else f"scraper-{session_data['session_id']}-{idx}",
+                external_job_id=str(external_id) if external_id else f"scraper-{session_data['session_id']}-{platform_name}-{idx}",
                 platform=platform,
                 title=title,
                 company=company,
@@ -307,7 +427,7 @@ def import_jobs_batch(
     db.session.commit()
     
     logger.info(
-        f"[JOB-IMPORT] Batch complete: {imported_count} imported, "
+        f"[JOB-IMPORT] {platform_name} batch complete: {imported_count} imported, "
         f"{skipped_count} skipped"
     )
     
@@ -318,54 +438,213 @@ def import_jobs_batch(
     }
 
 
-def complete_session(
+# ============================================================================
+# HELPER FUNCTIONS - Platform Status
+# ============================================================================
+
+def complete_platform_status(
+    platform_status_id: int,
     session_id: str,
     scraper_key_id: int,
     jobs_found: int,
     jobs_imported: int,
     jobs_skipped: int
 ) -> None:
-    """Update session to completed status."""
+    """Update platform status to completed."""
+    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    
+    if platform_status:
+        platform_status.status = "completed"
+        platform_status.jobs_found = jobs_found
+        platform_status.jobs_imported = jobs_imported
+        platform_status.jobs_skipped = jobs_skipped
+        platform_status.completed_at = datetime.utcnow()
+        
+        # Update session progress counters
+        session = ScrapeSession.query.filter_by(
+            session_id=UUID(session_id),
+            scraper_key_id=scraper_key_id
+        ).first()
+        
+        if session:
+            session.platforms_completed = (session.platforms_completed or 0) + 1
+            session.jobs_found = (session.jobs_found or 0) + jobs_found
+            session.jobs_imported = (session.jobs_imported or 0) + jobs_imported
+            session.jobs_skipped = (session.jobs_skipped or 0) + jobs_skipped
+        
+        db.session.commit()
+        
+        logger.info(
+            f"[JOB-IMPORT] Platform status {platform_status_id} completed: "
+            f"{jobs_imported} imported, {jobs_skipped} skipped"
+        )
+
+
+def mark_platform_failed(
+    platform_status_id: int,
+    session_id: str,
+    scraper_key_id: int,
+    error_message: str
+) -> None:
+    """Mark platform as failed with error message."""
+    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    
+    if platform_status:
+        platform_status.status = "failed"
+        platform_status.error_message = error_message
+        platform_status.completed_at = datetime.utcnow()
+        
+        # Update session failed counter
+        session = ScrapeSession.query.filter_by(
+            session_id=UUID(session_id),
+            scraper_key_id=scraper_key_id
+        ).first()
+        
+        if session:
+            session.platforms_failed = (session.platforms_failed or 0) + 1
+        
+        db.session.commit()
+        
+        logger.warning(
+            f"[JOB-IMPORT] Platform status {platform_status_id} failed: {error_message}"
+        )
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Session Aggregation
+# ============================================================================
+
+def aggregate_session_stats(session_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Aggregate statistics from all platform statuses for a session.
+    
+    Returns dict with:
+    - total_imported: total jobs imported across all platforms
+    - total_skipped: total jobs skipped
+    - successful_platforms: count of platforms that completed
+    - failed_platforms: count of platforms that failed
+    - total_platforms: total platforms in session
+    - job_ids: list of all imported job IDs
+    - global_role_id: the role ID for this session
+    - role_name: the role name
+    """
+    session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
+    
+    if not session:
+        logger.error(f"Session {session_id} not found for aggregation")
+        return None
+    
+    # Get all platform statuses for this session
+    platform_statuses = SessionPlatformStatus.query.filter_by(
+        session_id=session.session_id
+    ).all()
+    
+    total_imported = 0
+    total_skipped = 0
+    successful_platforms = 0
+    failed_platforms = 0
+    
+    for ps in platform_statuses:
+        if ps.status == "completed":
+            successful_platforms += 1
+            total_imported += ps.jobs_imported or 0
+            total_skipped += ps.jobs_skipped or 0
+        elif ps.status == "failed":
+            failed_platforms += 1
+        # Note: "skipped" status means platform was skipped by scraper
+    
+    # Get job IDs for matching
+    jobs = JobPosting.query.filter_by(
+        scrape_session_id=session.session_id
+    ).with_entities(JobPosting.id).all()
+    job_ids = [j.id for j in jobs]
+    
+    return {
+        "total_imported": total_imported,
+        "total_skipped": total_skipped,
+        "successful_platforms": successful_platforms,
+        "failed_platforms": failed_platforms,
+        "total_platforms": len(platform_statuses),
+        "job_ids": job_ids,
+        "global_role_id": session.global_role_id,
+        "role_name": session.role_name
+    }
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Session Finalization
+# ============================================================================
+
+def finalize_session(
+    session_id: str,
+    scraper_key_id: int,
+    session_stats: Dict[str, Any]
+) -> None:
+    """Finalize session with aggregated stats."""
     session = ScrapeSession.query.filter_by(
         session_id=UUID(session_id),
         scraper_key_id=scraper_key_id
     ).first()
     
-    if session:
-        session.complete(
-            jobs_found=jobs_found,
-            jobs_imported=jobs_imported,
-            jobs_skipped=jobs_skipped
+    if not session:
+        logger.error(f"Session {session_id} not found for finalization")
+        return
+    
+    # Update session with final stats
+    session.status = "completed"
+    session.completed_at = datetime.utcnow()
+    session.jobs_found = session_stats["total_imported"] + session_stats["total_skipped"]
+    session.jobs_imported = session_stats["total_imported"]
+    session.jobs_skipped = session_stats["total_skipped"]
+    session.platforms_completed = session_stats["successful_platforms"]
+    session.platforms_failed = session_stats["failed_platforms"]
+    
+    # Add notes if any platforms failed
+    if session_stats["failed_platforms"] > 0:
+        session.session_notes = (
+            f"Completed with {session_stats['failed_platforms']} platform failure(s). "
+            f"Successfully imported from {session_stats['successful_platforms']} platforms."
         )
-        
-        # Update scraper key usage
-        scraper_key = db.session.get(ScraperApiKey, scraper_key_id)
-        if scraper_key:
-            scraper_key.record_usage(jobs_imported=jobs_imported)
-        
-        db.session.commit()
-        
-        logger.info(
-            f"[JOB-IMPORT] Session {session_id} completed: "
-            f"{jobs_imported} imported, {jobs_skipped} skipped"
-        )
+    
+    # Update scraper key usage
+    scraper_key = db.session.get(ScraperApiKey, scraper_key_id)
+    if scraper_key:
+        scraper_key.record_usage(jobs_imported=session_stats["total_imported"])
+    
+    db.session.commit()
+    
+    logger.info(
+        f"[JOB-IMPORT] Session {session_id} finalized: "
+        f"{session_stats['total_imported']} jobs from "
+        f"{session_stats['successful_platforms']}/{session_stats['total_platforms']} platforms"
+    )
 
 
 def update_role_status(global_role_id: int, jobs_imported: int) -> None:
-    """Update role status to completed and update job count."""
+    """
+    Update role stats and keep it in the approved queue for continuous rotation.
+    
+    This ensures the scraping queue rotates continuously - once a role is scraped,
+    it stays approved and ready for the next scrape cycle.
+    """
     role = db.session.get(GlobalRole, global_role_id)
     
     if role:
-        role.queue_status = "completed"
+        # Keep the role in approved status for next rotation
+        role.queue_status = "approved"
         role.last_scraped_at = datetime.utcnow()
         role.total_jobs_scraped = (role.total_jobs_scraped or 0) + jobs_imported
         db.session.commit()
         
         logger.info(
-            f"[JOB-IMPORT] Updated role '{role.name}' status to completed, "
-            f"total jobs: {role.total_jobs_scraped}"
+            f"[JOB-IMPORT] Role '{role.name}' scraped successfully. "
+            f"Stays approved for next cycle. Total jobs: {role.total_jobs_scraped}"
         )
 
+
+# ============================================================================
+# HELPER FUNCTIONS - Job Matching Trigger
+# ============================================================================
 
 def trigger_job_matching(
     job_ids: List[int],

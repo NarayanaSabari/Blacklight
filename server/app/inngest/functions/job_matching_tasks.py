@@ -200,7 +200,7 @@ async def generate_candidate_matches_workflow(ctx: inngest.Context):
     retries=3,
     name="Match New Jobs to Candidates"
 )
-async def match_jobs_to_candidates_workflow(ctx, step):
+async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
     """
     Match newly imported jobs to candidates with matching preferred roles.
     
@@ -258,7 +258,7 @@ async def match_jobs_to_candidates_workflow(ctx, step):
             "embeddings_generated": embeddings_generated
         }
     
-    embedding_result = await step.run("ensure-job-embeddings", ensure_job_embeddings)
+    embedding_result = await ctx.step.run("ensure-job-embeddings", ensure_job_embeddings)
     
     # Step 2: Find candidates with matching preferred roles
     def find_matching_candidates():
@@ -286,7 +286,7 @@ async def match_jobs_to_candidates_workflow(ctx, step):
         
         return candidates_info
     
-    matching_candidates = await step.run("find-matching-candidates", find_matching_candidates)
+    matching_candidates = await ctx.step.run("find-matching-candidates", find_matching_candidates)
     
     if not matching_candidates:
         logger.info(f"[INNGEST] No candidates found for role '{role_name}'")
@@ -359,7 +359,7 @@ async def match_jobs_to_candidates_workflow(ctx, step):
         db.session.commit()
         return total_matches
     
-    matches_created = await step.run("generate-matches", generate_matches_for_candidates)
+    matches_created = await ctx.step.run("generate-matches", generate_matches_for_candidates)
     
     logger.info(
         f"[INNGEST] Job import matching complete: "

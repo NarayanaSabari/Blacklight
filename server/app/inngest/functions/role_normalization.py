@@ -19,14 +19,15 @@ logger = logging.getLogger(__name__)
     name="Normalize Candidate Roles",
     retries=3
 )
-async def normalize_candidate_roles_workflow(ctx: inngest.Context):
+async def normalize_candidate_roles_workflow(ctx: inngest.Context) -> dict:
     """
     Async workflow to normalize candidate preferred roles.
     
-    Triggered after candidate approval to:
-    1. Normalize each preferred role to canonical form
-    2. Create/update entries in global_roles table
-    3. Link candidate to global roles for job matching
+    Triggered after candidate approval or profile update to:
+    1. Sync removed roles (unlink candidate from roles they no longer have)
+    2. Normalize each preferred role to canonical form
+    3. Create/update entries in global_roles table
+    4. Link candidate to global roles for job matching
     
     Event data:
     {
@@ -47,20 +48,10 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context):
         f"(tenant {tenant_id}, trigger: {trigger_source}, roles: {preferred_roles})"
     )
     
-    if not preferred_roles:
-        logger.warning(f"[ROLE-NORM] No preferred roles for candidate {candidate_id}")
-        return {
-            "status": "skipped",
-            "reason": "No preferred roles",
-            "candidate_id": candidate_id
-        }
-    
     # Step 1: Validate candidate exists
     candidate_valid = await ctx.step.run(
         "validate-candidate",
-        validate_candidate_step,
-        candidate_id,
-        tenant_id
+        lambda: validate_candidate_step(candidate_id, tenant_id)
     )
     
     if not candidate_valid:
@@ -71,24 +62,42 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context):
             "candidate_id": candidate_id
         }
     
-    # Step 2: Normalize each role
+    # Step 2: Sync removed roles - unlink candidate from roles they no longer have
+    sync_result = await ctx.step.run(
+        "sync-removed-roles",
+        lambda: sync_removed_roles_step(candidate_id, preferred_roles)
+    )
+    
+    # Step 3: If no roles, we're done (just cleaned up)
+    if not preferred_roles:
+        logger.info(f"[ROLE-NORM] No preferred roles for candidate {candidate_id}, cleanup done")
+        return {
+            "status": "completed",
+            "candidate_id": candidate_id,
+            "total_roles": 0,
+            "roles_removed": sync_result.get("removed_count", 0),
+            "normalized": 0,
+            "failed": 0
+        }
+    
+    # Step 4: Normalize each role
     normalization_results = []
     for raw_role in preferred_roles:
         if raw_role and raw_role.strip():
+            role_to_normalize = raw_role.strip()
             result = await ctx.step.run(
-                f"normalize-role-{raw_role[:20]}",
-                normalize_single_role_step,
-                candidate_id,
-                raw_role.strip()
+                f"normalize-role-{role_to_normalize[:20].replace(' ', '-')}",
+                lambda r=role_to_normalize: normalize_single_role_step(candidate_id, r)
             )
             normalization_results.append(result)
     
-    # Step 3: Log summary
+    # Step 5: Log summary
     successful = [r for r in normalization_results if r.get("success")]
     failed = [r for r in normalization_results if not r.get("success")]
     
     logger.info(
         f"[ROLE-NORM] Completed for candidate {candidate_id}: "
+        f"{sync_result.get('removed_count', 0)} removed, "
         f"{len(successful)} normalized, {len(failed)} failed"
     )
     
@@ -96,6 +105,7 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context):
         "status": "completed",
         "candidate_id": candidate_id,
         "total_roles": len(preferred_roles),
+        "roles_removed": sync_result.get("removed_count", 0),
         "normalized": len(successful),
         "failed": len(failed),
         "results": normalization_results
@@ -117,6 +127,83 @@ def validate_candidate_step(candidate_id: int, tenant_id: int) -> bool:
     except Exception as e:
         logger.error(f"[ROLE-NORM] Candidate validation failed: {e}")
         return False
+
+
+def sync_removed_roles_step(candidate_id: int, current_preferred_roles: List[str]) -> Dict[str, Any]:
+    """
+    Sync removed roles - unlink candidate from roles they no longer have.
+    
+    Strategy: Clear all existing links and let normalization re-create them.
+    This ensures the candidate_count is accurate after role changes.
+    
+    Args:
+        candidate_id: The candidate to sync
+        current_preferred_roles: List of currently preferred role strings
+        
+    Returns:
+        Dict with removed_count and details
+    """
+    from app import db
+    from app.models.global_role import GlobalRole
+    from app.models.candidate_global_role import CandidateGlobalRole
+    
+    try:
+        # Get all existing links for this candidate
+        existing_links = db.session.query(CandidateGlobalRole).filter(
+            CandidateGlobalRole.candidate_id == candidate_id
+        ).all()
+        
+        if not existing_links:
+            logger.info(f"[ROLE-NORM] No existing role links for candidate {candidate_id}")
+            return {"removed_count": 0, "removed_roles": []}
+        
+        removed_roles = []
+        
+        # Remove all existing links and decrement counts
+        # The normalization step will re-create the ones that should exist
+        for link in existing_links:
+            global_role = db.session.get(GlobalRole, link.global_role_id)
+            
+            if global_role:
+                # Decrement candidate count
+                if global_role.candidate_count and global_role.candidate_count > 0:
+                    global_role.candidate_count -= 1
+                    logger.info(
+                        f"[ROLE-NORM] Decremented candidate_count for '{global_role.name}' "
+                        f"to {global_role.candidate_count}"
+                    )
+                
+                removed_roles.append({
+                    "global_role_name": global_role.name,
+                    "global_role_id": global_role.id,
+                    "remaining_candidates": global_role.candidate_count or 0
+                })
+            
+            # Delete the link
+            db.session.delete(link)
+        
+        db.session.commit()
+        logger.info(
+            f"[ROLE-NORM] Cleared {len(removed_roles)} role links for candidate {candidate_id}. "
+            f"Normalization will re-create valid links."
+        )
+        
+        return {
+            "removed_count": len(removed_roles),
+            "removed_roles": removed_roles
+        }
+        
+    except Exception as e:
+        logger.error(f"[ROLE-NORM] Error syncing removed roles: {e}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return {
+            "removed_count": 0,
+            "removed_roles": [],
+            "error": str(e)
+        }
 
 
 def normalize_single_role_step(candidate_id: int, raw_role: str) -> Dict[str, Any]:

@@ -57,7 +57,7 @@ export function CandidateManagementPage() {
 
   // Calculate stats
   const needsReviewCount = submittedInvitations?.total || 0;
-  const readyToAssignCount = statsData?.pending_assignment || 0;
+  const readyToAssignCount = statsData?.approved || 0;
 
   // Sidebar navigation items
   const navItems = [

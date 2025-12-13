@@ -67,6 +67,12 @@ class ScrapeSession(db.Model):
     jobs_imported = db.Column(Integer, default=0)  # Successfully imported (non-duplicate)
     jobs_skipped = db.Column(Integer, default=0)  # Skipped (duplicates)
     
+    # Multi-Platform Tracking
+    platforms_total = db.Column(Integer, default=0)  # Total platforms expected
+    platforms_completed = db.Column(Integer, default=0)  # Platforms that submitted (success or fail)
+    platforms_failed = db.Column(Integer, default=0)  # Platforms that failed
+    session_notes = db.Column(Text, nullable=True)  # General session notes/logs
+    
     # Status
     status = db.Column(String(20), default='in_progress', index=True)
     # in_progress: Scraper is working on this role
@@ -83,6 +89,13 @@ class ScrapeSession(db.Model):
     # Relationships
     scraper_key = db.relationship('ScraperApiKey', back_populates='scrape_sessions')
     global_role = db.relationship('GlobalRole', back_populates='scrape_sessions')
+    platform_statuses = db.relationship(
+        'SessionPlatformStatus',
+        back_populates='session',
+        cascade='all, delete-orphan',
+        foreign_keys='SessionPlatformStatus.session_id',
+        primaryjoin='ScrapeSession.session_id == SessionPlatformStatus.session_id'
+    )
     
     # Indexes
     __table_args__ = (
@@ -99,7 +112,7 @@ class ScrapeSession(db.Model):
     def __repr__(self):
         return f'<ScrapeSession {self.session_id} status={self.status} role={self.role_name}>'
     
-    def to_dict(self, include_role=False, include_scraper=False):
+    def to_dict(self, include_role=False, include_scraper=False, include_platforms=False):
         """Convert session to dictionary."""
         result = {
             'id': self.id,
@@ -114,6 +127,10 @@ class ScrapeSession(db.Model):
             'jobs_found': self.jobs_found,
             'jobs_imported': self.jobs_imported,
             'jobs_skipped': self.jobs_skipped,
+            'platforms_total': self.platforms_total,
+            'platforms_completed': self.platforms_completed,
+            'platforms_failed': self.platforms_failed,
+            'session_notes': self.session_notes,
             'status': self.status,
             'error_message': self.error_message,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -125,6 +142,9 @@ class ScrapeSession(db.Model):
         
         if include_scraper and self.scraper_key:
             result['scraper_key'] = self.scraper_key.to_dict()
+        
+        if include_platforms and self.platform_statuses:
+            result['platform_statuses'] = [ps.to_dict() for ps in self.platform_statuses]
         
         return result
     

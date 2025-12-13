@@ -126,7 +126,7 @@ class AIRoleNormalizationService:
                     name=canonical_name,
                     embedding=role_embedding_for_new,
                     aliases=[raw_role] if raw_role.lower() != canonical_name.lower() else [],
-                    queue_status='pending',
+                    queue_status='pending',  # New roles need PM_ADMIN review
                     priority='normal'
                 )
                 db.session.add(global_role)
@@ -281,6 +281,7 @@ Return ONLY the normalized job title, nothing else."""
         Link a candidate to a global role.
         
         Creates CandidateGlobalRole record and increments candidate_count.
+        Also ensures the role is in the scraping queue.
         """
         # Check if link already exists
         existing_link = CandidateGlobalRole.query.filter_by(
@@ -290,6 +291,8 @@ Return ONLY the normalized job title, nothing else."""
         
         if existing_link:
             logger.debug(f"Candidate {candidate_id} already linked to role {global_role.id}")
+            # Still ensure role is in queue even if link exists
+            self._ensure_role_in_queue(global_role)
             return
         
         # Create link
@@ -302,10 +305,29 @@ Return ONLY the normalized job title, nothing else."""
         # Increment candidate count
         global_role.increment_candidate_count()
         
+        # Ensure role is in the scraping queue
+        self._ensure_role_in_queue(global_role)
+        
         logger.info(
             f"Linked candidate {candidate_id} to role '{global_role.name}' "
             f"(count now: {global_role.candidate_count})"
         )
+    
+    def _ensure_role_in_queue(self, global_role: GlobalRole):
+        """
+        Ensure a role is in the scraping queue.
+        
+        If the role is not already pending/approved/processing, set it to pending.
+        New roles need PM_ADMIN review before scraping.
+        """
+        # Only add to queue if not already queued
+        if global_role.queue_status not in ['pending', 'approved', 'processing']:
+            old_status = global_role.queue_status
+            global_role.queue_status = 'pending'  # New additions need review
+            logger.info(
+                f"Added role '{global_role.name}' to scraping queue "
+                f"(was: {old_status or 'none'}, now: pending)"
+            )
     
     def normalize_candidate_roles(
         self,
