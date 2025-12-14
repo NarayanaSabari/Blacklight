@@ -159,6 +159,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import scraper_routes
     from app.routes import global_role_routes
     from app.routes import scraper_monitoring_routes
+    from app.routes import resume_tailor_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -214,6 +215,9 @@ def register_blueprints(app: Flask) -> None:
     
     # Scraper Monitoring routes (PM_ADMIN dashboard)
     app.register_blueprint(scraper_monitoring_routes.scraper_monitoring_bp)
+    
+    # Resume Tailor routes (AI-powered resume optimization)
+    app.register_blueprint(resume_tailor_routes.resume_tailor_bp)
 
 
 def register_inngest(app: Flask) -> None:

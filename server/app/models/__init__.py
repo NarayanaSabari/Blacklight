@@ -86,3 +86,6 @@ from app.models.scraper_api_key import ScraperApiKey
 from app.models.role_job_mapping import RoleJobMapping
 from app.models.scraper_platform import ScraperPlatform
 from app.models.session_platform_status import SessionPlatformStatus
+
+# Import resume tailor models
+from app.models.tailored_resume import TailoredResume, TailoredResumeStatus

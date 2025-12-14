@@ -71,3 +71,5 @@ credentials/*.json
 credentials/gcs-credentials.json
 *.pem
 *.key
+
+Resume-Matcher
