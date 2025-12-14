@@ -31,6 +31,9 @@ import {
   MapPin,
   Zap,
   ArrowRight,
+  User,
+  Mail,
+  Phone,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -374,8 +377,8 @@ export function ResumeTailorPage() {
     enabled: !!matchIdNum && !!candidateIdNum,
   });
 
-  // Fetch candidate data (for future use)
-  useQuery({
+  // Fetch candidate data
+  const { data: candidate } = useQuery({
     queryKey: ['candidate', candidateIdNum],
     queryFn: () => candidateApi.getCandidate(candidateIdNum),
     enabled: !!candidateIdNum,
@@ -570,6 +573,69 @@ export function ResumeTailorPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Candidate Card */}
+          {candidate && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Candidate
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-primary font-semibold">
+                      {candidate.first_name?.[0]}{candidate.last_name?.[0]}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium">{candidate.first_name} {candidate.last_name}</p>
+                    {candidate.current_title && (
+                      <p className="text-sm text-muted-foreground">{candidate.current_title}</p>
+                    )}
+                  </div>
+                </div>
+                <Separator />
+                {candidate.email && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-4 w-4" />
+                    <span className="truncate">{candidate.email}</span>
+                  </div>
+                )}
+                {candidate.phone && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Phone className="h-4 w-4" />
+                    {candidate.phone}
+                  </div>
+                )}
+                {candidate.total_experience_years && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Briefcase className="h-4 w-4" />
+                    {candidate.total_experience_years} years experience
+                  </div>
+                )}
+                {candidate.skills && candidate.skills.length > 0 && (
+                  <div className="pt-2">
+                    <p className="text-xs text-muted-foreground mb-2">Top Skills</p>
+                    <div className="flex flex-wrap gap-1">
+                      {candidate.skills.slice(0, 5).map((skill: string, idx: number) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {candidate.skills.length > 5 && (
+                        <Badge variant="outline" className="text-xs">
+                          +{candidate.skills.length - 5}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Processing Steps or Controls */}
           {phase === 'ready' && (
