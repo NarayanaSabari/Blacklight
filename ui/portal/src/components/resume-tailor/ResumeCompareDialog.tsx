@@ -102,9 +102,9 @@ export function ResumeCompareDialog({
 }: ResumeCompareDialogProps) {
   // Fetch detailed comparison data
   const { data: comparison, isLoading } = useQuery({
-    queryKey: ['resumeCompare', tailoredResume.id],
-    queryFn: () => resumeTailorApi.compareResumes(tailoredResume.id),
-    enabled: open && !!tailoredResume.id,
+    queryKey: ['resumeCompare', tailoredResume.tailor_id],
+    queryFn: () => resumeTailorApi.compareResumes(tailoredResume.tailor_id),
+    enabled: open && !!tailoredResume.tailor_id,
   });
 
   return (
@@ -116,7 +116,7 @@ export function ResumeCompareDialog({
               <FileText className="h-5 w-5" />
               Resume Comparison
             </DialogTitle>
-            <ExportMenu tailorId={tailoredResume.id} />
+            <ExportMenu tailorId={tailoredResume.tailor_id} />
           </div>
         </DialogHeader>
 

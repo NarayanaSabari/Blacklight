@@ -67,7 +67,8 @@ def require_tenant_admin(f):
     """
     Decorator to require Portal user authentication with TENANT_ADMIN role.
     
-    First validates authentication, then checks if user is TENANT_ADMIN.
+    This decorator handles authentication internally, so it should be used standalone
+    (not with @require_portal_auth).
     
     Usage:
         @bp.route("/admin-only")
@@ -78,25 +79,46 @@ def require_tenant_admin(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # Ensure user is authenticated first
-        response, status = require_portal_auth(f)(*args, **kwargs)
-        if status != 200:
-            return response, status
+        # Get Authorization header
+        auth_header = request.headers.get("Authorization")
         
-        # Get the authenticated user's ID from the request context
-        user_id = request.portal_user.get("user_id")
-        if not user_id:
-            return error_response("User ID not found in token payload", 401)
+        if not auth_header:
+            return error_response("Authorization header is required")
+        
+        # Extract token
+        parts = auth_header.split()
+        
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            return error_response("Invalid Authorization header format. Use: Bearer <token>")
+        
+        access_token = parts[1]
+        
+        try:
+            # Validate token (also checks user is active and tenant is ACTIVE)
+            payload = PortalAuthService.validate_token(access_token)
             
-        # Fetch the full PortalUser object to check roles
-        user = db.session.get(PortalUser, user_id)
-        if not user or not user.is_tenant_admin:
-            return error_response(
-                "Access denied: TENANT_ADMIN role required",
-                403
-            )
-        
-        return f(*args, **kwargs)
+            # Attach user info to request context
+            request.portal_user = payload
+            
+            # Get the authenticated user's ID from the request context
+            user_id = payload.get("user_id")
+            if not user_id:
+                return error_response("User ID not found in token payload", 401)
+                
+            # Fetch the full PortalUser object to check roles
+            user = db.session.get(PortalUser, user_id)
+            if not user or not user.is_tenant_admin:
+                return error_response(
+                    "Access denied: TENANT_ADMIN role required",
+                    403
+                )
+            
+            return f(*args, **kwargs)
+            
+        except ValueError as e:
+            return error_response(str(e))
+        except Exception as e:
+            return error_response(f"Authentication failed: {str(e)}", 500)
     
     return decorated_function
 
@@ -105,10 +127,13 @@ def require_permission(permission_name: str):
     """
     Decorator to require Portal user authentication with a specific permission.
     
-    First validates authentication, then checks if user has the required permission.
+    MUST be used after @require_portal_auth decorator. It checks if the 
+    already-authenticated user has the required permission.
     
     Usage:
         @bp.route("/protected")
+        @require_portal_auth
+        @with_tenant_context
         @require_permission("users.view")
         def protected_endpoint():
             user = request.portal_user
@@ -117,13 +142,13 @@ def require_permission(permission_name: str):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Ensure user is authenticated first
-            response, status = require_portal_auth(f)(*args, **kwargs)
-            if status != 200:
-                return response, status
+            # Check if user is already authenticated (by @require_portal_auth above)
+            portal_user = getattr(request, "portal_user", None)
+            if not portal_user:
+                return error_response("Authentication required", 401)
             
             # Get the authenticated user's ID from the request context
-            user_id = request.portal_user.get("user_id")
+            user_id = portal_user.get("user_id")
             if not user_id:
                 return error_response("User ID not found in token payload", 401)
                 

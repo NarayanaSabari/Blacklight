@@ -185,63 +185,72 @@ class TailoredResume(BaseModel):
         return 0.0
     
     def to_dict(self) -> dict:
-        """Serialize for API response."""
+        """Serialize for API response with flat structure for frontend."""
+        # Convert 0-1 scores to 0-100 percentages for frontend
+        original_score = float(self.original_match_score) * 100 if self.original_match_score else None
+        tailored_score = float(self.tailored_match_score) * 100 if self.tailored_match_score else None
+        improvement = float(self.score_improvement) * 100 if self.score_improvement else None
+        
         return {
+            # IDs
             "id": self.id,
             "tailor_id": self.tailor_id,
             "candidate_id": self.candidate_id,
             "job_posting_id": self.job_posting_id,
+            
+            # Content (flat structure for frontend)
+            "original_resume_content": self.original_resume_content,
+            "tailored_resume_content": self.tailored_resume_content,
+            
+            # Scores as percentages (0-100)
+            "original_match_score": original_score,
+            "tailored_match_score": tailored_score,
+            "score_improvement": improvement,
+            
+            # Skills analysis (flat)
+            "matched_skills": self.matched_skills or [],
+            "missing_skills": self.missing_skills or [],
+            "added_skills": self.added_skills or [],
+            
+            # Detailed data
+            "improvements": self.improvements or [],
+            "skill_comparison": self.skill_comparison or {},
+            
+            # Processing status
             "status": self.status.value if self.status else None,
             "processing_step": self.processing_step,
             "processing_progress": self.processing_progress,
-            "processing_error": self.processing_error,
-            "original": {
-                "content_markdown": self.original_resume_content,
-                "keywords": self.original_resume_keywords or [],
-                "match_score": float(self.original_match_score) if self.original_match_score else None,
-            },
-            "tailored": {
-                "content_markdown": self.tailored_resume_content,
-                "content_html": self.tailored_resume_html,
-                "keywords": self.tailored_resume_keywords or [],
-                "match_score": float(self.tailored_match_score) if self.tailored_match_score else None,
-            },
-            "job": {
-                "id": self.job_posting_id,
-                "title": self.job_title,
-                "company": self.job_company,
-                "keywords": self.job_keywords or [],
-            },
-            "analysis": {
-                "matched_skills": self.matched_skills or [],
-                "missing_skills": self.missing_skills or [],
-                "added_skills": self.added_skills or [],
-                "skill_comparison": self.skill_comparison or [],
-            },
-            "improvements": self.improvements or [],
-            "score_improvement": float(self.score_improvement) if self.score_improvement else None,
+            "error_message": self.processing_error,
+            
+            # Job info
+            "job_title": self.job_title,
+            "job_company": self.job_company,
+            
+            # Metadata
             "iterations_used": self.iterations_used,
             "ai_provider": self.ai_provider,
             "ai_model": self.ai_model,
             "processing_duration_seconds": self.processing_duration_seconds,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "completed_at": self.processing_completed_at.isoformat() if self.processing_completed_at else None,
-            "created_by": {
-                "id": self.created_by.id,
-                "name": f"{self.created_by.first_name} {self.created_by.last_name}"
-            } if self.created_by else None,
         }
     
     def to_list_dict(self) -> dict:
         """Serialize for list view (minimal data)."""
+        # Convert 0-1 scores to 0-100 percentages
+        original_score = float(self.original_match_score) * 100 if self.original_match_score else None
+        tailored_score = float(self.tailored_match_score) * 100 if self.tailored_match_score else None
+        improvement = float(self.score_improvement) * 100 if self.score_improvement else None
+        
         return {
             "id": self.id,
             "tailor_id": self.tailor_id,
             "job_title": self.job_title,
             "job_company": self.job_company,
-            "original_score": float(self.original_match_score) if self.original_match_score else None,
-            "tailored_score": float(self.tailored_match_score) if self.tailored_match_score else None,
-            "score_improvement": float(self.score_improvement) if self.score_improvement else None,
+            "original_match_score": original_score,
+            "tailored_match_score": tailored_score,
+            "score_improvement": improvement,
             "status": self.status.value if self.status else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

@@ -9,15 +9,15 @@ export type ExportFormat = 'pdf' | 'docx' | 'markdown';
 
 export interface TailoredResume {
   id: number;
+  tailor_id: string;  // UUID for API calls
   candidate_id: number;
   job_posting_id: number | null;
-  job_match_id: number | null;
 
   // Content
   original_resume_content: string;
   tailored_resume_content: string;
 
-  // Scores
+  // Scores (as percentages 0-100)
   original_match_score: number;
   tailored_match_score: number;
   score_improvement: number;
@@ -36,10 +36,15 @@ export interface TailoredResume {
   processing_step: string | null;
   processing_progress: number;
   error_message: string | null;
+  
+  // Job info
+  job_title?: string;
+  job_company?: string;
 
   // Timestamps
   created_at: string;
   updated_at: string;
+  completed_at?: string;
 }
 
 export interface TailorImprovement {

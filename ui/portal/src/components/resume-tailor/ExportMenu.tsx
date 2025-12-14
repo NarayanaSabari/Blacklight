@@ -28,7 +28,7 @@ import { resumeTailorApi } from '@/lib/resumeTailorApi';
 import type { ExportFormat } from '@/types/tailoredResume';
 
 interface ExportMenuProps {
-  tailorId: number;
+  tailorId: string;  // UUID string from tailor_id
   candidateName?: string;
   disabled?: boolean;
 }

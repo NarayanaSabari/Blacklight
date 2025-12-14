@@ -440,7 +440,7 @@ def compare_resumes(tailor_id: str):
 # Export Endpoint
 # ============================================================================
 
-@resume_tailor_bp.route('/<string:tailor_id>/export', methods=['POST'])
+@resume_tailor_bp.route('/<string:tailor_id>/export', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
 @require_permission('candidates.view')
@@ -448,15 +448,13 @@ def export_tailored_resume(tailor_id: str):
     """
     Export tailored resume in specified format.
     
-    POST /api/resume-tailor/:tailor_id/export
+    GET /api/resume-tailor/:tailor_id/export?format=pdf
     
-    Request body:
-    {
-        "format": "pdf" | "docx" | "markdown"
-    }
+    Query params:
+        format: pdf | docx | markdown (default: pdf)
     
     Returns:
-        File download or download URL
+        File download
     
     Permissions: candidates.view
     """
@@ -479,9 +477,8 @@ def export_tailored_resume(tailor_id: str):
         if not tailored_resume.tailored_resume_content:
             return error_response("No tailored content available", 400)
         
-        # Parse request
-        data = request.get_json() or {}
-        export_format = data.get('format', 'pdf')
+        # Parse query params
+        export_format = request.args.get('format', 'pdf')
         
         try:
             format_enum = ExportFormat(export_format)

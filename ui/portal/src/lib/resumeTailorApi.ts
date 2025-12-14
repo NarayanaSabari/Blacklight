@@ -132,23 +132,23 @@ export const resumeTailorApi = {
   },
 
   /**
-   * Get a specific tailored resume by ID
+   * Get a specific tailored resume by tailor_id (UUID)
    */
-  getTailoredResume: async (tailorId: number): Promise<TailoredResume> => {
+  getTailoredResume: async (tailorId: string): Promise<TailoredResume> => {
     return apiRequest.get<TailoredResume>(`${BASE_URL}/${tailorId}`);
   },
 
   /**
    * Get side-by-side comparison of original and tailored resume
    */
-  compareResumes: async (tailorId: number): Promise<CompareResponse> => {
+  compareResumes: async (tailorId: string): Promise<CompareResponse> => {
     return apiRequest.get<CompareResponse>(`${BASE_URL}/${tailorId}/compare`);
   },
 
   /**
    * Export tailored resume in specified format
    */
-  exportResume: async (tailorId: number, format: ExportFormat): Promise<Blob> => {
+  exportResume: async (tailorId: string, format: ExportFormat): Promise<Blob> => {
     return apiRequest.getBlob(`${BASE_URL}/${tailorId}/export`, {
       params: { format },
     });
@@ -158,7 +158,7 @@ export const resumeTailorApi = {
    * Download exported resume
    */
   downloadResume: async (
-    tailorId: number,
+    tailorId: string,
     format: ExportFormat,
     filename?: string
   ): Promise<void> => {
