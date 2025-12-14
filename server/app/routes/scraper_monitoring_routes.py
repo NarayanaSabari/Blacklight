@@ -246,10 +246,10 @@ def get_session_details(session_id: str):
                 "message": f"Session with ID {session_id} not found"
             }), 404
         
-        # Get platform statuses for this session
+        # Get platform statuses for this session (session_id in platform_status is UUID)
         platform_statuses = db.session.scalars(
             db.select(SessionPlatformStatus)
-            .where(SessionPlatformStatus.session_id == session.id)
+            .where(SessionPlatformStatus.session_id == session.session_id)
             .order_by(SessionPlatformStatus.started_at.asc())
         ).all()
         
