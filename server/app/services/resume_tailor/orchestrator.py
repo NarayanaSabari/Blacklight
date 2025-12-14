@@ -260,11 +260,15 @@ class ResumeTailorOrchestrator:
                         'iteration': iteration
                     })
                 
-                # Recalculate score
-                new_score = self.scorer.quick_score(
+                # Recalculate score using the same comprehensive method as initial scoring
+                # This ensures consistent comparison between before/after
+                new_score_result = self.scorer.calculate_match_score(
                     resume_text=candidate_markdown,
-                    job_description=job_posting.description or ""
-                ) / 100.0  # Convert to 0-1
+                    job_title=job_posting.title,
+                    job_description=job_posting.description or "",
+                    resume_skills=None  # Will be extracted from text
+                )
+                new_score = new_score_result.overall_score / 100.0  # Convert to 0-1
                 
                 logger.info(f"Score after iteration {iteration}: {new_score:.2%}")
                 
