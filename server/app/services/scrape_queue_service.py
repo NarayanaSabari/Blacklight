@@ -474,9 +474,12 @@ class ScrapeQueueService:
         """
         Mark session as failed.
         
+        Validates actual platform statuses before marking session as failed.
+        If all platforms are actually completed, marks session as completed instead.
+        
         Args:
             session_id: Session ID
-            error_message: Error description
+            error_message: Error description from scraper
             scraper_key: Scraper API key
         
         Returns:
@@ -490,6 +493,48 @@ class ScrapeQueueService:
         if not session:
             raise ValueError("Session not found or unauthorized")
         
+        # Check actual platform statuses from database
+        platform_statuses = SessionPlatformStatus.query.filter_by(
+            session_id=session.session_id
+        ).all()
+        
+        actually_failed = [ps for ps in platform_statuses if ps.status == 'failed']
+        actually_completed = [ps for ps in platform_statuses if ps.status == 'completed']
+        
+        # If no platforms actually failed, don't mark session as failed
+        if len(actually_failed) == 0 and len(actually_completed) > 0:
+            logger.warning(
+                f"Scraper reported failure for session {session_id} but all platforms completed. "
+                f"Marking as completed instead. Scraper message: {error_message}"
+            )
+            # Mark as completed instead
+            session.status = "completed"
+            session.completed_at = datetime.utcnow()
+            session.session_notes = f"Scraper incorrectly reported failure: {error_message}"
+            
+            # Calculate stats from platform statuses
+            session.jobs_found = sum(ps.jobs_found or 0 for ps in platform_statuses)
+            session.jobs_imported = sum(ps.jobs_imported or 0 for ps in platform_statuses)
+            session.jobs_skipped = sum(ps.jobs_skipped or 0 for ps in platform_statuses)
+            session.platforms_completed = len(actually_completed)
+            session.platforms_failed = 0
+            
+            # Reset role to approved for next rotation
+            role = db.session.get(GlobalRole, session.global_role_id)
+            if role:
+                role.queue_status = "approved"
+            
+            db.session.commit()
+            
+            return {
+                "session_id": str(session.session_id),
+                "status": "completed",
+                "message": "All platforms completed successfully - scraper failure report was incorrect",
+                "jobs_imported": session.jobs_imported,
+                "jobs_skipped": session.jobs_skipped
+            }
+        
+        # There are actual failures, mark session as failed
         session.fail(error_message)
         
         # Reset role to approved so it can be retried
@@ -504,7 +549,8 @@ class ScrapeQueueService:
         return {
             "session_id": str(session.session_id),
             "status": "failed",
-            "error_message": error_message
+            "error_message": error_message,
+            "failed_platforms": [ps.platform_name for ps in actually_failed]
         }
     
     @staticmethod

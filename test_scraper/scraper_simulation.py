@@ -252,8 +252,9 @@ def submit_jobs_for_platform(
         return False
 
 
-# Global flag for unique job generation
+# Global configuration flags
 GENERATE_UNIQUE_JOBS = False
+JOBS_PER_PLATFORM = 5
 
 
 def submit_all_jobs(
@@ -272,13 +273,20 @@ def submit_all_jobs(
         return False
     
     submitted_count = 0
-    for platform in platforms:
+    total_jobs = 0
+    
+    print_info(f"Processing {len(platforms)} platforms with {JOBS_PER_PLATFORM} jobs each...")
+    print()
+    
+    for i, platform in enumerate(platforms, 1):
         platform_id = platform.get('id')
         platform_name = platform.get('name')
         display_name = platform.get('display_name')
         
-        # Generate dummy jobs for this platform (uses global flag)
-        dummy_jobs = generate_dummy_jobs(platform_name, count=3, unique=GENERATE_UNIQUE_JOBS)
+        print(f"  [{i}/{len(platforms)}] {Colors.BOLD}{display_name}{Colors.ENDC} ({platform_name})")
+        
+        # Generate dummy jobs for this platform (uses global config)
+        dummy_jobs = generate_dummy_jobs(platform_name, count=JOBS_PER_PLATFORM, unique=GENERATE_UNIQUE_JOBS)
         
         # Submit jobs
         if submit_jobs_for_platform(
@@ -290,11 +298,14 @@ def submit_all_jobs(
             dummy_jobs
         ):
             submitted_count += 1
+            total_jobs += len(dummy_jobs)
         
         # Small delay between submissions
         time.sleep(0.5)
     
+    print()
     print_success(f"Submitted jobs for {Colors.GREEN}{submitted_count}/{len(platforms)}{Colors.ENDC} platforms")
+    print_info(f"Total jobs submitted: {Colors.CYAN}{total_jobs}{Colors.ENDC}")
     return submitted_count == len(platforms)
 
 
@@ -353,15 +364,17 @@ Examples:
         """
     )
     parser.add_argument("--api-key", help="Scraper API key (if not provided, will prompt)")
-    parser.add_argument("--server", default="http://localhost:5000", help="Server URL (default: http://localhost:5000)")
+    parser.add_argument("--server", default="http://34.131.146.89", help="Server URL (default: http://34.131.146.89)")
     parser.add_argument("--skip-complete", action="store_true", help="Skip session completion step")
     parser.add_argument("--unique", action="store_true", help="Generate unique job IDs (won't be deduplicated)")
+    parser.add_argument("--jobs-per-platform", type=int, default=5, help="Number of jobs to generate per platform (default: 5)")
     
     args = parser.parse_args()
     
-    # Store unique flag globally for job generation
-    global GENERATE_UNIQUE_JOBS
+    # Store config globally for job generation
+    global GENERATE_UNIQUE_JOBS, JOBS_PER_PLATFORM
     GENERATE_UNIQUE_JOBS = args.unique
+    JOBS_PER_PLATFORM = args.jobs_per_platform
     
     # Get API key
     api_key = args.api_key or get_api_key()
@@ -370,6 +383,7 @@ Examples:
     print_section("Simulation Configuration")
     print_info(f"Server URL: {Colors.CYAN}{server_url}{Colors.ENDC}")
     print_info(f"API Key: {Colors.CYAN}{api_key[:10]}...{api_key[-5:]}{Colors.ENDC}")
+    print_info(f"Jobs per platform: {Colors.CYAN}{JOBS_PER_PLATFORM}{Colors.ENDC}")
     if args.unique:
         print_warning("Unique mode: Jobs will NOT be deduplicated (new jobs each run)")
     else:
@@ -401,7 +415,7 @@ Examples:
     print_info(f"Role ID: {Colors.CYAN}{role.get('id')}{Colors.ENDC}")
     print_info(f"Role Name: {Colors.CYAN}{role.get('name')}{Colors.ENDC}")
     print_info(f"Platforms processed: {Colors.CYAN}{len(role_data.get('platforms', []))}{Colors.ENDC}")
-    print_info(f"Total jobs submitted: {Colors.CYAN}{len(role_data.get('platforms', [])) * 3}{Colors.ENDC}")
+    print_info(f"Total jobs submitted: {Colors.CYAN}{len(role_data.get('platforms', [])) * JOBS_PER_PLATFORM}{Colors.ENDC}")
     
     print(f"\n{Colors.GREEN}{Colors.BOLD}✨ Next Steps:{Colors.ENDC}")
     print_info("1. Check the Dashboard for the new session")
