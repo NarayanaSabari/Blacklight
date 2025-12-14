@@ -157,3 +157,21 @@ export type {
   MatchGrade,
   GradeBadgeConfig,
 } from './jobMatch';
+
+export type {
+  TailorStatus,
+  ExportFormat,
+  TailoredResume,
+  TailorImprovement,
+  SkillComparison,
+  TailorResumeRequest,
+  TailorFromMatchRequest,
+  ExportResumeRequest,
+  TailorResumeResponse,
+  TailoredResumeListResponse,
+  TailorStatsResponse,
+  CompareResponse,
+  TailorStreamEvent,
+  TailorDialogState,
+  TailorProgressState,
+} from './tailoredResume';

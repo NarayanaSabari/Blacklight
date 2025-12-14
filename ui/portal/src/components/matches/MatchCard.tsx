@@ -3,6 +3,7 @@
  * Displays a job match with score breakdown, grade badge, and action buttons
  */
 
+import { useState } from 'react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,16 +16,21 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { JobMatch, MatchGrade } from '@/types';
+import type { TailoredResume } from '@/types/tailoredResume';
+import { TailorDialog, ResumeCompareDialog } from '@/components/resume-tailor';
 
 interface MatchCardProps {
   match: JobMatch;
   candidateId?: number;
   onViewDetails?: (jobId: number) => void;
   onApply?: (jobId: number) => void;
+  onTailorResume?: (matchId: number) => void;
   showActions?: boolean;
+  showTailorButton?: boolean;
 }
 
 const GRADE_CONFIG: Record<
@@ -96,7 +102,19 @@ const ScoreBar = ({ label, value, icon: Icon }: { label: string; value: number; 
   );
 };
 
-export function MatchCard({ match, onViewDetails, onApply, showActions = true }: MatchCardProps) {
+export function MatchCard({ 
+  match, 
+  candidateId,
+  onViewDetails, 
+  onApply, 
+  onTailorResume,
+  showActions = true,
+  showTailorButton = true,
+}: MatchCardProps) {
+  const [tailorDialogOpen, setTailorDialogOpen] = useState(false);
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
+
   const job = match.job || match.job_posting;
   if (!job) return null;
 
@@ -247,12 +265,51 @@ export function MatchCard({ match, onViewDetails, onApply, showActions = true }:
               View Details
             </Button>
           )}
+          {showTailorButton && candidateId && (
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setTailorDialogOpen(true)}
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Tailor Resume
+            </Button>
+          )}
           {onApply && (
             <Button className="flex-1" onClick={() => onApply(job.id)}>
               Apply Now
             </Button>
           )}
         </CardFooter>
+      )}
+
+      {/* Tailor Resume Dialog */}
+      {candidateId && (
+        <TailorDialog
+          open={tailorDialogOpen}
+          onOpenChange={setTailorDialogOpen}
+          candidateId={candidateId}
+          jobMatchId={match.id}
+          jobPostingId={job.id}
+          jobTitle={job.title}
+          company={job.company}
+          currentScore={match.match_score}
+          onComplete={(result) => {
+            setTailoredResume(result);
+            setTailorDialogOpen(false);
+            setCompareDialogOpen(true);
+            onTailorResume?.(match.id);
+          }}
+        />
+      )}
+
+      {/* Resume Compare Dialog */}
+      {tailoredResume && (
+        <ResumeCompareDialog
+          open={compareDialogOpen}
+          onOpenChange={setCompareDialogOpen}
+          tailoredResume={tailoredResume}
+        />
       )}
     </Card>
   );
