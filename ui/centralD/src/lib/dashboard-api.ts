@@ -730,3 +730,167 @@ export const scraperPlatformApi = {
     return response.data;
   },
 };
+
+// ============================================================================
+// Job Postings Types
+// ============================================================================
+
+export interface JobPosting {
+  id: number;
+  externalJobId: string;
+  platform: string;
+  title: string;
+  company: string;
+  location: string | null;
+  salaryRange: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  snippet: string | null;
+  description?: string;
+  requirements: string | null;
+  postedDate: string | null;
+  expiresAt: string | null;
+  jobType: string | null;
+  isRemote: boolean;
+  experienceRequired: string | null;
+  experienceMin: number | null;
+  experienceMax: number | null;
+  skills: string[] | null;
+  keywords: string[] | null;
+  jobUrl: string;
+  applyUrl: string | null;
+  status: string;
+  importedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  scraperName?: string;
+  roleName?: string;
+}
+
+export interface JobListResponse {
+  jobs: JobPosting[];
+  total: number;
+  page: number;
+  perPage: number;
+  pages: number;
+  filters: {
+    platforms: string[];
+    statuses: string[];
+  };
+}
+
+export interface JobStatistics {
+  totalJobs: number;
+  jobsByPlatform: Record<string, number>;
+  jobsByStatus: Record<string, number>;
+  remoteJobs: number;
+  uniqueCompanies: number;
+  jobsToday: number;
+  jobsThisWeek: number;
+}
+
+export interface JobListParams {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  platform?: string;
+  status?: string;
+  isRemote?: boolean;
+  roleId?: number;
+  sortBy?: 'created_at' | 'posted_date' | 'title' | 'company' | 'salary_min';
+  sortOrder?: 'asc' | 'desc';
+}
+
+// ============================================================================
+// Job Postings API
+// ============================================================================
+
+function mapJobPosting(data: Record<string, unknown>): JobPosting {
+  return {
+    id: data.id as number,
+    externalJobId: data.external_job_id as string,
+    platform: data.platform as string,
+    title: data.title as string,
+    company: data.company as string,
+    location: data.location as string | null,
+    salaryRange: data.salary_range as string | null,
+    salaryMin: data.salary_min as number | null,
+    salaryMax: data.salary_max as number | null,
+    salaryCurrency: data.salary_currency as string | null,
+    snippet: data.snippet as string | null,
+    description: data.description as string | undefined,
+    requirements: data.requirements as string | null,
+    postedDate: data.posted_date as string | null,
+    expiresAt: data.expires_at as string | null,
+    jobType: data.job_type as string | null,
+    isRemote: data.is_remote as boolean,
+    experienceRequired: data.experience_required as string | null,
+    experienceMin: data.experience_min as number | null,
+    experienceMax: data.experience_max as number | null,
+    skills: data.skills as string[] | null,
+    keywords: data.keywords as string[] | null,
+    jobUrl: data.job_url as string,
+    applyUrl: data.apply_url as string | null,
+    status: data.status as string,
+    importedAt: data.imported_at as string | null,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+    scraperName: data.scraper_name as string | undefined,
+    roleName: data.role_name as string | undefined,
+  };
+}
+
+export const jobPostingsApi = {
+  /**
+   * List all job postings with filters and pagination
+   */
+  listJobs: async (params: JobListParams = {}): Promise<JobListResponse> => {
+    const queryParams = new URLSearchParams();
+    
+    if (params.page) queryParams.set('page', params.page.toString());
+    if (params.perPage) queryParams.set('per_page', params.perPage.toString());
+    if (params.search) queryParams.set('search', params.search);
+    if (params.platform) queryParams.set('platform', params.platform);
+    if (params.status) queryParams.set('status', params.status);
+    if (params.isRemote !== undefined) queryParams.set('is_remote', params.isRemote.toString());
+    if (params.roleId) queryParams.set('role_id', params.roleId.toString());
+    if (params.sortBy) queryParams.set('sort_by', params.sortBy);
+    if (params.sortOrder) queryParams.set('sort_order', params.sortOrder);
+    
+    const response = await apiClient.get(`/api/scraper-monitoring/jobs?${queryParams.toString()}`);
+    
+    return {
+      jobs: response.data.jobs.map(mapJobPosting),
+      total: response.data.total,
+      page: response.data.page,
+      perPage: response.data.per_page,
+      pages: response.data.pages,
+      filters: response.data.filters,
+    };
+  },
+
+  /**
+   * Get a single job posting by ID
+   */
+  getJob: async (jobId: number): Promise<JobPosting> => {
+    const response = await apiClient.get(`/api/scraper-monitoring/jobs/${jobId}`);
+    return mapJobPosting(response.data);
+  },
+
+  /**
+   * Get job statistics
+   */
+  getStatistics: async (): Promise<JobStatistics> => {
+    const response = await apiClient.get('/api/scraper-monitoring/jobs/statistics');
+    return {
+      totalJobs: response.data.total_jobs,
+      jobsByPlatform: response.data.jobs_by_platform,
+      jobsByStatus: response.data.jobs_by_status,
+      remoteJobs: response.data.remote_jobs,
+      uniqueCompanies: response.data.unique_companies,
+      jobsToday: response.data.jobs_today,
+      jobsThisWeek: response.data.jobs_this_week,
+    };
+  },
+};

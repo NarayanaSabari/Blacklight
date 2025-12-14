@@ -620,3 +620,278 @@ def get_activity_feed():
             "error": "Internal Server Error",
             "message": str(e)
         }), 500
+
+
+# ============================================================================
+# JOB POSTINGS ENDPOINTS (PM_ADMIN)
+# ============================================================================
+
+@scraper_monitoring_bp.route('/jobs', methods=['GET'])
+@require_pm_admin
+def list_all_jobs():
+    """
+    List all job postings in the database with filters and pagination.
+    
+    Query params:
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 50, max: 100)
+    - search: Search in title, company, location
+    - platform: Filter by platform (linkedin, indeed, monster, dice, glassdoor, techfetch)
+    - status: Filter by status (ACTIVE, EXPIRED, CLOSED)
+    - is_remote: Filter remote jobs (true/false)
+    - role_id: Filter by normalized role ID
+    - sort_by: Sort field (created_at, posted_date, title, company, salary_min)
+    - sort_order: asc or desc (default: desc)
+    
+    Response:
+    {
+        "jobs": [...],
+        "total": 1543,
+        "page": 1,
+        "per_page": 50,
+        "pages": 31,
+        "filters": {
+            "platforms": ["linkedin", "indeed", ...],
+            "statuses": ["ACTIVE", "EXPIRED"]
+        }
+    }
+    """
+    from sqlalchemy import or_
+    
+    try:
+        # Parse query parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 50, type=int), 100)
+        search = request.args.get('search', '').strip()
+        platform = request.args.get('platform')
+        status = request.args.get('status')
+        is_remote = request.args.get('is_remote')
+        role_id = request.args.get('role_id', type=int)
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
+        
+        # Build base query
+        query = db.select(JobPosting)
+        count_query = db.select(func.count(JobPosting.id))
+        
+        # Apply filters
+        filters = []
+        
+        if search:
+            search_filter = or_(
+                JobPosting.title.ilike(f'%{search}%'),
+                JobPosting.company.ilike(f'%{search}%'),
+                JobPosting.location.ilike(f'%{search}%')
+            )
+            filters.append(search_filter)
+        
+        if platform:
+            filters.append(JobPosting.platform == platform)
+        
+        if status:
+            filters.append(JobPosting.status == status)
+        
+        if is_remote is not None:
+            is_remote_bool = is_remote.lower() in ('true', '1', 'yes')
+            filters.append(JobPosting.is_remote == is_remote_bool)
+        
+        if role_id:
+            filters.append(JobPosting.normalized_role_id == role_id)
+        
+        # Apply filters to queries
+        if filters:
+            for f in filters:
+                query = query.where(f)
+                count_query = count_query.where(f)
+        
+        # Apply sorting
+        sort_columns = {
+            'created_at': JobPosting.created_at,
+            'posted_date': JobPosting.posted_date,
+            'title': JobPosting.title,
+            'company': JobPosting.company,
+            'salary_min': JobPosting.salary_min,
+            'imported_at': JobPosting.imported_at
+        }
+        
+        sort_column = sort_columns.get(sort_by, JobPosting.created_at)
+        if sort_order == 'asc':
+            query = query.order_by(sort_column.asc().nullslast())
+        else:
+            query = query.order_by(sort_column.desc().nullslast())
+        
+        # Get total count
+        total = db.session.scalar(count_query) or 0
+        
+        # Execute paginated query
+        jobs = db.session.scalars(
+            query.offset((page - 1) * per_page).limit(per_page)
+        ).all()
+        
+        # Get available filter options
+        platforms = db.session.scalars(
+            db.select(JobPosting.platform)
+            .distinct()
+            .where(JobPosting.platform.isnot(None))
+            .order_by(JobPosting.platform)
+        ).all()
+        
+        statuses = db.session.scalars(
+            db.select(JobPosting.status)
+            .distinct()
+            .where(JobPosting.status.isnot(None))
+            .order_by(JobPosting.status)
+        ).all()
+        
+        return jsonify({
+            "jobs": [job.to_dict(include_description=False) for job in jobs],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page if total > 0 else 0,
+            "filters": {
+                "platforms": list(platforms),
+                "statuses": list(statuses)
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error listing jobs: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/jobs/<int:job_id>', methods=['GET'])
+@require_pm_admin
+def get_job_detail(job_id: int):
+    """
+    Get detailed information about a specific job posting.
+    
+    Response includes full description and related data.
+    """
+    try:
+        job = db.session.get(JobPosting, job_id)
+        
+        if not job:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Job posting {job_id} not found"
+            }), 404
+        
+        result = job.to_dict(include_description=True)
+        
+        # Add scraper info if available
+        if job.scraped_by_key:
+            result['scraper_name'] = job.scraped_by_key.name
+        
+        if job.normalized_role:
+            result['role_name'] = job.normalized_role.name
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting job {job_id}: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/jobs/statistics', methods=['GET'])
+@require_pm_admin
+def get_job_statistics():
+    """
+    Get aggregate statistics about all job postings.
+    
+    Response:
+    {
+        "total_jobs": 15432,
+        "jobs_by_platform": {
+            "linkedin": 5000,
+            "indeed": 4000,
+            ...
+        },
+        "jobs_by_status": {
+            "ACTIVE": 12000,
+            "EXPIRED": 3000,
+            ...
+        },
+        "remote_jobs": 3200,
+        "unique_companies": 2100,
+        "jobs_today": 150,
+        "jobs_this_week": 890
+    }
+    """
+    from datetime import date
+    
+    try:
+        today = date.today()
+        week_ago = today - timedelta(days=7)
+        
+        # Total jobs
+        total_jobs = db.session.scalar(
+            db.select(func.count(JobPosting.id))
+        ) or 0
+        
+        # Jobs by platform
+        platform_stats = db.session.execute(
+            db.select(
+                JobPosting.platform,
+                func.count(JobPosting.id).label('count')
+            )
+            .group_by(JobPosting.platform)
+            .order_by(desc('count'))
+        ).all()
+        jobs_by_platform = {row[0]: row[1] for row in platform_stats}
+        
+        # Jobs by status
+        status_stats = db.session.execute(
+            db.select(
+                JobPosting.status,
+                func.count(JobPosting.id).label('count')
+            )
+            .group_by(JobPosting.status)
+        ).all()
+        jobs_by_status = {row[0]: row[1] for row in status_stats}
+        
+        # Remote jobs
+        remote_jobs = db.session.scalar(
+            db.select(func.count(JobPosting.id))
+            .where(JobPosting.is_remote == True)
+        ) or 0
+        
+        # Unique companies
+        unique_companies = db.session.scalar(
+            db.select(func.count(func.distinct(JobPosting.company)))
+        ) or 0
+        
+        # Jobs today
+        jobs_today = db.session.scalar(
+            db.select(func.count(JobPosting.id))
+            .where(func.date(JobPosting.created_at) == today)
+        ) or 0
+        
+        # Jobs this week
+        jobs_this_week = db.session.scalar(
+            db.select(func.count(JobPosting.id))
+            .where(func.date(JobPosting.created_at) >= week_ago)
+        ) or 0
+        
+        return jsonify({
+            "total_jobs": total_jobs,
+            "jobs_by_platform": jobs_by_platform,
+            "jobs_by_status": jobs_by_status,
+            "remote_jobs": remote_jobs,
+            "unique_companies": unique_companies,
+            "jobs_today": jobs_today,
+            "jobs_this_week": jobs_this_week
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting job statistics: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
