@@ -223,9 +223,11 @@ class ResumeTailorOrchestrator:
                 db.session.commit()
                 return tailored_resume
             
-            # Iterative improvement
+            # Iterative improvement - track best version
             current_markdown = resume_markdown
             current_score = initial_score_decimal
+            best_markdown = resume_markdown
+            best_score = initial_score_decimal
             iterations_used = 0
             all_improvements = []
             
@@ -247,7 +249,7 @@ class ResumeTailorOrchestrator:
                     target_keywords=job_data.keywords.technical_keywords[:15]
                 )
                 
-                current_markdown = improved.content
+                candidate_markdown = improved.content
                 
                 # Build improvement records
                 for change in improved.summary_of_changes:
@@ -260,29 +262,42 @@ class ResumeTailorOrchestrator:
                 
                 # Recalculate score
                 new_score = self.scorer.quick_score(
-                    resume_text=current_markdown,
+                    resume_text=candidate_markdown,
                     job_description=job_posting.description or ""
                 ) / 100.0  # Convert to 0-1
                 
                 logger.info(f"Score after iteration {iteration}: {new_score:.2%}")
-                current_score = new_score
+                
+                # Only keep this version if it's better than our best
+                if new_score > best_score:
+                    best_score = new_score
+                    best_markdown = candidate_markdown
+                    current_markdown = candidate_markdown  # Use this as base for next iteration
+                    current_score = new_score
+                    logger.info(f"New best score: {best_score:.2%}")
+                else:
+                    logger.info(f"Score {new_score:.2%} not better than best {best_score:.2%}, keeping previous version")
                 
                 # Check if target reached
-                if new_score >= target_score_decimal:
+                if best_score >= target_score_decimal:
                     logger.info(f"Target score {target_score_decimal:.2%} reached!")
                     break
+            
+            # Use the best version we found
+            final_markdown = best_markdown
+            final_score = best_score
             
             # Identify added skills
             added_skills = self._identify_added_skills(
                 original_markdown=resume_markdown,
-                improved_markdown=current_markdown,
+                improved_markdown=final_markdown,
                 job_keywords=job_data.keywords.technical_keywords
             )
             tailored_resume.added_skills = added_skills
             
             # Extract keywords from tailored content
             tailored_resume.tailored_resume_keywords = self._extract_keywords_from_text(
-                current_markdown, 
+                final_markdown, 
                 job_data.keywords.technical_keywords
             )
             
@@ -291,9 +306,9 @@ class ResumeTailorOrchestrator:
             
             # Complete the tailoring
             tailored_resume.complete(
-                tailored_content=current_markdown,
+                tailored_content=final_markdown,
                 tailored_html=None,  # Could convert markdown to HTML here
-                tailored_score=current_score,
+                tailored_score=final_score,
                 improvements=all_improvements,
                 skill_comparison=skill_comparison,
                 iterations=iterations_used
@@ -301,7 +316,7 @@ class ResumeTailorOrchestrator:
             db.session.commit()
             
             logger.info(
-                f"Resume tailoring completed. Score: {initial_score_decimal:.2%} -> {current_score:.2%} "
+                f"Resume tailoring completed. Score: {initial_score_decimal:.2%} -> {final_score:.2%} "
                 f"in {iterations_used} iterations, {tailored_resume.processing_duration_seconds}s"
             )
             

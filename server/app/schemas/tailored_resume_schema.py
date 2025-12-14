@@ -32,7 +32,7 @@ class TailorResumeRequest(BaseModel):
         description="Target match score to achieve (50-100)"
     )
     max_iterations: Optional[int] = Field(
-        default=3,
+        default=1,
         ge=1,
         le=5,
         description="Maximum number of improvement iterations (1-5)"
@@ -55,7 +55,7 @@ class TailorResumeFromMatchRequest(BaseModel):
         description="Target match score to achieve (50-100)"
     )
     max_iterations: Optional[int] = Field(
-        default=3,
+        default=1,
         ge=1,
         le=5,
         description="Maximum number of improvement iterations (1-5)"
