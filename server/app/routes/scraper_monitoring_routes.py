@@ -11,6 +11,7 @@ from sqlalchemy import func, desc
 from app import db
 from app.models.scraper_api_key import ScraperApiKey
 from app.models.scrape_session import ScrapeSession
+from app.models.session_platform_status import SessionPlatformStatus
 from app.models.global_role import GlobalRole
 from app.models.job_posting import JobPosting
 from app.middleware import require_pm_admin
@@ -216,6 +217,84 @@ def get_recent_sessions():
         
     except Exception as e:
         logger.error(f"Error getting sessions: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/sessions/<session_id>', methods=['GET'])
+@require_pm_admin
+def get_session_details(session_id: str):
+    """
+    Get detailed session information including platform-level statuses.
+    
+    Path params:
+    - session_id: UUID of the session
+    
+    Returns detailed session info with all platform statuses and error messages.
+    """
+    try:
+        # Get session by UUID
+        session = db.session.scalar(
+            db.select(ScrapeSession).where(ScrapeSession.session_id == session_id)
+        )
+        
+        if not session:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Session with ID {session_id} not found"
+            }), 404
+        
+        # Get platform statuses for this session
+        platform_statuses = db.session.scalars(
+            db.select(SessionPlatformStatus)
+            .where(SessionPlatformStatus.session_id == session.id)
+            .order_by(SessionPlatformStatus.started_at.asc())
+        ).all()
+        
+        # Build platform details
+        platforms = []
+        for ps in platform_statuses:
+            platforms.append({
+                "id": ps.id,
+                "platform_name": ps.platform_name,
+                "status": ps.status,
+                "jobs_found": ps.jobs_found or 0,
+                "jobs_imported": ps.jobs_imported or 0,
+                "jobs_skipped": ps.jobs_skipped or 0,
+                "started_at": ps.started_at.isoformat() if ps.started_at else None,
+                "completed_at": ps.completed_at.isoformat() if ps.completed_at else None,
+                "duration_seconds": ps.duration_seconds,
+                "error_message": ps.error_message
+            })
+        
+        # Build session response
+        session_data = {
+            "id": session.id,
+            "session_id": str(session.session_id),
+            "scraper_name": session.scraper_name,
+            "scraper_key_id": session.scraper_key_id,
+            "role_id": session.global_role_id,
+            "role_name": session.role_name,
+            "status": session.status,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "duration_seconds": session.duration_seconds,
+            "jobs_found": session.jobs_found or 0,
+            "jobs_imported": session.jobs_imported or 0,
+            "jobs_skipped": session.jobs_skipped or 0,
+            "platforms_total": session.platforms_total or 0,
+            "platforms_completed": session.platforms_completed or 0,
+            "platforms_failed": session.platforms_failed or 0,
+            "error_message": session.error_message,
+            "platform_statuses": platforms
+        }
+        
+        return jsonify(session_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting session details: {e}")
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)

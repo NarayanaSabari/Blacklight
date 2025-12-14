@@ -23,7 +23,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { scraperMonitoringApi, type ScrapeSession } from "@/lib/dashboard-api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { scraperMonitoringApi, type ScrapeSession, type SessionPlatformStatus } from "@/lib/dashboard-api";
 import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   Activity, 
@@ -38,9 +46,11 @@ import {
   Layers,
   Timer,
   StopCircle,
-  RotateCcw
+  RotateCcw,
+  Eye,
+  AlertTriangle
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
 
 function SessionStatusBadge({ status }: { status: ScrapeSession['status'] }) {
@@ -53,6 +63,155 @@ function SessionStatusBadge({ status }: { status: ScrapeSession['status'] }) {
 
   const { variant, label, className } = variants[status] || { variant: "outline" as const, label: status, className: "" };
   return <Badge variant={variant} className={className}>{label}</Badge>;
+}
+
+function PlatformStatusBadge({ status }: { status: SessionPlatformStatus['status'] }) {
+  const variants: Record<SessionPlatformStatus['status'], { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className: string }> = {
+    pending: { variant: "outline", label: "Pending", className: "text-gray-500" },
+    in_progress: { variant: "default", label: "Running", className: "bg-blue-500" },
+    completed: { variant: "secondary", label: "Completed", className: "bg-green-100 text-green-800" },
+    failed: { variant: "destructive", label: "Failed", className: "" },
+    skipped: { variant: "outline", label: "Skipped", className: "text-yellow-600 border-yellow-500" },
+  };
+
+  const { variant, label, className } = variants[status] || { variant: "outline" as const, label: status, className: "" };
+  return <Badge variant={variant} className={className}>{label}</Badge>;
+}
+
+function SessionDetailsDialog({ session }: { session: ScrapeSession }) {
+  const [open, setOpen] = useState(false);
+  
+  const { data: sessionDetails, isLoading, error } = useQuery({
+    queryKey: ['session-details', session.sessionId],
+    queryFn: () => scraperMonitoringApi.getSessionDetails(session.sessionId),
+    enabled: open,
+  });
+  
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 gap-1.5">
+          <Eye className="h-3.5 w-3.5" />
+          <span className="text-xs">Details</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>Session Details</span>
+            <SessionStatusBadge status={session.status} />
+          </DialogTitle>
+          <DialogDescription>
+            {session.roleName} • {session.scraperKeyName}
+          </DialogDescription>
+        </DialogHeader>
+        
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="p-4 rounded bg-destructive/10 border border-destructive/20">
+            <p className="text-sm text-destructive">Failed to load session details</p>
+          </div>
+        ) : sessionDetails ? (
+          <div className="space-y-4">
+            {/* Session Summary */}
+            <div className="grid grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg bg-muted/50 text-center">
+                <p className="text-xs text-muted-foreground">Jobs Found</p>
+                <p className="text-lg font-semibold">{sessionDetails.jobsFound}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-green-50 text-center">
+                <p className="text-xs text-green-600">Imported</p>
+                <p className="text-lg font-semibold text-green-700">{sessionDetails.jobsImported}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-yellow-50 text-center">
+                <p className="text-xs text-yellow-600">Skipped</p>
+                <p className="text-lg font-semibold text-yellow-700">{sessionDetails.jobsSkipped}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50 text-center">
+                <p className="text-xs text-muted-foreground">Duration</p>
+                <p className="text-lg font-semibold">
+                  {sessionDetails.durationSeconds ? `${sessionDetails.durationSeconds}s` : '-'}
+                </p>
+              </div>
+            </div>
+            
+            {/* Session-level error */}
+            {sessionDetails.errorMessage && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-destructive">Session Error</p>
+                    <p className="text-sm text-destructive/80">{sessionDetails.errorMessage}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Platform Statuses */}
+            <div>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Platform Results ({sessionDetails.platformStatuses.length})
+              </h4>
+              <div className="space-y-2">
+                {sessionDetails.platformStatuses.map((platform) => (
+                  <div 
+                    key={platform.id} 
+                    className={`p-3 rounded-lg border ${
+                      platform.status === 'failed' 
+                        ? 'border-destructive/30 bg-destructive/5' 
+                        : platform.status === 'completed'
+                        ? 'border-green-200 bg-green-50/50'
+                        : 'border-muted'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{platform.platformName}</span>
+                        <PlatformStatusBadge status={platform.status} />
+                      </div>
+                      {platform.durationSeconds && (
+                        <span className="text-xs text-muted-foreground">
+                          {platform.durationSeconds}s
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Platform stats */}
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      <span>Found: {platform.jobsFound}</span>
+                      <span className="text-green-600">Imported: {platform.jobsImported}</span>
+                      <span className="text-yellow-600">Skipped: {platform.jobsSkipped}</span>
+                    </div>
+                    
+                    {/* Platform error */}
+                    {platform.status === 'failed' && platform.errorMessage && (
+                      <div className="mt-2 p-2 rounded bg-destructive/10">
+                        <p className="text-xs text-destructive font-medium">Error:</p>
+                        <p className="text-xs text-destructive/80 break-words">{platform.errorMessage}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Timestamps */}
+            <div className="pt-3 border-t text-xs text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Started: {sessionDetails.startedAt ? format(new Date(sessionDetails.startedAt), 'PPpp') : '-'}</span>
+                <span>Completed: {sessionDetails.completedAt ? format(new Date(sessionDetails.completedAt), 'PPpp') : '-'}</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function SessionCard({ session, onTerminate, isTerminating }: { 
@@ -189,16 +348,19 @@ function SessionCard({ session, onTerminate, isTerminating }: {
 
       {/* Platforms Progress */}
       {session.platformsTotal > 0 && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Layers className="h-3 w-3" />
-          <span>
-            Platforms: {session.platformsCompleted}/{session.platformsTotal} completed
-            {session.platformsFailed > 0 && (
-              <span className="text-destructive ml-1">
-                ({session.platformsFailed} failed)
-              </span>
-            )}
-          </span>
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Layers className="h-3 w-3" />
+            <span>
+              Platforms: {session.platformsCompleted}/{session.platformsTotal} completed
+              {session.platformsFailed > 0 && (
+                <span className="text-destructive ml-1">
+                  ({session.platformsFailed} failed)
+                </span>
+              )}
+            </span>
+          </div>
+          <SessionDetailsDialog session={session} />
         </div>
       )}
 

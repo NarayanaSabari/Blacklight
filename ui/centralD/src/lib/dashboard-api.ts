@@ -37,6 +37,24 @@ export interface ScrapeSession {
   durationSeconds: number | null;
 }
 
+export interface SessionDetails extends ScrapeSession {
+  platformStatuses: SessionPlatformStatus[];
+}
+
+// Platform status for session details (includes id)
+export interface SessionPlatformStatus {
+  id: number;
+  platformName: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+  jobsFound: number;
+  jobsImported: number;
+  jobsSkipped: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationSeconds: number | null;
+  errorMessage: string | null;
+}
+
 export interface GlobalRole {
   id: number;
   name: string;
@@ -290,6 +308,35 @@ export const scraperMonitoringApi = {
       roleName: response.data.role_name,
       roleReturnedToQueue: response.data.role_returned_to_queue,
       message: response.data.message,
+    };
+  },
+
+  /**
+   * Get detailed session information including platform statuses
+   */
+  getSessionDetails: async (sessionId: string): Promise<SessionDetails> => {
+    const response = await apiClient.get(`/api/scraper-monitoring/sessions/${sessionId}`);
+    const data = response.data;
+    
+    // Map platform statuses
+    const platformStatuses: SessionPlatformStatus[] = (data.platform_statuses || []).map(
+      (ps: Record<string, unknown>) => ({
+        id: ps.id as number,
+        platformName: ps.platform_name as string,
+        status: ps.status as SessionPlatformStatus['status'],
+        jobsFound: (ps.jobs_found ?? 0) as number,
+        jobsImported: (ps.jobs_imported ?? 0) as number,
+        jobsSkipped: (ps.jobs_skipped ?? 0) as number,
+        startedAt: ps.started_at as string | null,
+        completedAt: ps.completed_at as string | null,
+        durationSeconds: ps.duration_seconds as number | null,
+        errorMessage: ps.error_message as string | null,
+      })
+    );
+    
+    return {
+      ...mapSession(data),
+      platformStatuses,
     };
   },
 };
