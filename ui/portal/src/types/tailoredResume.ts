@@ -117,18 +117,6 @@ export interface CompareResponse {
 }
 
 /**
- * SSE streaming event data
- */
-export interface TailorStreamEvent {
-  type: 'progress' | 'step' | 'complete' | 'error';
-  step?: string;
-  progress?: number;
-  message?: string;
-  result?: TailoredResume;
-  error?: string;
-}
-
-/**
  * UI state interfaces
  */
 export interface TailorDialogState {

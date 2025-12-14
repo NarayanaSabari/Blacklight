@@ -1,6 +1,7 @@
 /**
  * TailorDialog Component
  * Dialog to initiate resume tailoring for a job match
+ * Uses simple REST API (no streaming)
  */
 
 import { useState, useCallback } from 'react';
@@ -11,6 +12,7 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 import {
@@ -22,12 +24,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
-import type { TailoredResume, TailorStreamEvent } from '@/types/tailoredResume';
+import type { TailoredResume } from '@/types/tailoredResume';
 
 interface TailorDialogProps {
   open: boolean;
@@ -43,15 +44,6 @@ interface TailorDialogProps {
 
 type TailorPhase = 'confirm' | 'processing' | 'complete' | 'error';
 
-const STEP_LABELS: Record<string, string> = {
-  extracting_keywords: 'Analyzing job requirements...',
-  scoring_original: 'Evaluating current resume...',
-  generating_improvements: 'AI generating improvements...',
-  applying_improvements: 'Applying enhancements...',
-  scoring_tailored: 'Calculating new match score...',
-  saving: 'Saving tailored resume...',
-};
-
 export function TailorDialog({
   open,
   onOpenChange,
@@ -66,13 +58,10 @@ export function TailorDialog({
   const queryClient = useQueryClient();
   
   const [phase, setPhase] = useState<TailorPhase>('confirm');
-  const [progress, setProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TailoredResume | null>(null);
-  const [cleanupFn, setCleanupFn] = useState<(() => void) | null>(null);
 
-  // Non-streaming mutation (fallback)
+  // Simple REST API mutation
   const tailorMutation = useMutation({
     mutationFn: async () => {
       if (jobMatchId) {
@@ -83,7 +72,9 @@ export function TailorDialog({
       throw new Error('Either jobMatchId or jobPostingId is required');
     },
     onSuccess: (data) => {
-      setResult(data.tailored_resume);
+      // The API returns the tailored resume directly (not wrapped)
+      const tailoredResume = data as unknown as TailoredResume;
+      setResult(tailoredResume);
       setPhase('complete');
       queryClient.invalidateQueries({ queryKey: ['candidateMatches', candidateId] });
       queryClient.invalidateQueries({ queryKey: ['tailoredResumes', candidateId] });
@@ -94,69 +85,18 @@ export function TailorDialog({
     },
   });
 
-  const handleStreamProgress = useCallback((event: TailorStreamEvent) => {
-    if (event.progress !== undefined) {
-      setProgress(event.progress);
-    }
-    if (event.step) {
-      setCurrentStep(STEP_LABELS[event.step] || event.step);
-    }
-  }, []);
-
-  const handleStreamComplete = useCallback((tailoredResume: TailoredResume) => {
-    setResult(tailoredResume);
-    setPhase('complete');
-    setProgress(100);
-    queryClient.invalidateQueries({ queryKey: ['candidateMatches', candidateId] });
-    queryClient.invalidateQueries({ queryKey: ['tailoredResumes', candidateId] });
-    onComplete?.(tailoredResume);
-  }, [candidateId, queryClient, onComplete]);
-
-  const handleStreamError = useCallback((errorMsg: string) => {
-    setError(errorMsg);
-    setPhase('error');
-  }, []);
-
   const startTailoring = useCallback(() => {
     setPhase('processing');
-    setProgress(0);
-    setCurrentStep('Initializing...');
     setError(null);
-
-    if (jobPostingId) {
-      // Use streaming for better UX
-      const cleanup = resumeTailorApi.tailorWithStreaming(
-        candidateId,
-        jobPostingId,
-        handleStreamProgress,
-        handleStreamComplete,
-        handleStreamError
-      );
-      setCleanupFn(() => cleanup);
-    } else {
-      // Fallback to non-streaming for match-based tailoring
-      tailorMutation.mutate();
-    }
-  }, [
-    candidateId,
-    jobPostingId,
-    handleStreamProgress,
-    handleStreamComplete,
-    handleStreamError,
-    tailorMutation,
-  ]);
+    tailorMutation.mutate();
+  }, [tailorMutation]);
 
   const handleClose = useCallback(() => {
-    if (cleanupFn) {
-      cleanupFn();
-    }
     setPhase('confirm');
-    setProgress(0);
-    setCurrentStep('');
     setError(null);
     setResult(null);
     onOpenChange(false);
-  }, [cleanupFn, onOpenChange]);
+  }, [onOpenChange]);
 
   const handleViewResult = useCallback(() => {
     if (result) {
@@ -228,7 +168,7 @@ export function TailorDialog({
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                <Loader2 className="h-5 w-5 text-primary animate-spin" />
                 Tailoring Resume
               </DialogTitle>
               <DialogDescription>
@@ -237,16 +177,13 @@ export function TailorDialog({
             </DialogHeader>
 
             <div className="space-y-6 py-6">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{currentStep}</span>
-                  <span className="font-medium">{Math.round(progress)}%</span>
-                </div>
-                <Progress value={progress} className="h-2" />
-              </div>
-
-              <div className="text-center text-sm text-muted-foreground">
-                <p>This typically takes 15-30 seconds</p>
+              <div className="flex flex-col items-center justify-center gap-4">
+                <Loader2 className="h-12 w-12 text-primary animate-spin" />
+                <p className="text-sm text-muted-foreground text-center">
+                  Analyzing job requirements and optimizing resume...
+                  <br />
+                  This typically takes 15-30 seconds
+                </p>
               </div>
             </div>
           </>
