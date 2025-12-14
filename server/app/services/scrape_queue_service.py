@@ -176,7 +176,27 @@ class ScrapeQueueService:
         
         Returns:
             Dict with session_id, role details, and platforms list, or None if queue empty
+        
+        Raises:
+            ValueError: If scraper already has an active session
         """
+        # Check if this API key already has an active session
+        active_session = ScrapeSession.query.filter(
+            ScrapeSession.scraper_key_id == scraper_key.id,
+            ScrapeSession.status == "in_progress"
+        ).first()
+        
+        if active_session:
+            logger.warning(
+                f"Scraper '{scraper_key.name}' (key_id={scraper_key.id}) already has an active session: "
+                f"{active_session.session_id} for role '{active_session.role_name}'"
+            )
+            raise ValueError(
+                f"Scraper already has an active session ({active_session.session_id}) "
+                f"for role '{active_session.role_name}'. "
+                f"Complete or terminate the current session before requesting a new role."
+            )
+        
         # Find approved roles ready for scraping, prioritized by priority + candidate_count
         role = GlobalRole.query.filter(
             GlobalRole.queue_status == "approved"

@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from uuid import UUID
 import inngest
+from sqlalchemy import or_
 
 from app import db
 from app.models.scrape_session import ScrapeSession
@@ -269,6 +270,15 @@ def import_jobs_batch_for_platform(
         f"for role '{session_data['role_name']}'"
     )
     
+    # Track skip reasons for debugging
+    skip_reasons = {
+        "missing_required": 0,
+        "duplicate_platform_id": 0,
+        "duplicate_title_company_location": 0,
+        "duplicate_title_company_description": 0,
+        "error": 0
+    }
+    
     for idx, job_data in enumerate(jobs_data):
         try:
             # Map your schema field names to our internal names
@@ -284,6 +294,7 @@ def import_jobs_batch_for_platform(
             if not title or not company:
                 logger.warning(f"[JOB-IMPORT] Skipping job {idx+1}: Missing title or company")
                 skipped_count += 1
+                skip_reasons["missing_required"] += 1
                 continue
             
             # =================================================================
@@ -301,29 +312,49 @@ def import_jobs_batch_for_platform(
                 ).first()
                 
                 if existing:
-                    logger.debug(f"[JOB-IMPORT] Skipping duplicate (same platform+id): {external_id}")
+                    logger.info(f"[JOB-IMPORT] Skipping duplicate (platform+id): platform={platform}, id={external_id}")
                     skipped_count += 1
+                    skip_reasons["duplicate_platform_id"] += 1
                     continue
             
             # Check 2: Duplicate by title + company + location (case-insensitive)
             # This catches the same job posted on different platforms
-            existing_by_content = JobPosting.query.filter(
+            # Build query filters dynamically to handle empty location correctly
+            content_filters = [
                 db.func.lower(JobPosting.title) == title.lower().strip(),
                 db.func.lower(JobPosting.company) == company.lower().strip(),
-                db.func.lower(JobPosting.location) == location.lower().strip() if location else True
-            ).first()
+            ]
+            
+            # Only add location filter if we have a location to compare
+            if location and location.strip():
+                content_filters.append(
+                    db.func.lower(JobPosting.location) == location.lower().strip()
+                )
+            else:
+                # If no location provided, only match jobs that also have no location
+                content_filters.append(
+                    or_(
+                        JobPosting.location.is_(None),
+                        JobPosting.location == "",
+                        db.func.trim(JobPosting.location) == ""
+                    )
+                )
+            
+            existing_by_content = JobPosting.query.filter(*content_filters).first()
             
             if existing_by_content:
-                logger.debug(
-                    f"[JOB-IMPORT] Skipping duplicate (same title+company+location): "
-                    f"'{title}' at '{company}'"
+                logger.info(
+                    f"[JOB-IMPORT] Skipping duplicate (title+company+location): "
+                    f"'{title}' at '{company}' in '{location}' (existing job id={existing_by_content.id})"
                 )
                 skipped_count += 1
+                skip_reasons["duplicate_title_company_location"] += 1
                 continue
             
-            # Check 3: Similar job by title + company (even if location differs)
-            # Use first 100 chars of description for comparison
-            if description:
+            # Check 3: Similar job by title + company + description prefix
+            # Only skip if description start is identical (same job posting text)
+            # This catches exact reposts but allows different jobs at same company
+            if description and len(description) >= 100:
                 desc_prefix = description[:100].lower().strip()
                 existing_similar = JobPosting.query.filter(
                     db.func.lower(JobPosting.title) == title.lower().strip(),
@@ -332,11 +363,12 @@ def import_jobs_batch_for_platform(
                 ).first()
                 
                 if existing_similar:
-                    logger.debug(
-                        f"[JOB-IMPORT] Skipping duplicate (same title+company+description): "
-                        f"'{title}' at '{company}'"
+                    logger.info(
+                        f"[JOB-IMPORT] Skipping duplicate (title+company+description): "
+                        f"'{title}' at '{company}' (existing job id={existing_similar.id})"
                     )
                     skipped_count += 1
+                    skip_reasons["duplicate_title_company_description"] += 1
                     continue
             
             # Parse salary
@@ -423,18 +455,30 @@ def import_jobs_batch_for_platform(
         except Exception as e:
             logger.error(f"[JOB-IMPORT] Failed to import job {idx+1}: {e}")
             skipped_count += 1
+            skip_reasons["error"] += 1
     
     db.session.commit()
     
+    # Log detailed skip reasons summary
     logger.info(
         f"[JOB-IMPORT] {platform_name} batch complete: {imported_count} imported, "
         f"{skipped_count} skipped"
     )
+    if skipped_count > 0:
+        logger.info(
+            f"[JOB-IMPORT] Skip breakdown for {platform_name}: "
+            f"platform_id_dup={skip_reasons['duplicate_platform_id']}, "
+            f"title_company_location_dup={skip_reasons['duplicate_title_company_location']}, "
+            f"title_company_desc_dup={skip_reasons['duplicate_title_company_description']}, "
+            f"missing_required={skip_reasons['missing_required']}, "
+            f"errors={skip_reasons['error']}"
+        )
     
     return {
         "imported": imported_count,
         "skipped": skipped_count,
-        "job_ids": job_ids
+        "job_ids": job_ids,
+        "skip_reasons": skip_reasons
     }
 
 

@@ -23,6 +23,7 @@ This document provides complete API specifications for integrating your job scra
    - [Complete Session](#4-complete-session)
    - [Report Session Failure](#5-report-session-failure)
    - [Get Queue Stats](#6-get-queue-stats)
+   - [Get Current Session](#7-get-current-session)
 5. [Admin Endpoints](#admin-endpoints)
    - [Terminate Session](#terminate-session)
 6. [Job Object Schema](#job-object-schema)
@@ -163,6 +164,8 @@ Fetch the next role from the scraping queue with the list of platforms to scrape
 
 **Authentication:** Required
 
+> ⚠️ **Important:** A scraper can only have ONE active session at a time. Complete or terminate the current session before requesting a new role.
+
 #### Success Response (200 OK)
 
 ```json
@@ -189,6 +192,20 @@ Fetch the next role from the scraping queue with the list of platforms to scrape
 #### Empty Queue Response (204 No Content)
 
 Returns empty response with status 204 when no roles are available to scrape.
+
+#### Active Session Conflict (409 Conflict)
+
+If the scraper already has an active session, it will receive a 409 error:
+
+```json
+{
+  "error": "Conflict",
+  "message": "Scraper already has an active session (550e8400-...) for role 'Python Developer'. Complete or terminate the current session before requesting a new role.",
+  "code": "ACTIVE_SESSION_EXISTS"
+}
+```
+
+**Solution:** Complete the current session with `POST /queue/complete` or check status with `GET /queue/current-session`.
 
 #### Response Fields
 
@@ -399,6 +416,65 @@ Get current queue statistics (useful for monitoring).
   "queue_depth": 50
 }
 ```
+
+---
+
+### 7. Get Current Session
+
+Check if the scraper has an active session. Useful for resuming interrupted work or debugging 409 conflicts.
+
+**Endpoint:** `GET /queue/current-session`
+
+**Authentication:** Required
+
+#### Active Session Response (200 OK)
+
+```json
+{
+  "has_active_session": true,
+  "session": {
+    "session_id": "550e8400-e29b-41d4-a716-446655440000",
+    "role_id": 42,
+    "role_name": "Python Developer",
+    "status": "in_progress",
+    "started_at": "2024-01-15T10:30:00Z",
+    "platforms_total": 6,
+    "platforms_completed": 2,
+    "platforms_failed": 0,
+    "jobs_found": 45
+  }
+}
+```
+
+#### No Active Session Response (200 OK)
+
+```json
+{
+  "has_active_session": false,
+  "session": null
+}
+```
+
+#### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `has_active_session` | boolean | Whether the scraper has an active session |
+| `session.session_id` | UUID | Current session identifier |
+| `session.role_id` | integer | Global role ID being scraped |
+| `session.role_name` | string | Role name being scraped |
+| `session.status` | string | Session status (`in_progress`) |
+| `session.started_at` | ISO 8601 | When the session started |
+| `session.platforms_total` | integer | Total number of platforms to scrape |
+| `session.platforms_completed` | integer | Platforms that have submitted jobs |
+| `session.platforms_failed` | integer | Platforms that reported failure |
+| `session.jobs_found` | integer | Total jobs found so far |
+
+#### Use Cases
+
+1. **Resume after crash**: Check for existing session before requesting new role
+2. **Debug 409 errors**: Understand which session is blocking new role requests
+3. **Status monitoring**: Track progress of current scraping operation
 
 ---
 

@@ -72,7 +72,10 @@ def get_next_role():
     """
     Get next role from the scrape queue with platform checklist.
     
-    Response:
+    Note: A scraper can only have ONE active session at a time.
+    Complete or terminate the current session before requesting a new role.
+    
+    Response (200 OK):
     {
         "session_id": "uuid",
         "role": {
@@ -90,6 +93,7 @@ def get_next_role():
     }
     
     Returns 204 No Content if queue is empty.
+    Returns 409 Conflict if scraper already has an active session.
     """
     try:
         result = ScrapeQueueService.get_next_role_with_platforms(g.scraper_key)
@@ -98,9 +102,88 @@ def get_next_role():
             return '', 204  # No content - queue empty
         
         return jsonify(result), 200
+    
+    except ValueError as e:
+        # Scraper already has an active session
+        logger.warning(f"Scraper blocked from getting new role: {e}")
+        return jsonify({
+            "error": "Conflict",
+            "message": str(e),
+            "code": "ACTIVE_SESSION_EXISTS"
+        }), 409
         
     except Exception as e:
         logger.error(f"Error getting next role: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_bp.route('/queue/current-session', methods=['GET'])
+@require_scraper_auth
+def get_current_session():
+    """
+    Get the current active session for this scraper (if any).
+    
+    Useful for:
+    - Checking if there's an active session before requesting a new role
+    - Resuming work after a scraper restart
+    - Debugging session issues
+    
+    Response (200 OK) - Has active session:
+    {
+        "has_active_session": true,
+        "session": {
+            "session_id": "uuid",
+            "role_name": "Python Developer",
+            "role_id": 42,
+            "status": "in_progress",
+            "started_at": "2025-12-14T10:00:00Z",
+            "platforms_total": 6,
+            "platforms_completed": 2,
+            "platforms_failed": 0
+        }
+    }
+    
+    Response (200 OK) - No active session:
+    {
+        "has_active_session": false,
+        "session": null
+    }
+    """
+    try:
+        from app.models.scrape_session import ScrapeSession
+        
+        active_session = ScrapeSession.query.filter(
+            ScrapeSession.scraper_key_id == g.scraper_key.id,
+            ScrapeSession.status == "in_progress"
+        ).first()
+        
+        if not active_session:
+            return jsonify({
+                "has_active_session": False,
+                "session": None
+            }), 200
+        
+        return jsonify({
+            "has_active_session": True,
+            "session": {
+                "session_id": str(active_session.session_id),
+                "role_name": active_session.role_name,
+                "role_id": active_session.global_role_id,
+                "status": active_session.status,
+                "started_at": active_session.started_at.isoformat() if active_session.started_at else None,
+                "platforms_total": active_session.platforms_total or 0,
+                "platforms_completed": active_session.platforms_completed or 0,
+                "platforms_failed": active_session.platforms_failed or 0,
+                "jobs_found": active_session.jobs_found or 0,
+                "jobs_imported": active_session.jobs_imported or 0
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting current session: {e}")
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
