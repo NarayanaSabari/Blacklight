@@ -701,7 +701,24 @@ class ResumeTailorOrchestrator:
     def _get_resume_markdown(self, candidate: Candidate) -> str:
         """Get resume as markdown format."""
         if candidate.parsed_resume_data:
-            return self.improver.convert_to_markdown(candidate.parsed_resume_data)
+            # Ensure candidate contact info is in parsed data
+            parsed_data = dict(candidate.parsed_resume_data)
+            if 'personal_info' not in parsed_data:
+                parsed_data['personal_info'] = {}
+            
+            # Override with actual candidate data to ensure it's accurate
+            personal_info = parsed_data['personal_info']
+            personal_info['full_name'] = f"{candidate.first_name or ''} {candidate.last_name or ''}".strip() or personal_info.get('full_name', 'Candidate')
+            if candidate.email:
+                personal_info['email'] = candidate.email
+            if candidate.phone:
+                personal_info['phone'] = candidate.phone
+            if candidate.location:
+                personal_info['location'] = candidate.location
+            if candidate.linkedin_url:
+                personal_info['linkedin_url'] = candidate.linkedin_url
+            
+            return self.improver.convert_to_markdown(parsed_data)
         
         # Build basic markdown from candidate data
         md_parts = []
@@ -717,6 +734,8 @@ class ResumeTailorOrchestrator:
             contact.append(candidate.phone)
         if candidate.location:
             contact.append(candidate.location)
+        if candidate.linkedin_url:
+            contact.append(candidate.linkedin_url)
         if contact:
             md_parts.append(" | ".join(contact) + "\n")
         
@@ -737,6 +756,19 @@ class ResumeTailorOrchestrator:
                     md_parts.append(f"\n### {title} | {company}\n")
                     if exp.get('description'):
                         md_parts.append(f"{exp['description']}\n")
+        
+        if candidate.education:
+            md_parts.append("\n## Education\n")
+            for edu in candidate.education:
+                if isinstance(edu, dict):
+                    degree = edu.get('degree', 'Degree')
+                    institution = edu.get('institution', 'Institution')
+                    year = edu.get('graduation_year', '')
+                    md_parts.append(f"### {degree}\n")
+                    md_parts.append(f"*{institution}*")
+                    if year:
+                        md_parts.append(f" | {year}")
+                    md_parts.append("\n")
         
         return "".join(md_parts)
     

@@ -82,7 +82,13 @@ Your task is to improve resumes to better match specific job descriptions while 
    - Do NOT exaggerate responsibilities or achievements
    - Only work with information present in the original resume
 
-2. IMPROVEMENT STRATEGIES:
+2. PRESERVE CONTACT INFORMATION:
+   - ALWAYS keep the candidate's name as the main header (# Name)
+   - ALWAYS preserve email, phone, location, and LinkedIn URL exactly as provided
+   - The header/contact section must remain at the TOP of the resume
+   - Never modify or omit contact details
+
+3. IMPROVEMENT STRATEGIES:
    - Highlight existing relevant skills more prominently
    - Reword experience to use job description keywords (where truthful)
    - Reorder skills to prioritize those matching the job
@@ -90,14 +96,15 @@ Your task is to improve resumes to better match specific job descriptions while 
    - Quantify achievements where possible from context clues
    - Remove irrelevant information to focus on job-relevant content
 
-3. ATS OPTIMIZATION:
+4. ATS OPTIMIZATION:
    - Use standard section headers (Summary, Experience, Skills, Education)
    - Include exact keywords from job description (where applicable)
    - Avoid graphics, tables, or complex formatting
    - Use common job title variations if applicable
 
-4. FORMAT:
+5. FORMAT:
    - Output in clean Markdown format
+   - Start with candidate name as H1 header, followed by contact info
    - Use bullet points for experience items
    - Keep formatting simple and parseable
 
@@ -452,20 +459,22 @@ ORIGINAL RESUME:
 {original_resume[:6000]}
 
 IMPROVEMENT INSTRUCTIONS:
-1. Rewrite the professional summary to target this specific role
-2. Reorder skills to prioritize job-relevant skills first
-3. Enhance experience bullet points with stronger action verbs
-4. Integrate job keywords where they fit naturally and truthfully
-5. Quantify achievements where context allows
-6. Remove or de-emphasize irrelevant information
-7. Ensure ATS-friendly formatting (standard sections, no tables)
+1. PRESERVE THE HEADER SECTION EXACTLY - Keep the candidate's name, email, phone, location, and LinkedIn as-is
+2. Rewrite the professional summary to target this specific role
+3. Reorder skills to prioritize job-relevant skills first
+4. Enhance experience bullet points with stronger action verbs
+5. Integrate job keywords where they fit naturally and truthfully
+6. Quantify achievements where context allows
+7. Remove or de-emphasize irrelevant information
+8. Ensure ATS-friendly formatting (standard sections, no tables)
 
 CRITICAL: 
+- The header with contact information (name, email, phone, location) MUST remain at the top
 - Preserve ALL factual information
 - Do NOT add skills, experiences, or qualifications not in the original
-- Output in clean Markdown format
+- Output in clean Markdown format with the header first
 
-Return the complete improved resume in the 'content' field, along with a summary_of_changes list and preserved_facts list."""
+Return the complete improved resume in the 'content' field (starting with the candidate's name and contact info), along with a summary_of_changes list and preserved_facts list."""
     
     def convert_to_markdown(self, parsed_resume_data: Dict[str, Any]) -> str:
         """

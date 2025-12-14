@@ -509,7 +509,7 @@ def export_tailored_resume(tailor_id: str):
         elif format_enum == ExportFormat.PDF:
             # Convert markdown to PDF using weasyprint
             try:
-                from weasyprint import HTML
+                from weasyprint import HTML, CSS
                 import markdown
                 
                 # Convert markdown to HTML
@@ -518,51 +518,65 @@ def export_tailored_resume(tailor_id: str):
                     extensions=['tables', 'fenced_code']
                 )
                 
-                # Wrap with basic styling
+                # Wrap with basic styling - 1 inch margins on all sides
                 styled_html = f"""
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset="utf-8">
                     <style>
+                        @page {{
+                            size: letter;
+                            margin: 1in;
+                        }}
                         body {{
                             font-family: 'Helvetica Neue', Arial, sans-serif;
                             font-size: 11pt;
-                            line-height: 1.5;
-                            max-width: 800px;
-                            margin: 40px auto;
-                            padding: 0 20px;
+                            line-height: 1.4;
                             color: #333;
+                            margin: 0;
+                            padding: 0;
                         }}
                         h1 {{
-                            font-size: 24pt;
+                            font-size: 22pt;
                             margin-bottom: 5px;
+                            margin-top: 0;
                             color: #1a1a1a;
+                        }}
+                        h1 + p {{
+                            margin-top: 5px;
+                            color: #555;
                         }}
                         h2 {{
-                            font-size: 14pt;
-                            border-bottom: 2px solid #2563eb;
-                            padding-bottom: 5px;
-                            margin-top: 20px;
+                            font-size: 13pt;
+                            border-bottom: 1.5px solid #2563eb;
+                            padding-bottom: 4px;
+                            margin-top: 18px;
+                            margin-bottom: 8px;
                             color: #1a1a1a;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
                         }}
                         h3 {{
-                            font-size: 12pt;
-                            margin-bottom: 3px;
+                            font-size: 11pt;
+                            margin-bottom: 2px;
+                            margin-top: 12px;
                             color: #333;
+                            font-weight: 600;
                         }}
                         ul {{
                             margin: 5px 0;
-                            padding-left: 20px;
+                            padding-left: 18px;
                         }}
                         li {{
                             margin-bottom: 3px;
                         }}
                         p {{
-                            margin: 5px 0;
+                            margin: 4px 0;
                         }}
                         em {{
-                            color: #666;
+                            color: #555;
+                            font-style: italic;
                         }}
                     </style>
                 </head>
@@ -597,13 +611,22 @@ def export_tailored_resume(tailor_id: str):
             try:
                 from docx import Document
                 from docx.shared import Pt, Inches
+                from docx.enum.text import WD_ALIGN_PARAGRAPH
                 from io import BytesIO
                 import re
                 
                 doc = Document()
                 
+                # Set 1-inch margins on all sides
+                for section in doc.sections:
+                    section.top_margin = Inches(1)
+                    section.bottom_margin = Inches(1)
+                    section.left_margin = Inches(1)
+                    section.right_margin = Inches(1)
+                
                 # Process markdown content
                 lines = tailored_resume.tailored_resume_content.split('\n')
+                is_first_line = True
                 
                 for line in lines:
                     line = line.strip()
@@ -613,13 +636,25 @@ def export_tailored_resume(tailor_id: str):
                     # Headers
                     if line.startswith('# '):
                         p = doc.add_heading(line[2:], level=1)
+                        # Style the main name header
+                        if is_first_line:
+                            for run in p.runs:
+                                run.font.size = Pt(22)
+                                run.font.bold = True
+                        is_first_line = False
                     elif line.startswith('## '):
-                        doc.add_heading(line[3:], level=2)
+                        p = doc.add_heading(line[3:], level=2)
+                        for run in p.runs:
+                            run.font.size = Pt(13)
                     elif line.startswith('### '):
-                        doc.add_heading(line[4:], level=3)
+                        p = doc.add_heading(line[4:], level=3)
+                        for run in p.runs:
+                            run.font.size = Pt(11)
                     # Bullet points
                     elif line.startswith('- ') or line.startswith('* '):
-                        doc.add_paragraph(line[2:], style='List Bullet')
+                        p = doc.add_paragraph(line[2:], style='List Bullet')
+                        for run in p.runs:
+                            run.font.size = Pt(11)
                     # Regular paragraphs
                     else:
                         # Handle italic (dates)
@@ -627,8 +662,18 @@ def export_tailored_resume(tailor_id: str):
                             p = doc.add_paragraph()
                             run = p.add_run(line.strip('*'))
                             run.italic = True
+                            run.font.size = Pt(10)
+                        # Contact info line (pipe separated)
+                        elif ' | ' in line and is_first_line == False and not line.startswith('#'):
+                            p = doc.add_paragraph(line)
+                            for run in p.runs:
+                                run.font.size = Pt(10)
                         else:
-                            doc.add_paragraph(line)
+                            p = doc.add_paragraph(line)
+                            for run in p.runs:
+                                run.font.size = Pt(11)
+                    
+                    is_first_line = False
                 
                 # Save to bytes
                 docx_buffer = BytesIO()
