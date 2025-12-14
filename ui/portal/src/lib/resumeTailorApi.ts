@@ -3,7 +3,9 @@
  * Handles all API calls for the resume tailoring feature
  */
 
-import { apiRequest } from './api-client';
+import axios from 'axios';
+import { apiRequest, tokenManager } from './api-client';
+import { env } from './env';
 import type {
   TailoredResume,
   TailorResumeResponse,
@@ -18,6 +20,25 @@ const BASE_URL = '/api/resume-tailor';
 // Extended timeout for AI operations (3 minutes)
 const AI_TIMEOUT = 180000;
 
+// Create a dedicated axios instance for long-running AI operations
+// This ensures the timeout is definitely applied
+const aiClient = axios.create({
+  baseURL: env.apiBaseUrl,
+  timeout: AI_TIMEOUT,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add auth token to AI client requests
+aiClient.interceptors.request.use((config) => {
+  const token = tokenManager.getAccessToken();
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const resumeTailorApi = {
   /**
    * Tailor a resume for a specific job posting
@@ -26,14 +47,14 @@ export const resumeTailorApi = {
     candidateId: number,
     jobPostingId: number
   ): Promise<TailorResumeResponse> => {
-    return apiRequest.post<TailorResumeResponse>(
+    const response = await aiClient.post<TailorResumeResponse>(
       `${BASE_URL}/tailor`,
       {
         candidate_id: candidateId,
         job_posting_id: jobPostingId,
-      },
-      { timeout: AI_TIMEOUT }
+      }
     );
+    return response.data;
   },
 
   /**
@@ -42,11 +63,11 @@ export const resumeTailorApi = {
   tailorFromMatch: async (
     matchId: number
   ): Promise<TailorResumeResponse> => {
-    return apiRequest.post<TailorResumeResponse>(
+    const response = await aiClient.post<TailorResumeResponse>(
       `${BASE_URL}/tailor-from-match`,
-      { match_id: matchId },
-      { timeout: AI_TIMEOUT }
+      { match_id: matchId }
     );
+    return response.data;
   },
 
   /**
