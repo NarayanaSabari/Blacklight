@@ -171,7 +171,6 @@ export type {
   TailoredResumeListResponse,
   TailorStatsResponse,
   CompareResponse,
-  TailorStreamEvent,
   TailorDialogState,
   TailorProgressState,
 } from './tailoredResume';
