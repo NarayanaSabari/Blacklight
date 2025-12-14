@@ -65,7 +65,7 @@ export function TailorDialog({
   const tailorMutation = useMutation({
     mutationFn: async () => {
       if (jobMatchId) {
-        return resumeTailorApi.tailorFromMatch(candidateId, jobMatchId);
+        return resumeTailorApi.tailorFromMatch(jobMatchId);
       } else if (jobPostingId) {
         return resumeTailorApi.tailorResume(candidateId, jobPostingId);
       }

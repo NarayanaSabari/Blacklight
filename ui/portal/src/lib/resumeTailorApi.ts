@@ -33,12 +33,10 @@ export const resumeTailorApi = {
    * Tailor a resume based on an existing job match
    */
   tailorFromMatch: async (
-    candidateId: number,
-    jobMatchId: number
+    matchId: number
   ): Promise<TailorResumeResponse> => {
     return apiRequest.post<TailorResumeResponse>(`${BASE_URL}/tailor-from-match`, {
-      candidate_id: candidateId,
-      job_match_id: jobMatchId,
+      match_id: matchId,
     });
   },
 
