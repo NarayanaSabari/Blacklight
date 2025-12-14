@@ -128,7 +128,7 @@ function SessionCard({ session, onTerminate, isTerminating }: {
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={() => onTerminate(session.id)}
+                    onClick={() => onTerminate(session.sessionId)}
                     className="bg-orange-600 hover:bg-orange-700"
                   >
                     Terminate & Requeue
@@ -313,7 +313,7 @@ function ActiveSessionsList() {
           key={session.id} 
           session={session} 
           onTerminate={handleTerminate}
-          isTerminating={terminatingSessionId === session.id}
+          isTerminating={terminatingSessionId === session.sessionId}
         />
       ))}
     </div>

@@ -18,7 +18,8 @@ export interface DashboardStats {
 }
 
 export interface ScrapeSession {
-  id: string;
+  id: number;
+  sessionId: string;  // UUID - use this for API calls
   scraperKeyId: number;
   scraperKeyName: string;
   globalRoleId: number;
@@ -271,14 +272,6 @@ export const scraperMonitoringApi = {
   },
 
   /**
-   * Get session by ID
-   */
-  getSession: async (sessionId: string): Promise<ScrapeSession> => {
-    const response = await apiClient.get(`/api/scraper-monitoring/sessions/${sessionId}`);
-    return mapSession(response.data);
-  },
-
-  /**
    * Terminate a session and return the role to the queue
    */
   terminateSession: async (sessionId: string): Promise<{
@@ -476,7 +469,8 @@ export const jobImportsApi = {
 
 function mapSession(data: Record<string, unknown>): ScrapeSession {
   return {
-    id: (data.id || data.session_id) as string,
+    id: data.id as number,
+    sessionId: data.session_id as string,  // UUID for API calls
     scraperKeyId: data.scraper_key_id as number,
     scraperKeyName: (data.scraper_key_name || data.scraper_name) as string,
     globalRoleId: (data.global_role_id || data.role_id) as number,
