@@ -26,6 +26,7 @@ import {
   Clock,
   Users,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -37,6 +38,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { jobPostingApi } from '@/lib/jobPostingApi';
+import { env } from '@/lib/env';
 import type { JobMatch } from '@/types';
 
 export function JobDetailPage() {
@@ -91,6 +93,17 @@ export function JobDetailPage() {
   const handleSave = () => {
     toast.success('Job saved to favorites');
     // Implement actual save logic
+  };
+
+  const handleStartTailoring = () => {
+    if (!matchData || !candidateIdNum) {
+      toast.error('Match data not available. Please access from candidate matches.');
+      return;
+    }
+    // Build the tailor page URL and open in new tab
+    const tailorPath = `/candidates/${candidateIdNum}/matches/jobs/${jobIdNum}/tailor/${matchData.id}`;
+    const fullUrl = `${window.location.origin}${env.basePath}${tailorPath}`;
+    window.open(fullUrl, '_blank');
   };
 
   if (isLoading) {
@@ -186,9 +199,18 @@ export function JobDetailPage() {
                   </Badge>
                 )}
               </div>
-              <div className="text-sm text-muted-foreground">
-                Skills Match: {matchData.skill_match_score.toFixed(0)}% • 
-                Experience: {matchData.experience_match_score.toFixed(0)}%
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-muted-foreground">
+                  Skills: {matchData.skill_match_score.toFixed(0)}% • 
+                  Experience: {matchData.experience_match_score.toFixed(0)}%
+                </div>
+                <Button 
+                  onClick={handleStartTailoring}
+                  className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Start Tailoring
+                </Button>
               </div>
             </div>
           </CardContent>

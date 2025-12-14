@@ -11,6 +11,7 @@ import { EditCandidatePage } from '@/pages/EditCandidatePage';
 import { CandidateDetailPage } from '@/pages/CandidateDetailPage';
 import { CandidateMatchesPage } from '@/pages/CandidateMatchesPage';
 import { JobDetailPage } from '@/pages/JobDetailPage';
+import { ResumeTailorPage } from '@/pages/ResumeTailorPage';
 import { JobsPage } from '@/pages/JobsPage';
 import { ApplicationsPage } from '@/pages/ApplicationsPage';
 import { InterviewsPage } from '@/pages/InterviewsPage';
@@ -87,6 +88,7 @@ function App() {
                       <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
                       <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
                       <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
+                      <Route path="/candidates/:candidateId/matches/jobs/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
                       <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
