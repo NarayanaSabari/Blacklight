@@ -24,7 +24,7 @@ COPY . .
 
 # Build arguments for environment variables at build time
 ARG VITE_API_BASE_URL
-ARG VITE_API_TIMEOUT=30000
+ARG VITE_API_TIMEOUT=180000
 ARG VITE_ENVIRONMENT=production
 ARG VITE_BASE_PATH=/portal/
 
