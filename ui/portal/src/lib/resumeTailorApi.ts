@@ -15,6 +15,9 @@ import type {
 
 const BASE_URL = '/api/resume-tailor';
 
+// Extended timeout for AI operations (3 minutes)
+const AI_TIMEOUT = 180000;
+
 export const resumeTailorApi = {
   /**
    * Tailor a resume for a specific job posting
@@ -23,10 +26,14 @@ export const resumeTailorApi = {
     candidateId: number,
     jobPostingId: number
   ): Promise<TailorResumeResponse> => {
-    return apiRequest.post<TailorResumeResponse>(`${BASE_URL}/tailor`, {
-      candidate_id: candidateId,
-      job_posting_id: jobPostingId,
-    });
+    return apiRequest.post<TailorResumeResponse>(
+      `${BASE_URL}/tailor`,
+      {
+        candidate_id: candidateId,
+        job_posting_id: jobPostingId,
+      },
+      { timeout: AI_TIMEOUT }
+    );
   },
 
   /**
@@ -35,9 +42,11 @@ export const resumeTailorApi = {
   tailorFromMatch: async (
     matchId: number
   ): Promise<TailorResumeResponse> => {
-    return apiRequest.post<TailorResumeResponse>(`${BASE_URL}/tailor-from-match`, {
-      match_id: matchId,
-    });
+    return apiRequest.post<TailorResumeResponse>(
+      `${BASE_URL}/tailor-from-match`,
+      { match_id: matchId },
+      { timeout: AI_TIMEOUT }
+    );
   },
 
   /**
