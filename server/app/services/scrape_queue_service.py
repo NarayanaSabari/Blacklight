@@ -488,6 +488,72 @@ class ScrapeQueueService:
         }
     
     @staticmethod
+    def terminate_session(session_id: str) -> Dict[str, Any]:
+        """
+        Terminate a session and return the role back to the queue.
+        
+        Used by PM_ADMIN to manually stop a stuck session and allow the role
+        to be picked up again by another scraper.
+        
+        Args:
+            session_id: Session ID (UUID string)
+        
+        Returns:
+            Dict with session and role status
+        
+        Raises:
+            ValueError: If session not found
+        """
+        try:
+            session_uuid = uuid.UUID(session_id)
+        except ValueError:
+            raise ValueError(f"Invalid session ID format: {session_id}")
+        
+        session = ScrapeSession.query.filter_by(session_id=session_uuid).first()
+        
+        if not session:
+            raise ValueError(f"Session not found: {session_id}")
+        
+        # Only allow terminating in_progress sessions
+        if session.status not in ['in_progress', 'completing']:
+            raise ValueError(
+                f"Cannot terminate session with status '{session.status}'. "
+                f"Only 'in_progress' or 'completing' sessions can be terminated."
+            )
+        
+        # Mark session as terminated (using 'failed' status with specific message)
+        session.status = 'terminated'
+        session.error_message = 'Manually terminated by PM_ADMIN'
+        session.completed_at = datetime.utcnow()
+        if session.started_at:
+            session.duration_seconds = int((session.completed_at - session.started_at).total_seconds())
+        
+        # Reset the role back to approved status so it goes back in the queue
+        role_name = session.role_name
+        role_id = session.global_role_id
+        
+        if session.global_role_id:
+            role = db.session.get(GlobalRole, session.global_role_id)
+            if role:
+                role.queue_status = 'approved'
+                role.updated_at = datetime.utcnow()
+                role_name = role.name
+                logger.info(f"Role '{role.name}' (id={role.id}) returned to queue")
+        
+        db.session.commit()
+        
+        logger.info(f"Session {session_id} terminated manually. Role '{role_name}' returned to queue.")
+        
+        return {
+            "session_id": str(session.session_id),
+            "status": "terminated",
+            "role_id": role_id,
+            "role_name": role_name,
+            "role_returned_to_queue": True,
+            "message": f"Session terminated. Role '{role_name}' has been returned to the queue."
+        }
+    
+    @staticmethod
     def cleanup_stale_sessions() -> Dict[str, int]:
         """
         Clean up stale sessions that have been in_progress too long.

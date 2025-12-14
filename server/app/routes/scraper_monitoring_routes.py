@@ -222,6 +222,48 @@ def get_recent_sessions():
         }), 500
 
 
+@scraper_monitoring_bp.route('/sessions/<session_id>/terminate', methods=['POST'])
+@require_pm_admin
+def terminate_session(session_id: str):
+    """
+    Terminate a session and return the role to the queue.
+    
+    Use this to manually stop a stuck/hanging session and allow the role
+    to be picked up again by another scraper.
+    
+    Path params:
+    - session_id: UUID of the session to terminate
+    
+    Response:
+    {
+        "session_id": "uuid",
+        "status": "terminated",
+        "role_id": 42,
+        "role_name": "Python Developer",
+        "role_returned_to_queue": true,
+        "message": "Session terminated. Role 'Python Developer' has been returned to the queue."
+    }
+    """
+    from app.services.scrape_queue_service import ScrapeQueueService
+    
+    try:
+        result = ScrapeQueueService.terminate_session(session_id)
+        return jsonify(result), 200
+        
+    except ValueError as e:
+        logger.warning(f"Terminate session error: {e}")
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"Error terminating session {session_id}: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
 @scraper_monitoring_bp.route('/api-keys', methods=['GET'])
 @require_pm_admin
 def get_api_keys():

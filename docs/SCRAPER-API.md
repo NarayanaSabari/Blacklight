@@ -23,9 +23,11 @@ This document provides complete API specifications for integrating your job scra
    - [Complete Session](#4-complete-session)
    - [Report Session Failure](#5-report-session-failure)
    - [Get Queue Stats](#6-get-queue-stats)
-5. [Job Object Schema](#job-object-schema)
-6. [Error Handling](#error-handling)
-7. [Example Implementation](#example-implementation)
+5. [Admin Endpoints](#admin-endpoints)
+   - [Terminate Session](#terminate-session)
+6. [Job Object Schema](#job-object-schema)
+7. [Error Handling](#error-handling)
+8. [Example Implementation](#example-implementation)
 
 ---
 
@@ -397,6 +399,59 @@ Get current queue statistics (useful for monitoring).
   "queue_depth": 50
 }
 ```
+
+---
+
+## Admin Endpoints
+
+These endpoints are for PM_ADMIN users managing scrapers through the CentralD Dashboard.
+
+### Terminate Session
+
+Manually terminate a stuck/hanging session and return the role back to the queue.
+
+**Endpoint:** `POST /api/scraper-monitoring/sessions/{session_id}/terminate`
+
+**Authentication:** PM_ADMIN (via CentralD Dashboard)
+
+**Use Cases:**
+- Scraper is stuck or unresponsive
+- Testing and debugging scrapers
+- Manually clearing a session to allow another scraper to pick up the role
+
+#### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `session_id` | UUID | The session ID to terminate |
+
+#### Response (200 OK)
+
+```json
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "terminated",
+  "role_id": 42,
+  "role_name": "Python Developer",
+  "role_returned_to_queue": true,
+  "message": "Session terminated. Role 'Python Developer' has been returned to the queue."
+}
+```
+
+#### Error Responses
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | Invalid session ID format | UUID format is invalid |
+| 400 | Cannot terminate session | Session is not in 'in_progress' or 'completing' status |
+| 404 | Session not found | Session doesn't exist |
+
+#### What Happens When You Terminate
+
+1. The session status changes to `terminated`
+2. The error message is set to "Manually terminated by PM_ADMIN"
+3. The associated role's `queue_status` is reset to `approved`
+4. The role immediately becomes available for another scraper to pick up
 
 ---
 

@@ -23,7 +23,7 @@ export interface ScrapeSession {
   scraperKeyName: string;
   globalRoleId: number;
   roleName: string;
-  status: 'in_progress' | 'completed' | 'failed';
+  status: 'in_progress' | 'completed' | 'failed' | 'terminated';
   jobsFound: number;
   jobsImported: number;
   jobsSkipped: number;
@@ -276,6 +276,28 @@ export const scraperMonitoringApi = {
   getSession: async (sessionId: string): Promise<ScrapeSession> => {
     const response = await apiClient.get(`/api/scraper-monitoring/sessions/${sessionId}`);
     return mapSession(response.data);
+  },
+
+  /**
+   * Terminate a session and return the role to the queue
+   */
+  terminateSession: async (sessionId: string): Promise<{
+    sessionId: string;
+    status: string;
+    roleId: number;
+    roleName: string;
+    roleReturnedToQueue: boolean;
+    message: string;
+  }> => {
+    const response = await apiClient.post(`/api/scraper-monitoring/sessions/${sessionId}/terminate`);
+    return {
+      sessionId: response.data.session_id,
+      status: response.data.status,
+      roleId: response.data.role_id,
+      roleName: response.data.role_name,
+      roleReturnedToQueue: response.data.role_returned_to_queue,
+      message: response.data.message,
+    };
   },
 };
 

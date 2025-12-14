@@ -88,7 +88,7 @@ def get_server_url() -> str:
     """Get server URL from user or use default"""
     print_section("Server Configuration")
     
-    default_url = "http://localhost:5000"
+    default_url = "http://34.131.146.89"
     url_input = input(f"{Colors.YELLOW}Enter server URL (default: {default_url}): {Colors.ENDC}").strip()
     
     server_url = url_input if url_input else default_url

@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { scraperMonitoringApi, type ScrapeSession } from "@/lib/dashboard-api";
 import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
@@ -25,22 +36,30 @@ import {
   FileCheck,
   FileX,
   Layers,
-  Timer
+  Timer,
+  StopCircle,
+  RotateCcw
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 
 function SessionStatusBadge({ status }: { status: ScrapeSession['status'] }) {
   const variants: Record<ScrapeSession['status'], { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className: string }> = {
     in_progress: { variant: "default", label: "Running", className: "bg-blue-500" },
     completed: { variant: "secondary", label: "Completed", className: "bg-green-100 text-green-800" },
     failed: { variant: "destructive", label: "Failed", className: "" },
+    terminated: { variant: "outline", label: "Terminated", className: "border-orange-500 text-orange-600" },
   };
 
-  const { variant, label, className } = variants[status];
+  const { variant, label, className } = variants[status] || { variant: "outline" as const, label: status, className: "" };
   return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
-function SessionCard({ session }: { session: ScrapeSession }) {
+function SessionCard({ session, onTerminate, isTerminating }: { 
+  session: ScrapeSession; 
+  onTerminate?: (sessionId: string) => void;
+  isTerminating?: boolean;
+}) {
   const timeAgo = formatDistanceToNow(new Date(session.startedAt), { addSuffix: true });
   const successRate = session.jobsFound > 0 
     ? Math.round((session.jobsImported / session.jobsFound) * 100) 
@@ -54,12 +73,15 @@ function SessionCard({ session }: { session: ScrapeSession }) {
           <div className={`p-2 rounded-full ${
             session.status === 'in_progress' ? 'bg-blue-100 text-blue-600' :
             session.status === 'completed' ? 'bg-green-100 text-green-600' :
+            session.status === 'terminated' ? 'bg-orange-100 text-orange-600' :
             'bg-red-100 text-red-600'
           }`}>
             {session.status === 'in_progress' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : session.status === 'completed' ? (
               <CheckCircle2 className="h-4 w-4" />
+            ) : session.status === 'terminated' ? (
+              <StopCircle className="h-4 w-4" />
             ) : (
               <XCircle className="h-4 w-4" />
             )}
@@ -71,7 +93,51 @@ function SessionCard({ session }: { session: ScrapeSession }) {
             </p>
           </div>
         </div>
-        <SessionStatusBadge status={session.status} />
+        <div className="flex items-center gap-2">
+          <SessionStatusBadge status={session.status} />
+          {/* Terminate button for in_progress sessions */}
+          {session.status === 'in_progress' && onTerminate && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                  disabled={isTerminating}
+                >
+                  {isTerminating ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <StopCircle className="h-3 w-3" />
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Terminate Session?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will stop the scraping session for <strong>{session.roleName}</strong> and 
+                    return the role back to the queue so it can be picked up by another scraper.
+                    <br /><br />
+                    <span className="flex items-center gap-2 text-sm">
+                      <RotateCcw className="h-4 w-4 text-blue-500" />
+                      The role will be available for scraping again immediately.
+                    </span>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => onTerminate(session.id)}
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    Terminate & Requeue
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -147,13 +213,44 @@ function SessionCard({ session }: { session: ScrapeSession }) {
 }
 
 function ActiveSessionsList() {
+  const queryClient = useQueryClient();
   const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
+  const [terminatingSessionId, setTerminatingSessionId] = useState<string | null>(null);
+  
   const { data: sessions, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['active-scraper-sessions'],
     queryFn: scraperMonitoringApi.getActiveSessions,
     refetchInterval: 5000, // Refresh every 5 seconds for active sessions
     enabled: !authLoading && isAuthenticated,
   });
+
+  const terminateMutation = useMutation({
+    mutationFn: scraperMonitoringApi.terminateSession,
+    onMutate: (sessionId) => {
+      setTerminatingSessionId(sessionId);
+    },
+    onSuccess: (result) => {
+      toast.success("Session Terminated", {
+        description: result.message,
+      });
+      // Refetch sessions to update the list
+      queryClient.invalidateQueries({ queryKey: ['active-scraper-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-scraper-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['scraper-stats'] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to terminate session", {
+        description: error.message || "An error occurred",
+      });
+    },
+    onSettled: () => {
+      setTerminatingSessionId(null);
+    },
+  });
+
+  const handleTerminate = (sessionId: string) => {
+    terminateMutation.mutate(sessionId);
+  };
 
   if (isLoading) {
     return (
@@ -212,7 +309,12 @@ function ActiveSessionsList() {
         </Button>
       </div>
       {sessions.map((session) => (
-        <SessionCard key={session.id} session={session} />
+        <SessionCard 
+          key={session.id} 
+          session={session} 
+          onTerminate={handleTerminate}
+          isTerminating={terminatingSessionId === session.id}
+        />
       ))}
     </div>
   );
