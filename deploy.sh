@@ -177,6 +177,12 @@ rebuild_all() {
     log_info "All services rebuilt."
 }
 
+recreate_nginx() {
+    log_info "Recreating nginx container..."
+    docker compose -f $COMPOSE_FILE --env-file $ENV_FILE up -d --force-recreate nginx
+    log_info "Nginx container recreated and config reloaded."
+}
+
 create_inngest_db() {
     log_info "Creating inngest database..."
     
@@ -267,6 +273,9 @@ case "$1" in
     sync-inngest)
         sync_inngest
         ;;
+    recreate-nginx)
+        recreate_nginx
+        ;;
     *)
         echo "Blacklight Production Deployment Script"
         echo ""
@@ -287,6 +296,7 @@ case "$1" in
         echo "  rebuild            Rebuild all containers"
         echo "  create-inngest-db  Create inngest database in PostgreSQL"
         echo "  sync-inngest       Sync Inngest functions with backend"
+        echo "  recreate-nginx     Recreate nginx container (reload config)"
         echo "  clean              Remove all containers and volumes (DESTRUCTIVE!)"
         echo ""
         echo "Services: db, redis, backend, portal, central"
