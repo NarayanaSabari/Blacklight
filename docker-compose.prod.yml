@@ -157,7 +157,7 @@ services:
       target: production
       args:
         VITE_API_BASE_URL: ${PORTAL_API_URL:-http://localhost}
-        VITE_API_TIMEOUT: 30000
+        VITE_API_TIMEOUT: 180000
         VITE_ENVIRONMENT: production
         VITE_BASE_PATH: /portal
     container_name: blacklight-portal
@@ -185,7 +185,7 @@ services:
       target: production
       args:
         VITE_API_BASE_URL: ${CENTRAL_API_URL:-http://localhost}
-        VITE_API_TIMEOUT: 30000
+        VITE_API_TIMEOUT: 180000
         VITE_ENVIRONMENT: production
         VITE_APP_NAME: "Blacklight Central Dashboard"
         VITE_APP_VERSION: "1.0.0"

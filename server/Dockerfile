@@ -86,7 +86,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # - workers: 4 (2 * CPU cores + 1, adjust based on your VM)
 # - threads: 4 (handle concurrent requests per worker)
 # - worker-class: gthread (threaded workers for I/O bound tasks)
-# - timeout: 120 (2 min timeout for long operations like resume parsing)
+# - timeout: 180 (3 min timeout for AI operations like resume tailoring)
 # - keep-alive: 5 (connection keep-alive)
 # - max-requests: 1000 (restart workers to prevent memory leaks)
 # - graceful-timeout: 30 (graceful shutdown time)
@@ -97,7 +97,7 @@ CMD exec gunicorn \
     --threads ${GUNICORN_THREADS:-4} \
     --worker-class gthread \
     --worker-tmp-dir /dev/shm \
-    --timeout ${GUNICORN_TIMEOUT:-120} \
+    --timeout ${GUNICORN_TIMEOUT:-180} \
     --graceful-timeout 30 \
     --keep-alive 5 \
     --max-requests 1000 \
