@@ -89,3 +89,7 @@ from app.models.session_platform_status import SessionPlatformStatus
 
 # Import resume tailor models
 from app.models.tailored_resume import TailoredResume, TailoredResumeStatus
+
+# Import email integration models
+from app.models.user_email_integration import UserEmailIntegration
+from app.models.processed_email import ProcessedEmail

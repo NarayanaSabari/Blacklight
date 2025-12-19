@@ -101,6 +101,32 @@ class Settings(BaseSettings):
     # OpenAI Configuration (optional alternative to Gemini)
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     
+    # Email Integration - Google OAuth (Gmail)
+    google_oauth_client_id: str = Field(default="", env="GOOGLE_OAUTH_CLIENT_ID")
+    google_oauth_client_secret: str = Field(default="", env="GOOGLE_OAUTH_CLIENT_SECRET")
+    google_oauth_redirect_uri: str = Field(
+        default="http://localhost:5001/api/integrations/email/callback/gmail",
+        env="GOOGLE_OAUTH_REDIRECT_URI"
+    )
+    
+    # Email Integration - Microsoft OAuth (Outlook)
+    microsoft_oauth_client_id: str = Field(default="", env="MICROSOFT_OAUTH_CLIENT_ID")
+    microsoft_oauth_client_secret: str = Field(default="", env="MICROSOFT_OAUTH_CLIENT_SECRET")
+    microsoft_oauth_redirect_uri: str = Field(
+        default="http://localhost:5001/api/integrations/email/callback/outlook",
+        env="MICROSOFT_OAUTH_REDIRECT_URI"
+    )
+    microsoft_oauth_tenant: str = Field(default="common", env="MICROSOFT_OAUTH_TENANT")
+    
+    # Email Integration - Token Encryption
+    token_encryption_key: str = Field(default="", env="TOKEN_ENCRYPTION_KEY")
+    
+    # Email Integration - Sync Settings
+    email_sync_enabled: bool = Field(default=True, env="EMAIL_SYNC_ENABLED")
+    email_sync_frequency_minutes: int = Field(default=15, env="EMAIL_SYNC_FREQUENCY_MINUTES")
+    email_sync_lookback_days: int = Field(default=7, env="EMAIL_SYNC_LOOKBACK_DAYS")
+    email_sync_max_emails: int = Field(default=50, env="EMAIL_SYNC_MAX_EMAILS_PER_BATCH")
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"
@@ -131,6 +157,11 @@ class Settings(BaseSettings):
     def is_testing(self) -> bool:
         """Check if running in testing."""
         return self.testing or self.environment.lower() == "testing"
+    
+    @property
+    def frontend_url(self) -> str:
+        """Get frontend URL (alias for frontend_base_url for backward compatibility)."""
+        return self.frontend_base_url
     
     @validator("environment")
     def environment_must_be_valid(cls, v):

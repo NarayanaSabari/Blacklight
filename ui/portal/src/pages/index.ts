@@ -33,3 +33,6 @@ export { default as InvitationDetailsPage } from './invitations/InvitationDetail
 
 // Public Pages
 export { default as OnboardingPage } from './public/OnboardingPage';
+
+// Email Jobs
+export { EmailJobsPage } from './EmailJobsPage';

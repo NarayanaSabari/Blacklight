@@ -73,6 +73,14 @@ class PortalUser(BaseModel):
         backref='team_members'
     )
     
+    # Email integrations relationship
+    email_integrations = db.relationship(
+        'UserEmailIntegration',
+        back_populates='user',
+        cascade='all, delete-orphan',
+        lazy='select'
+    )
+    
     # Indexes
     __table_args__ = (
         Index('idx_portal_user_tenant_id', 'tenant_id'),

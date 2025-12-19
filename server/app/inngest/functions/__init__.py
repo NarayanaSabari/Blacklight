@@ -33,6 +33,11 @@ from .job_import import (
     import_platform_jobs_fn,
     complete_scrape_session_fn
 )
+from .email_sync import (
+    sync_all_integrations_workflow,
+    sync_user_inbox_workflow,
+    manual_sync_workflow
+)
 
 # List of all Inngest functions to be registered
 INNGEST_FUNCTIONS = [
@@ -66,6 +71,11 @@ INNGEST_FUNCTIONS = [
     # Job Import (Multi-Platform)
     import_platform_jobs_fn,
     complete_scrape_session_fn,
+    
+    # Email Sync (Gmail/Outlook)
+    sync_all_integrations_workflow,
+    sync_user_inbox_workflow,
+    manual_sync_workflow,
 ]
 
 __all__ = ["INNGEST_FUNCTIONS"]

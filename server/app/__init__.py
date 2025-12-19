@@ -160,6 +160,8 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import global_role_routes
     from app.routes import scraper_monitoring_routes
     from app.routes import resume_tailor_routes
+    from app.routes import email_integration_routes
+    from app.routes import email_jobs_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -218,6 +220,12 @@ def register_blueprints(app: Flask) -> None:
     
     # Resume Tailor routes (AI-powered resume optimization)
     app.register_blueprint(resume_tailor_routes.resume_tailor_bp)
+    
+    # Email Integration routes (Gmail/Outlook OAuth)
+    app.register_blueprint(email_integration_routes.bp)
+    
+    # Email Jobs routes (jobs sourced from email)
+    app.register_blueprint(email_jobs_routes.bp)
 
 
 def register_inngest(app: Flask) -> None:

@@ -21,6 +21,7 @@ import {
   FolderOpen,
   Network,
   UserCheck,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -82,6 +83,13 @@ const navigation: NavItem[] = [
     icon: Briefcase,
     href: '/jobs',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'TEAM_LEAD'],
+  },
+  {
+    id: 'email-jobs',
+    label: 'Email Jobs',
+    icon: Mail,
+    href: '/email-jobs',
+    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {
     id: 'applications',

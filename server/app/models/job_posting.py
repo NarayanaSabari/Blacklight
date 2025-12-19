@@ -87,12 +87,33 @@ class JobPosting(db.Model):
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
+    # Email Source Fields (for jobs sourced from email integrations)
+    is_email_sourced = db.Column(Boolean, default=False, index=True)
+    source_tenant_id = db.Column(
+        Integer,
+        ForeignKey('tenants.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True
+    )  # Email-sourced jobs are tenant-specific
+    sourced_by_user_id = db.Column(
+        Integer,
+        ForeignKey('portal_users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )  # Which user's email integration found this job
+    source_email_id = db.Column(String(255), nullable=True, index=True)  # Email Message-ID for dedup
+    source_email_subject = db.Column(String(500), nullable=True)
+    source_email_sender = db.Column(String(255), nullable=True)
+    source_email_date = db.Column(DateTime, nullable=True)
+    
     # Relationships
     matches = db.relationship('CandidateJobMatch', back_populates='job_posting', cascade='all, delete-orphan')
     applications = db.relationship('JobApplication', back_populates='job_posting', cascade='all, delete-orphan')
     role_job_mappings = db.relationship('RoleJobMapping', back_populates='job_posting', cascade='all, delete-orphan')
     scraped_by_key = db.relationship('ScraperApiKey', backref='imported_jobs')
     normalized_role = db.relationship('GlobalRole', backref='jobs')
+    source_tenant = db.relationship('Tenant', foreign_keys=[source_tenant_id])
+    sourced_by_user = db.relationship('PortalUser', foreign_keys=[sourced_by_user_id])
     
     # Indexes
     __table_args__ = (
@@ -137,6 +158,14 @@ class JobPosting(db.Model):
             'last_synced_at': self.last_synced_at.isoformat() if self.last_synced_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # Email source fields
+            'is_email_sourced': self.is_email_sourced,
+            'source_tenant_id': self.source_tenant_id,
+            'sourced_by_user_id': self.sourced_by_user_id,
+            'source_email_id': self.source_email_id,
+            'source_email_subject': self.source_email_subject,
+            'source_email_sender': self.source_email_sender,
+            'source_email_date': self.source_email_date.isoformat() if self.source_email_date else None,
         }
         
         if include_description:

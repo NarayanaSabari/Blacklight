@@ -8,12 +8,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePortalAuth } from '@/contexts/PortalAuthContext';
-import { Building2, User, Bell, Shield, FileCheck } from 'lucide-react';
+import { Building2, User, Bell, Shield, FileCheck, Link2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DocumentRequirementsSettings } from '@/components/settings';
+import { DocumentRequirementsSettings, EmailIntegrationsSettings } from '@/components/settings';
+import { useSearchParams } from 'react-router-dom';
+import { useMemo } from 'react';
 
 export function SettingsPage() {
   const { user, tenantName } = usePortalAuth();
+  const [searchParams] = useSearchParams();
+
+  // Auto-switch to integrations tab when OAuth callback params are present
+  const defaultTab = useMemo(() => {
+    const hasOAuthParams = searchParams.has('success') || searchParams.has('error');
+    const provider = searchParams.get('provider');
+    if (hasOAuthParams && (provider === 'gmail' || provider === 'outlook')) {
+      return 'integrations';
+    }
+    return 'profile';
+  }, [searchParams]);
 
   return (
     <div className="space-y-6">
@@ -24,7 +37,7 @@ export function SettingsPage() {
       </div>
 
       {/* Settings Tabs */}
-      <Tabs defaultValue="profile" className="space-y-4">
+      <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />
@@ -37,6 +50,10 @@ export function SettingsPage() {
           <TabsTrigger value="onboarding" className="gap-2">
             <FileCheck className="h-4 w-4" />
             Onboarding
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2">
+            <Link2 className="h-4 w-4" />
+            Integrations
           </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2">
             <Bell className="h-4 w-4" />
@@ -130,6 +147,11 @@ export function SettingsPage() {
         {/* Onboarding Tab */}
         <TabsContent value="onboarding" className="space-y-4">
           <DocumentRequirementsSettings />
+        </TabsContent>
+
+        {/* Integrations Tab */}
+        <TabsContent value="integrations" className="space-y-4">
+          <EmailIntegrationsSettings />
         </TabsContent>
 
         {/* Notifications Tab */}
