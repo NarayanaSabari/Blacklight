@@ -36,3 +36,6 @@ export { default as OnboardingPage } from './public/OnboardingPage';
 
 // Email Jobs
 export { EmailJobsPage } from './EmailJobsPage';
+
+// Kanban Pipeline
+export { KanbanBoardPage } from './KanbanBoardPage';

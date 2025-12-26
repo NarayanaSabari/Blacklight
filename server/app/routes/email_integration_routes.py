@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 from flask import Blueprint, g, jsonify, redirect, request
 
 from app.middleware.portal_auth import require_portal_auth, require_permission
+from app.middleware.tenant_context import with_tenant_context
 from app.services.email_integration_service import email_integration_service
 from app.services.oauth.gmail_oauth import gmail_oauth_service
 from app.services.oauth.outlook_oauth import outlook_oauth_service
@@ -37,6 +38,7 @@ def error_response(message: str, status: int = 400, details: dict = None):
 
 @bp.route("/status", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def get_integration_status():
     """
     Get email integration status for current user.
@@ -58,6 +60,7 @@ def get_integration_status():
 
 @bp.route("/list", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def list_integrations():
     """
     List all email integrations for current user.
@@ -93,6 +96,7 @@ def list_integrations():
 
 @bp.route("/connect/gmail", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def connect_gmail():
     """
     Initiate Gmail OAuth flow.
@@ -163,6 +167,7 @@ def gmail_callback():
 
 @bp.route("/connect/outlook", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def connect_outlook():
     """
     Initiate Outlook OAuth flow.
@@ -234,6 +239,7 @@ def outlook_callback():
 
 @bp.route("/<int:integration_id>", methods=["DELETE"])
 @require_portal_auth
+@with_tenant_context
 def disconnect_integration(integration_id: int):
     """
     Disconnect and delete an email integration.
@@ -259,6 +265,7 @@ def disconnect_integration(integration_id: int):
 
 @bp.route("/<int:integration_id>/toggle", methods=["PATCH"])
 @require_portal_auth
+@with_tenant_context
 def toggle_integration(integration_id: int):
     """
     Toggle integration active status.
@@ -296,6 +303,7 @@ def toggle_integration(integration_id: int):
 
 @bp.route("/<int:integration_id>/sync", methods=["POST"])
 @require_portal_auth
+@with_tenant_context
 def trigger_sync(integration_id: int):
     """
     Manually trigger a sync for an integration.

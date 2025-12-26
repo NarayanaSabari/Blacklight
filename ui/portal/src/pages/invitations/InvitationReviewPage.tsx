@@ -57,6 +57,8 @@ interface SubmissionData {
   work_experience?: string;
   education?: string;
   parsed_resume_data?: Record<string, unknown>;
+  preferred_roles?: string[];
+  preferred_locations?: string[];
 }
 
 export default function InvitationReviewPage() {
@@ -306,6 +308,55 @@ export default function InvitationReviewPage() {
                   {submissionData.skills.map((skill: string, idx: number) => (
                     <Badge key={idx} variant="secondary">
                       {skill}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Preferred Roles */}
+          {submissionData?.preferred_roles && submissionData.preferred_roles.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5" />
+                  <CardTitle>Preferred Roles</CardTitle>
+                </div>
+                <CardDescription>
+                  {submissionData.preferred_roles.length} role{submissionData.preferred_roles.length !== 1 ? 's' : ''} specified
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {submissionData.preferred_roles.map((role: string, idx: number) => (
+                    <Badge key={idx} variant="default" className="bg-purple-100 text-purple-800 hover:bg-purple-200">
+                      {role}
+                    </Badge>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Preferred Locations */}
+          {submissionData?.preferred_locations && submissionData.preferred_locations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  <CardTitle>Preferred Locations</CardTitle>
+                </div>
+                <CardDescription>
+                  {submissionData.preferred_locations.length} location{submissionData.preferred_locations.length !== 1 ? 's' : ''} specified
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {submissionData.preferred_locations.map((loc: string, idx: number) => (
+                    <Badge key={idx} variant="outline" className="border-blue-300 text-blue-800">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      {loc}
                     </Badge>
                   ))}
                 </div>

@@ -14,6 +14,7 @@ from app.models.scrape_session import ScrapeSession
 from app.models.session_platform_status import SessionPlatformStatus
 from app.models.global_role import GlobalRole
 from app.models.job_posting import JobPosting
+from app.models.role_location_queue import RoleLocationQueue
 from app.middleware import require_pm_admin
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,57 @@ def get_scraper_stats():
         # For the dashboard, we show all pending roles as "Roles to Review"
         pending_roles_count = pending_queue  # Same as pending queue for now
         
+        # =========================================================================
+        # LOCATION ANALYTICS
+        # =========================================================================
+        
+        # Sessions with location (role+location scraping) vs without
+        location_session_counts = db.session.execute(
+            db.select(
+                func.count(ScrapeSession.id).filter(ScrapeSession.location.isnot(None)).label('with_location'),
+                func.count(ScrapeSession.id).filter(ScrapeSession.location.is_(None)).label('without_location')
+            )
+            .where(ScrapeSession.created_at >= since)
+        ).first()
+        
+        # Jobs by location (top 10 locations by jobs imported in last 24h)
+        jobs_by_location = db.session.execute(
+            db.select(
+                ScrapeSession.location,
+                func.sum(ScrapeSession.jobs_found).label('jobs_found'),
+                func.sum(ScrapeSession.jobs_imported).label('jobs_imported'),
+                func.count(ScrapeSession.id).label('session_count')
+            )
+            .where(
+                ScrapeSession.created_at >= since,
+                ScrapeSession.location.isnot(None)
+            )
+            .group_by(ScrapeSession.location)
+            .order_by(func.sum(ScrapeSession.jobs_imported).desc())
+            .limit(10)
+        ).all()
+        
+        # Role+Location queue stats
+        location_queue_stats = db.session.execute(
+            db.select(
+                RoleLocationQueue.queue_status,
+                func.count(RoleLocationQueue.id).label('count')
+            )
+            .group_by(RoleLocationQueue.queue_status)
+        ).all()
+        
+        location_queue_by_status = {row[0]: row[1] for row in location_queue_stats}
+        
+        # Unique locations in queue
+        unique_locations_in_queue = db.session.scalar(
+            db.select(func.count(func.distinct(RoleLocationQueue.location)))
+        ) or 0
+        
+        # Total role+location entries
+        total_location_entries = db.session.scalar(
+            db.select(func.count(RoleLocationQueue.id))
+        ) or 0
+        
         return jsonify({
             "active_scrapers": active_scrapers,
             "pending_queue": pending_queue,
@@ -143,7 +195,28 @@ def get_scraper_stats():
             },
             "avg_duration_seconds": int(avg_duration),
             "total_api_keys": total_keys,
-            "active_api_keys": active_keys
+            "active_api_keys": active_keys,
+            "location_analytics": {
+                "sessions_with_location": location_session_counts.with_location if location_session_counts else 0,
+                "sessions_without_location": location_session_counts.without_location if location_session_counts else 0,
+                "top_locations": [
+                    {
+                        "location": row.location,
+                        "jobs_found": int(row.jobs_found) if row.jobs_found else 0,
+                        "jobs_imported": int(row.jobs_imported) if row.jobs_imported else 0,
+                        "session_count": int(row.session_count) if row.session_count else 0
+                    }
+                    for row in jobs_by_location
+                ],
+                "queue": {
+                    "total": total_location_entries,
+                    "pending": location_queue_by_status.get('pending', 0),
+                    "approved": location_queue_by_status.get('approved', 0),
+                    "processing": location_queue_by_status.get('processing', 0),
+                    "completed": location_queue_by_status.get('completed', 0),
+                    "unique_locations": unique_locations_in_queue
+                }
+            }
         }), 200
         
     except Exception as e:
@@ -194,6 +267,8 @@ def get_recent_sessions():
             "scraper_key_id": s.scraper_key_id,
             "role_id": s.global_role_id,
             "role_name": s.role_name,
+            "location": s.location,
+            "role_location_queue_id": s.role_location_queue_id,
             "status": s.status,
             "started_at": s.started_at.isoformat() if s.started_at else None,
             "completed_at": s.completed_at.isoformat() if s.completed_at else None,
@@ -277,6 +352,8 @@ def get_session_details(session_id: str):
             "scraper_key_id": session.scraper_key_id,
             "role_id": session.global_role_id,
             "role_name": session.role_name,
+            "location": session.location,
+            "role_location_queue_id": session.role_location_queue_id,
             "status": session.status,
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "completed_at": session.completed_at.isoformat() if session.completed_at else None,
@@ -970,6 +1047,384 @@ def get_job_statistics():
         
     except Exception as e:
         logger.error(f"Error getting job statistics: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+# ============================================================================
+# ROLE LOCATION QUEUE ENDPOINTS
+# ============================================================================
+
+@scraper_monitoring_bp.route('/role-location-queue', methods=['GET'])
+@require_pm_admin
+def get_role_location_queue():
+    """
+    Get role+location queue entries for dashboard monitoring.
+    
+    Query params:
+    - status: Filter by status (pending, approved, processing, completed, rejected)
+    - search: Search by role name or location
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 50)
+    
+    Response:
+    {
+        "entries": [...],
+        "total": 100,
+        "page": 1,
+        "per_page": 50,
+        "stats": {
+            "by_status": {...},
+            "total_entries": 100
+        }
+    }
+    """
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        status_filter = request.args.get('status')
+        search = request.args.get('search', '').strip()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        # Build query
+        query = db.select(RoleLocationQueue).join(
+            GlobalRole, RoleLocationQueue.global_role_id == GlobalRole.id
+        )
+        
+        if status_filter and status_filter != 'all':
+            query = query.where(RoleLocationQueue.queue_status == status_filter)
+        
+        if search:
+            search_term = f"%{search}%"
+            query = query.where(
+                db.or_(
+                    GlobalRole.name.ilike(search_term),
+                    RoleLocationQueue.location.ilike(search_term)
+                )
+            )
+        
+        # Order by priority and candidate count
+        query = query.order_by(
+            db.case(
+                (RoleLocationQueue.priority == 'urgent', 4),
+                (RoleLocationQueue.priority == 'high', 3),
+                (RoleLocationQueue.priority == 'normal', 2),
+                (RoleLocationQueue.priority == 'low', 1),
+            ).desc(),
+            RoleLocationQueue.candidate_count.desc()
+        )
+        
+        # Get total count
+        count_query = db.select(func.count(RoleLocationQueue.id))
+        if status_filter and status_filter != 'all':
+            count_query = count_query.where(RoleLocationQueue.queue_status == status_filter)
+        total = db.session.scalar(count_query) or 0
+        
+        # Paginate
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        entries = db.session.execute(query).scalars().all()
+        
+        # Get status counts
+        status_counts = db.session.execute(
+            db.select(
+                RoleLocationQueue.queue_status,
+                func.count(RoleLocationQueue.id)
+            ).group_by(RoleLocationQueue.queue_status)
+        ).all()
+        
+        return jsonify({
+            "entries": [
+                {
+                    "id": entry.id,
+                    "global_role_id": entry.global_role_id,
+                    "role_name": entry.global_role.name if entry.global_role else None,
+                    "location": entry.location,
+                    "queue_status": entry.queue_status,
+                    "priority": entry.priority,
+                    "candidate_count": entry.candidate_count,
+                    "total_jobs_scraped": entry.total_jobs_scraped or 0,
+                    "last_scraped_at": entry.last_scraped_at.isoformat() if entry.last_scraped_at else None,
+                    "created_at": entry.created_at.isoformat() if entry.created_at else None,
+                    "updated_at": entry.updated_at.isoformat() if entry.updated_at else None,
+                }
+                for entry in entries
+            ],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "stats": {
+                "by_status": {row[0]: row[1] for row in status_counts},
+                "total_entries": sum(row[1] for row in status_counts)
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting role location queue: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/by-role/<int:role_id>', methods=['GET'])
+@require_pm_admin
+def get_locations_for_role(role_id: int):
+    """
+    Get all location queue entries for a specific role.
+    
+    Path params:
+    - role_id: Global role ID
+    
+    Response:
+    {
+        "role_id": 42,
+        "role_name": "Python Developer",
+        "locations": [
+            {
+                "id": 1,
+                "location": "New York, NY",
+                "queue_status": "approved",
+                "priority": "normal",
+                "candidate_count": 5,
+                "total_jobs_scraped": 120
+            },
+            ...
+        ],
+        "total_locations": 3
+    }
+    """
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        # Get the role
+        role = db.session.get(GlobalRole, role_id)
+        if not role:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Role with ID {role_id} not found"
+            }), 404
+        
+        # Get all location entries for this role
+        entries = db.session.query(RoleLocationQueue).filter(
+            RoleLocationQueue.global_role_id == role_id
+        ).order_by(
+            RoleLocationQueue.candidate_count.desc(),
+            RoleLocationQueue.location
+        ).all()
+        
+        return jsonify({
+            "role_id": role.id,
+            "role_name": role.name,
+            "locations": [
+                {
+                    "id": entry.id,
+                    "location": entry.location,
+                    "queue_status": entry.queue_status,
+                    "priority": entry.priority,
+                    "candidate_count": entry.candidate_count,
+                    "total_jobs_scraped": entry.total_jobs_scraped or 0,
+                    "last_scraped_at": entry.last_scraped_at.isoformat() if entry.last_scraped_at else None,
+                }
+                for entry in entries
+            ],
+            "total_locations": len(entries)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting locations for role {role_id}: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/<int:entry_id>/approve', methods=['POST'])
+@require_pm_admin
+def approve_role_location_entry(entry_id: int):
+    """Approve a role+location queue entry for scraping."""
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        entry = db.session.get(RoleLocationQueue, entry_id)
+        if not entry:
+            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
+        
+        if entry.queue_status not in ['pending', 'rejected']:
+            return jsonify({
+                "error": "Bad Request",
+                "message": f"Cannot approve entry with status '{entry.queue_status}'"
+            }), 400
+        
+        entry.queue_status = 'approved'
+        entry.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        logger.info(f"Approved role+location entry {entry_id}: {entry.global_role.name} @ {entry.location}")
+        
+        return jsonify({
+            "message": "Entry approved",
+            "entry": entry.to_dict(include_role=True)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error approving role location entry: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/<int:entry_id>/reject', methods=['POST'])
+@require_pm_admin
+def reject_role_location_entry(entry_id: int):
+    """Reject a role+location queue entry."""
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        entry = db.session.get(RoleLocationQueue, entry_id)
+        if not entry:
+            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
+        
+        if entry.queue_status not in ['pending', 'approved']:
+            return jsonify({
+                "error": "Bad Request",
+                "message": f"Cannot reject entry with status '{entry.queue_status}'"
+            }), 400
+        
+        entry.queue_status = 'rejected'
+        entry.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        logger.info(f"Rejected role+location entry {entry_id}: {entry.global_role.name} @ {entry.location}")
+        
+        return jsonify({
+            "message": "Entry rejected",
+            "entry": entry.to_dict(include_role=True)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error rejecting role location entry: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/<int:entry_id>/priority', methods=['PATCH'])
+@require_pm_admin
+def update_role_location_priority(entry_id: int):
+    """Update priority of a role+location queue entry."""
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        data = request.get_json() or {}
+        priority = data.get('priority')
+        
+        if priority not in ['urgent', 'high', 'normal', 'low']:
+            return jsonify({
+                "error": "Bad Request",
+                "message": "Invalid priority. Must be: urgent, high, normal, low"
+            }), 400
+        
+        entry = db.session.get(RoleLocationQueue, entry_id)
+        if not entry:
+            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
+        
+        entry.priority = priority
+        entry.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        logger.info(f"Updated priority for role+location entry {entry_id} to {priority}")
+        
+        return jsonify({
+            "message": "Priority updated",
+            "entry": entry.to_dict(include_role=True)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating role location priority: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/<int:entry_id>', methods=['DELETE'])
+@require_pm_admin
+def delete_role_location_entry(entry_id: int):
+    """Delete a role+location queue entry."""
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        entry = db.session.get(RoleLocationQueue, entry_id)
+        if not entry:
+            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
+        
+        role_name = entry.global_role.name if entry.global_role else "Unknown"
+        location = entry.location
+        
+        db.session.delete(entry)
+        db.session.commit()
+        
+        logger.info(f"Deleted role+location entry {entry_id}: {role_name} @ {location}")
+        
+        return jsonify({
+            "message": "Entry deleted",
+            "deleted_id": entry_id
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting role location entry: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/role-location-queue/bulk-approve', methods=['POST'])
+@require_pm_admin
+def bulk_approve_role_location_entries():
+    """Bulk approve pending role+location queue entries."""
+    try:
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        data = request.get_json() or {}
+        entry_ids = data.get('entry_ids', [])
+        
+        if not entry_ids:
+            # If no specific IDs, approve all pending
+            entries = RoleLocationQueue.query.filter_by(queue_status='pending').all()
+        else:
+            entries = RoleLocationQueue.query.filter(
+                RoleLocationQueue.id.in_(entry_ids),
+                RoleLocationQueue.queue_status == 'pending'
+            ).all()
+        
+        approved_count = 0
+        for entry in entries:
+            entry.queue_status = 'approved'
+            entry.updated_at = datetime.utcnow()
+            approved_count += 1
+        
+        db.session.commit()
+        
+        logger.info(f"Bulk approved {approved_count} role+location entries")
+        
+        return jsonify({
+            "message": f"Approved {approved_count} entries",
+            "approved_count": approved_count
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error bulk approving role location entries: {e}")
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)

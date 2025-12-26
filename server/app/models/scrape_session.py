@@ -57,6 +57,15 @@ class ScrapeSession(db.Model):
     )
     role_name = db.Column(String(255), nullable=True)  # Cached role name for reporting
     
+    # Location-based scraping support
+    location = db.Column(String(255), nullable=True)  # Location for location-specific scraping
+    role_location_queue_id = db.Column(
+        Integer,
+        ForeignKey('role_location_queue.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )
+    
     # Timing
     started_at = db.Column(DateTime, nullable=False, default=datetime.utcnow)  # When scraper fetched role
     completed_at = db.Column(DateTime, nullable=True)  # When scraper posted jobs
@@ -121,6 +130,8 @@ class ScrapeSession(db.Model):
             'scraper_name': self.scraper_name,
             'global_role_id': self.global_role_id,
             'role_name': self.role_name,
+            'location': self.location,  # Location for location-specific scraping
+            'role_location_queue_id': self.role_location_queue_id,
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'duration_seconds': self.duration_seconds,

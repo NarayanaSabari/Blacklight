@@ -285,6 +285,12 @@ class CandidateService:
         print(f"[DEBUG] Candidate object created with education: {len(candidate.education or [])} items")
         
         db.session.add(candidate)
+        
+        # Invalidate tenant roles cache if candidate has preferred_roles (Phase 3)
+        if parsed_data.get('preferred_roles'):
+            from app.services.email_sync_service import EmailSyncService
+            EmailSyncService.invalidate_tenant_roles_cache(tenant_id)
+        
         return candidate
 
     def _update_candidate(
@@ -484,6 +490,12 @@ class CandidateService:
                 setattr(candidate, field, data[field])
         
         db.session.commit()
+        
+        # Invalidate tenant roles cache if preferred_roles changed (Phase 3)
+        if 'preferred_roles' in data:
+            from app.services.email_sync_service import EmailSyncService
+            EmailSyncService.invalidate_tenant_roles_cache(tenant_id)
+        
         return candidate
     
     def delete_candidate(self, candidate_id: int, tenant_id: int) -> bool:
@@ -734,6 +746,14 @@ class CandidateService:
                 "Please add at least one preferred role for the candidate."
             )
         
+        # VALIDATION: Check preferred_locations is filled (required for location-based job scraping)
+        if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
+            raise ValueError(
+                "Preferred locations are required for approval. "
+                "Please add at least one preferred location for the candidate "
+                "(e.g., 'New York, NY', 'Remote', 'Los Angeles, CA')."
+            )
+        
         # Update approval fields
         candidate.onboarding_status = 'APPROVED'
         candidate.status = 'ready_for_assignment'  # Critical for job matching
@@ -759,6 +779,7 @@ class CandidateService:
                             "candidate_id": candidate.id,
                             "tenant_id": tenant_id,
                             "preferred_roles": candidate.preferred_roles,
+                            "preferred_locations": candidate.preferred_locations or [],
                             "trigger_source": "approval_service"
                         }
                     )

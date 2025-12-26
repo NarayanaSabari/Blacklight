@@ -168,6 +168,7 @@ export interface OnboardingSubmissionRequest {
   expected_salary: string;
   skills?: string[];
   preferred_roles?: string[];
+  preferred_locations?: string[];
   education?: string;
   work_experience?: string;
   summary?: string;

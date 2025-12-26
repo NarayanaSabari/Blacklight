@@ -9,3 +9,5 @@ export { ApiKeysManager } from './ApiKeysManager';
 export { JobsPreview } from './JobsPreview';
 export { GlobalRolesQueue } from './GlobalRolesQueue';
 export { PlatformManager } from './PlatformManager';
+export { RoleLocationQueue } from './RoleLocationQueue';
+export { UnifiedRoleQueue } from './UnifiedRoleQueue';

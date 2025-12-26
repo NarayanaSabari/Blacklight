@@ -22,6 +22,7 @@ import {
   Network,
   UserCheck,
   Mail,
+  LayoutGrid,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -68,6 +69,13 @@ const navigation: NavItem[] = [
     label: 'Your Candidates',
     icon: UserCheck,
     href: '/your-candidates',
+    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
+  },
+  {
+    id: 'pipeline',
+    label: 'Pipeline',
+    icon: LayoutGrid,
+    href: '/pipeline',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {

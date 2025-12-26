@@ -28,12 +28,14 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context) -> dict:
     2. Normalize each preferred role to canonical form
     3. Create/update entries in global_roles table
     4. Link candidate to global roles for job matching
+    5. Create RoleLocationQueue entries for each role+location combination
     
     Event data:
     {
         "candidate_id": 123,
         "tenant_id": 456,
         "preferred_roles": ["Senior Python Developer", "Backend Engineer"],
+        "preferred_locations": ["New York, NY", "Remote"],  # Optional
         "trigger_source": "approval" | "profile_update" | "manual"
     }
     """
@@ -41,11 +43,12 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context) -> dict:
     candidate_id = event_data.get("candidate_id")
     tenant_id = event_data.get("tenant_id")
     preferred_roles = event_data.get("preferred_roles", [])
+    preferred_locations = event_data.get("preferred_locations", [])
     trigger_source = event_data.get("trigger_source", "manual")
     
     logger.info(
         f"[ROLE-NORM] Starting normalization for candidate {candidate_id} "
-        f"(tenant {tenant_id}, trigger: {trigger_source}, roles: {preferred_roles})"
+        f"(tenant {tenant_id}, trigger: {trigger_source}, roles: {preferred_roles}, locations: {preferred_locations})"
     )
     
     # Step 1: Validate candidate exists
@@ -80,14 +83,14 @@ async def normalize_candidate_roles_workflow(ctx: inngest.Context) -> dict:
             "failed": 0
         }
     
-    # Step 4: Normalize each role
+    # Step 4: Normalize each role (with location queue entries)
     normalization_results = []
     for raw_role in preferred_roles:
         if raw_role and raw_role.strip():
             role_to_normalize = raw_role.strip()
             result = await ctx.step.run(
                 f"normalize-role-{role_to_normalize[:20].replace(' ', '-')}",
-                lambda r=role_to_normalize: normalize_single_role_step(candidate_id, r)
+                lambda r=role_to_normalize, locs=preferred_locations: normalize_single_role_step(candidate_id, r, locs)
             )
             normalization_results.append(result)
     
@@ -206,8 +209,22 @@ def sync_removed_roles_step(candidate_id: int, current_preferred_roles: List[str
         }
 
 
-def normalize_single_role_step(candidate_id: int, raw_role: str) -> Dict[str, Any]:
-    """Normalize a single role for a candidate."""
+def normalize_single_role_step(
+    candidate_id: int, 
+    raw_role: str, 
+    preferred_locations: List[str] = None
+) -> Dict[str, Any]:
+    """
+    Normalize a single role for a candidate.
+    
+    Also creates RoleLocationQueue entries for each role+location combination
+    if preferred_locations are provided.
+    
+    Args:
+        candidate_id: The candidate's ID
+        raw_role: The raw role string to normalize
+        preferred_locations: Optional list of preferred work locations
+    """
     from app import db
     from app.services.ai_role_normalization_service import AIRoleNormalizationService
     
@@ -215,12 +232,16 @@ def normalize_single_role_step(candidate_id: int, raw_role: str) -> Dict[str, An
         # Instantiate the service
         role_normalizer = AIRoleNormalizationService()
         
-        logger.info(f"[ROLE-NORM] Normalizing '{raw_role}' for candidate {candidate_id}")
+        logger.info(
+            f"[ROLE-NORM] Normalizing '{raw_role}' for candidate {candidate_id} "
+            f"(locations: {preferred_locations or []})"
+        )
         
-        # Perform normalization
+        # Perform normalization with location queue entries
         global_role, similarity, method = role_normalizer.normalize_candidate_role(
             raw_role=raw_role,
-            candidate_id=candidate_id
+            candidate_id=candidate_id,
+            preferred_locations=preferred_locations
         )
         
         logger.info(
@@ -234,7 +255,8 @@ def normalize_single_role_step(candidate_id: int, raw_role: str) -> Dict[str, An
             "normalized_name": global_role.name,
             "global_role_id": global_role.id,
             "similarity": similarity,
-            "method": method
+            "method": method,
+            "location_queue_entries": len(preferred_locations) if preferred_locations else 0
         }
     except Exception as e:
         # Rollback any failed transaction

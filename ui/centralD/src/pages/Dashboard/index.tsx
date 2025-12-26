@@ -1,7 +1,7 @@
 /**
  * Dashboard Page
  * Main dashboard for PM_ADMIN to monitor job matching system
- * Features 6 tabs: Overview, Scraper Monitoring, API Keys, Jobs Overview, Role Queue, Platforms
+ * Features 6 tabs: Overview, Scraper Monitoring, API Keys, Jobs Overview, Scraper Queue, Platforms
  */
 
 import { 
@@ -10,8 +10,8 @@ import {
   RoleQueueTable, 
   ApiKeysManager,
   JobsPreview,
-  GlobalRolesQueue,
-  PlatformManager
+  PlatformManager,
+  UnifiedRoleQueue
 } from './components';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -56,9 +56,9 @@ export function DashboardPage() {
             <Briefcase className="h-4 w-4" />
             <span>Jobs Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="role-queue" className="flex items-center gap-2 px-4">
+          <TabsTrigger value="scraper-queue" className="flex items-center gap-2 px-4">
             <Tags className="h-4 w-4" />
-            <span>Role Queue</span>
+            <span>Scraper Queue</span>
           </TabsTrigger>
           <TabsTrigger value="platforms" className="flex items-center gap-2 px-4">
             <Globe className="h-4 w-4" />
@@ -93,11 +93,11 @@ export function DashboardPage() {
           <JobsPreview />
         </TabsContent>
 
-        {/* Tab 5: Role Queue (Pending Review) */}
-        <TabsContent value="role-queue" className="space-y-6">
+        {/* Tab 5: Unified Scraper Queue (Roles + Locations) */}
+        <TabsContent value="scraper-queue" className="space-y-6">
           <RoleQueueTable />
-          {/* Global Roles Queue - All roles with status */}
-          <GlobalRolesQueue />
+          {/* Unified Role Queue with expandable locations */}
+          <UnifiedRoleQueue />
         </TabsContent>
 
         {/* Tab 6: Platform Manager */}

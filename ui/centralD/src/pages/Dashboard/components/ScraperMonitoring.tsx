@@ -31,7 +31,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { scraperMonitoringApi, type ScrapeSession, type SessionPlatformStatus } from "@/lib/dashboard-api";
+import { scraperMonitoringApi, type ScrapeSession, type SessionPlatformStatus, type ScraperStats } from "@/lib/dashboard-api";
 import { usePMAdminAuth } from "@/hooks/usePMAdminAuth";
 import { 
   Activity, 
@@ -48,7 +48,11 @@ import {
   StopCircle,
   RotateCcw,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  MapPin,
+  Globe,
+  TrendingUp,
+  BarChart3
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
@@ -97,12 +101,21 @@ function SessionDetailsDialog({ session }: { session: ScrapeSession }) {
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
             <span>Session Details</span>
             <SessionStatusBadge status={session.status} />
           </DialogTitle>
-          <DialogDescription>
-            {session.roleName} • {session.scraperKeyName}
+          <DialogDescription className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-foreground">{session.roleName}</span>
+            <div className="flex items-center gap-2">
+              {session.location && (
+                <Badge variant="outline" className="text-xs gap-1 border-blue-300 text-blue-600 bg-blue-50">
+                  <MapPin className="h-3 w-3" />
+                  {session.location}
+                </Badge>
+              )}
+              <span className="text-xs text-muted-foreground">• {session.scraperKeyName}</span>
+            </div>
           </DialogDescription>
         </DialogHeader>
         
@@ -116,6 +129,30 @@ function SessionDetailsDialog({ session }: { session: ScrapeSession }) {
           </div>
         ) : sessionDetails ? (
           <div className="space-y-4">
+            {/* Scrape Target Info */}
+            <div className="p-3 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-full bg-blue-100">
+                  <Activity className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-blue-600 font-medium">Scrape Target</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-semibold text-blue-900">{sessionDetails.roleName}</span>
+                    <span className="text-blue-400">→</span>
+                    {sessionDetails.location ? (
+                      <Badge className="gap-1 bg-blue-600 text-white">
+                        <MapPin className="h-3 w-3" />
+                        {sessionDetails.location}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground italic">No location data</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             {/* Session Summary */}
             <div className="grid grid-cols-4 gap-3">
               <div className="p-3 rounded-lg bg-muted/50 text-center">
@@ -246,7 +283,15 @@ function SessionCard({ session, onTerminate, isTerminating }: {
             )}
           </div>
           <div>
-            <p className="font-medium">{session.roleName}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-medium">{session.roleName}</p>
+              {session.location && (
+                <Badge variant="outline" className="text-xs gap-1 border-blue-300 text-blue-600 bg-blue-50">
+                  <MapPin className="h-3 w-3" />
+                  {session.location}
+                </Badge>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {session.scraperKeyName} • {timeAgo}
             </p>
@@ -535,6 +580,144 @@ function RecentSessionsList() {
   );
 }
 
+function LocationAnalytics({ stats }: { stats: ScraperStats }) {
+  const { locationAnalytics } = stats;
+  const totalLocationSessions = locationAnalytics.sessionsWithLocation + locationAnalytics.sessionsWithoutLocation;
+  const locationSessionPercentage = totalLocationSessions > 0 
+    ? Math.round((locationAnalytics.sessionsWithLocation / totalLocationSessions) * 100)
+    : 0;
+  
+  return (
+    <div className="space-y-4">
+      {/* Location Queue Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4 text-blue-600" />
+            <span className="text-xs text-blue-600 font-medium">Total Queue</span>
+          </div>
+          <p className="text-2xl font-bold text-blue-700 mt-1">
+            {locationAnalytics.queue.total}
+          </p>
+          <p className="text-xs text-blue-500">
+            {locationAnalytics.queue.uniqueLocations} unique locations
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-yellow-600" />
+            <span className="text-xs text-yellow-600 font-medium">Pending</span>
+          </div>
+          <p className="text-2xl font-bold text-yellow-700 mt-1">
+            {locationAnalytics.queue.pending}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <span className="text-xs text-green-600 font-medium">Approved</span>
+          </div>
+          <p className="text-2xl font-bold text-green-700 mt-1">
+            {locationAnalytics.queue.approved}
+          </p>
+        </div>
+        <div className="p-3 rounded-lg bg-purple-50 border border-purple-200">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-purple-600" />
+            <span className="text-xs text-purple-600 font-medium">Processing</span>
+          </div>
+          <p className="text-2xl font-bold text-purple-700 mt-1">
+            {locationAnalytics.queue.processing}
+          </p>
+        </div>
+      </div>
+
+      {/* Session Distribution */}
+      <div className="p-4 rounded-lg border bg-muted/30">
+        <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Session Distribution (Last 24h)
+        </h4>
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-muted-foreground">Location-based Scraping</span>
+              <span className={locationSessionPercentage > 50 ? 'text-blue-600' : 'text-muted-foreground'}>
+                {locationSessionPercentage}%
+              </span>
+            </div>
+            <Progress value={locationSessionPercentage} className="h-2" />
+          </div>
+          <div className="text-right text-xs">
+            <span className="text-blue-600 font-medium">{locationAnalytics.sessionsWithLocation}</span>
+            <span className="text-muted-foreground"> / {totalLocationSessions} sessions</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Locations by Jobs Imported */}
+      {locationAnalytics.topLocations.length > 0 && (
+        <div className="p-4 rounded-lg border">
+          <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            Top Locations by Jobs Imported (Last 24h)
+          </h4>
+          <div className="space-y-2">
+            {locationAnalytics.topLocations.map((loc, idx) => {
+              const maxJobs = locationAnalytics.topLocations[0]?.jobsImported || 1;
+              const barWidth = (loc.jobsImported / maxJobs) * 100;
+              const successRate = loc.jobsFound > 0 
+                ? Math.round((loc.jobsImported / loc.jobsFound) * 100) 
+                : 0;
+              
+              return (
+                <div key={loc.location} className="relative">
+                  <div 
+                    className="absolute inset-y-0 left-0 bg-blue-100 rounded-lg transition-all"
+                    style={{ width: `${barWidth}%` }}
+                  />
+                  <div className="relative flex items-center justify-between p-2 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground w-5">#{idx + 1}</span>
+                      <MapPin className="h-3.5 w-3.5 text-blue-600" />
+                      <span className="text-sm font-medium truncate max-w-[200px]">{loc.location}</span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="text-muted-foreground">
+                        {loc.sessionCount} session{loc.sessionCount !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-blue-600">
+                        {loc.jobsFound} found
+                      </span>
+                      <span className="text-green-600 font-medium">
+                        {loc.jobsImported} imported
+                      </span>
+                      <Badge 
+                        variant={successRate >= 80 ? "secondary" : successRate >= 50 ? "outline" : "destructive"}
+                        className={`text-xs ${successRate >= 80 ? 'bg-green-100 text-green-800' : ''}`}
+                      >
+                        {successRate}%
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {locationAnalytics.topLocations.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No location-based sessions in the last 24 hours</p>
+          <p className="text-xs mt-1">Run scraper with --mode role-location to see location analytics</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatsSummary() {
   const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
   const { data: stats, isLoading } = useQuery({
@@ -647,6 +830,14 @@ function StatsSummary() {
 
 export function ScraperMonitoring() {
   const [activeTab, setActiveTab] = useState("active");
+  const { isAuthenticated, isLoading: authLoading } = usePMAdminAuth();
+  
+  const { data: stats } = useQuery({
+    queryKey: ['scraper-stats-for-location'],
+    queryFn: scraperMonitoringApi.getStats,
+    refetchInterval: 30000,
+    enabled: !authLoading && isAuthenticated,
+  });
 
   return (
     <Card>
@@ -664,12 +855,16 @@ export function ScraperMonitoring() {
         <StatsSummary />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="active">
               Active Sessions
             </TabsTrigger>
             <TabsTrigger value="recent">
               Recent Activity
+            </TabsTrigger>
+            <TabsTrigger value="locations" className="gap-1">
+              <MapPin className="h-3.5 w-3.5" />
+              Location Analytics
             </TabsTrigger>
           </TabsList>
           <TabsContent value="active" className="mt-4">
@@ -677,6 +872,15 @@ export function ScraperMonitoring() {
           </TabsContent>
           <TabsContent value="recent" className="mt-4">
             <RecentSessionsList />
+          </TabsContent>
+          <TabsContent value="locations" className="mt-4">
+            {stats ? (
+              <LocationAnalytics stats={stats} />
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>

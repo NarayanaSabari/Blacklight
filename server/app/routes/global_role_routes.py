@@ -628,7 +628,7 @@ def get_role_candidates(role_id: int):
                 "first_name": candidate.first_name,
                 "last_name": candidate.last_name,
                 "email": candidate.email,
-                "preferred_role": candidate.preferred_role,
+                "preferred_roles": candidate.preferred_roles,
                 "tenant_id": candidate.tenant_id,
                 "created_at": candidate.created_at.isoformat()
             })

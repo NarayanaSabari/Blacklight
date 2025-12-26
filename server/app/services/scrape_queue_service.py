@@ -96,6 +96,61 @@ class ScrapeQueueService:
         }
     
     @staticmethod
+    def get_role_location_queue_stats() -> Dict[str, Any]:
+        """
+        Get role+location queue statistics for dashboard.
+        
+        Returns:
+            Dict with queue counts by status and priority for RoleLocationQueue
+        """
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        # Count by status
+        status_counts = db.session.execute(
+            select(
+                RoleLocationQueue.queue_status,
+                func.count(RoleLocationQueue.id)
+            ).group_by(RoleLocationQueue.queue_status)
+        ).fetchall()
+        
+        # Count by priority (for approved entries)
+        priority_counts = db.session.execute(
+            select(
+                RoleLocationQueue.priority,
+                func.count(RoleLocationQueue.id)
+            ).where(
+                RoleLocationQueue.queue_status == 'approved'
+            ).group_by(RoleLocationQueue.priority)
+        ).fetchall()
+        
+        # Total entries
+        total_entries = db.session.execute(
+            select(func.count(RoleLocationQueue.id))
+        ).scalar() or 0
+        
+        # Unique roles (global_role_id)
+        unique_roles = db.session.execute(
+            select(func.count(func.distinct(RoleLocationQueue.global_role_id)))
+        ).scalar() or 0
+        
+        # Unique locations
+        unique_locations = db.session.execute(
+            select(func.count(func.distinct(RoleLocationQueue.location)))
+        ).scalar() or 0
+        
+        # Queue depth = approved entries
+        queue_depth = sum(row[1] for row in status_counts if row[0] == 'approved')
+        
+        return {
+            "by_status": {row[0]: row[1] for row in status_counts},
+            "by_priority": {row[0]: row[1] for row in priority_counts},
+            "total_location_entries": total_entries,
+            "unique_roles": unique_roles,
+            "unique_locations": unique_locations,
+            "queue_depth": queue_depth
+        }
+    
+    @staticmethod
     def get_next_role(scraper_key: ScraperApiKey) -> Optional[Dict[str, Any]]:
         """
         Get next role from queue and start session.
@@ -281,6 +336,139 @@ class ScrapeQueueService:
         }
     
     @staticmethod
+    def get_next_role_location_with_platforms(scraper_key: ScraperApiKey) -> Optional[Dict[str, Any]]:
+        """
+        Get next role+location combination from queue with platform checklist.
+        Creates session and platform status entries.
+        
+        This is the location-aware version of get_next_role_with_platforms.
+        Returns role+location combinations for location-specific job scraping.
+        
+        Called by: GET /api/scraper/queue/next-role-location
+        
+        Args:
+            scraper_key: Authenticated scraper API key
+        
+        Returns:
+            Dict with session_id, role details, location, and platforms list, or None if queue empty
+        
+        Raises:
+            ValueError: If scraper already has an active session
+        """
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        # Check if this API key already has an active session
+        active_session = ScrapeSession.query.filter(
+            ScrapeSession.scraper_key_id == scraper_key.id,
+            ScrapeSession.status == "in_progress"
+        ).first()
+        
+        if active_session:
+            logger.warning(
+                f"Scraper '{scraper_key.name}' (key_id={scraper_key.id}) already has an active session: "
+                f"{active_session.session_id} for role '{active_session.role_name}'"
+            )
+            raise ValueError(
+                f"Scraper already has an active session ({active_session.session_id}) "
+                f"for role '{active_session.role_name}'. "
+                f"Complete or terminate the current session before requesting a new role."
+            )
+        
+        # Find approved role+location entries, prioritized by priority + candidate_count
+        queue_entry = db.session.query(RoleLocationQueue).filter(
+            RoleLocationQueue.queue_status == "approved"
+        ).order_by(
+            case(
+                (RoleLocationQueue.priority == "urgent", 4),
+                (RoleLocationQueue.priority == "high", 3),
+                (RoleLocationQueue.priority == "normal", 2),
+                (RoleLocationQueue.priority == "low", 1),
+            ).desc(),
+            RoleLocationQueue.candidate_count.desc()
+        ).first()
+        
+        if not queue_entry:
+            logger.info("Role+location queue is empty - no approved entries")
+            return None
+        
+        # Get the global role
+        role = db.session.get(GlobalRole, queue_entry.global_role_id)
+        if not role:
+            logger.error(f"GlobalRole not found for queue entry {queue_entry.id}")
+            return None
+        
+        # Get active platforms
+        active_platforms = ScraperPlatform.get_active_platforms()
+        
+        if not active_platforms:
+            logger.warning("No active platforms configured")
+            return None
+        
+        # Mark queue entry as processing
+        queue_entry.queue_status = "processing"
+        queue_entry.updated_at = datetime.utcnow()
+        
+        # Create session for tracking (include location in role_name for identification)
+        session = ScrapeSession(
+            session_id=uuid.uuid4(),
+            scraper_key_id=scraper_key.id,
+            scraper_name=scraper_key.name,
+            global_role_id=role.id,
+            role_name=role.name,
+            location=queue_entry.location,  # Store location in dedicated column
+            role_location_queue_id=queue_entry.id,  # Track which queue entry this is for
+            started_at=datetime.utcnow(),
+            status="in_progress",
+            platforms_total=len(active_platforms),
+            platforms_completed=0,
+            platforms_failed=0
+        )
+        db.session.add(session)
+        db.session.flush()  # Get session_id
+        
+        # Create platform status entries for each active platform
+        platform_list = []
+        for platform in active_platforms:
+            platform_status = SessionPlatformStatus(
+                session_id=session.session_id,
+                platform_id=platform.id,
+                platform_name=platform.name,
+                status="pending"
+            )
+            db.session.add(platform_status)
+            
+            platform_list.append({
+                "id": platform.id,
+                "name": platform.name,
+                "display_name": platform.display_name
+            })
+        
+        # Record API key usage
+        scraper_key.record_usage()
+        
+        db.session.commit()
+        
+        logger.info(
+            f"Assigned role '{role.name}' + location '{queue_entry.location}' "
+            f"to scraper '{scraper_key.name}' (session={session.session_id}) "
+            f"with {len(platform_list)} platforms"
+        )
+        
+        return {
+            "session_id": str(session.session_id),
+            "role": {
+                "id": role.id,
+                "name": role.name,
+                "aliases": role.aliases or [],
+                "category": role.category,
+                "candidate_count": role.candidate_count
+            },
+            "location": queue_entry.location,
+            "role_location_queue_id": queue_entry.id,
+            "platforms": platform_list
+        }
+
+    @staticmethod
     def complete_session(
         session_id: str,
         jobs_data: List[Dict],
@@ -337,6 +525,22 @@ class ScrapeQueueService:
             role.last_scraped_at = datetime.utcnow()
             role.total_jobs_scraped += import_result["imported"]
         
+        # Update RoleLocationQueue if this was a location-specific scrape
+        role_location_queue_id = None
+        if session.metadata and session.metadata.get("role_location_queue_id"):
+            from app.models.role_location_queue import RoleLocationQueue
+            role_location_queue_id = session.metadata["role_location_queue_id"]
+            queue_entry = db.session.get(RoleLocationQueue, role_location_queue_id)
+            if queue_entry:
+                queue_entry.queue_status = "completed"
+                queue_entry.last_scraped_at = datetime.utcnow()
+                queue_entry.total_jobs_scraped = (queue_entry.total_jobs_scraped or 0) + import_result["imported"]
+                queue_entry.last_scrape_session_id = str(session.session_id)
+                logger.info(
+                    f"Updated RoleLocationQueue entry {role_location_queue_id}: "
+                    f"jobs_scraped={queue_entry.total_jobs_scraped}"
+                )
+        
         # Record API key usage with job count
         scraper_key.record_usage(jobs_imported=import_result["imported"])
         
@@ -345,16 +549,24 @@ class ScrapeQueueService:
         # Trigger job matching event if jobs were imported
         if import_result["job_ids"]:
             try:
+                # Build event data including location info if available
+                event_data = {
+                    "job_ids": import_result["job_ids"],
+                    "global_role_id": session.global_role_id,
+                    "role_name": session.role_name,
+                    "session_id": str(session.session_id),
+                    "source": "scraper"
+                }
+                
+                # Add location info if this was a location-specific scrape
+                if session.metadata and session.metadata.get("location"):
+                    event_data["location"] = session.metadata["location"]
+                    event_data["role_location_queue_id"] = session.metadata.get("role_location_queue_id")
+                
                 inngest_client.send_sync(
                     inngest.Event(
                         name="jobs/imported",
-                        data={
-                            "job_ids": import_result["job_ids"],
-                            "global_role_id": session.global_role_id,
-                            "role_name": session.role_name,
-                            "session_id": str(session.session_id),
-                            "source": "scraper"
-                        }
+                        data=event_data
                     )
                 )
                 logger.info(f"Triggered jobs/imported event for {len(import_result['job_ids'])} jobs")

@@ -449,6 +449,15 @@ def approve_candidate(candidate_id: int):
                 400
             )
         
+        # VALIDATION: Check preferred_locations is filled (required for location-based job scraping)
+        if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
+            return error_response(
+                "Preferred locations are required for approval. "
+                "Please add at least one preferred location for the candidate "
+                "(e.g., 'New York, NY', 'Remote', 'Los Angeles, CA').",
+                400
+            )
+        
         # Update status to 'ready_for_assignment'
         candidate.status = 'ready_for_assignment'
         candidate.onboarding_status = 'APPROVED'  # For tracking
@@ -535,6 +544,7 @@ def approve_candidate(candidate_id: int):
                             "candidate_id": candidate.id,
                             "tenant_id": tenant_id,
                             "preferred_roles": candidate.preferred_roles,
+                            "preferred_locations": candidate.preferred_locations or [],
                             "trigger_source": "approval_route"
                         }
                     )
@@ -858,6 +868,7 @@ def update_preferred_roles(candidate_id: int):
                             "candidate_id": candidate_id,
                             "tenant_id": tenant_id,
                             "preferred_roles": preferred_roles,
+                            "preferred_locations": candidate.preferred_locations or [],
                             "trigger_source": "profile_update",
                             "roles_hash": roles_hash
                         }

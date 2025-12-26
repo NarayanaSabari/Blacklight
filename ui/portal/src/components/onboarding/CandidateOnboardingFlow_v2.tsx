@@ -131,6 +131,7 @@ export function CandidateOnboardingFlow({
   const [workExperience, setWorkExperience] = useState<any[]>([]);
   const [education, setEducation] = useState<any[]>([]);
   const [preferredRoles, setPreferredRoles] = useState<string[]>([]);
+  const [preferredLocations, setPreferredLocations] = useState<string[]>([]);
   const [suggestedRoles, setSuggestedRoles] = useState<{
     roles: Array<{ role: string; score: number; reasoning: string }>;
     generated_at: string;
@@ -506,6 +507,9 @@ export function CandidateOnboardingFlow({
       if (preferredRoles && preferredRoles.length > 0) {
         mergedParsed.preferred_roles = preferredRoles;
       }
+      if (preferredLocations && preferredLocations.length > 0) {
+        mergedParsed.preferred_locations = preferredLocations;
+      }
       // Include AI suggestions if generated
       if (suggestedRoles) {
         mergedParsed.suggested_roles = suggestedRoles;
@@ -521,6 +525,7 @@ export function CandidateOnboardingFlow({
           expected_salary: professionalData.expected_salary,
           skills,
           preferred_roles: preferredRoles,
+          preferred_locations: preferredLocations,
           education: professionalData.education,
           work_experience: professionalData.work_experience,
           summary: professionalData.summary,
@@ -989,6 +994,30 @@ export function CandidateOnboardingFlow({
 
                   <Separator />
 
+                  {/* Preferred Locations */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Preferred Work Locations</h4>
+                    <div className="space-y-2">
+                      <Label>Preferred Locations</Label>
+                      <TagInput
+                        value={preferredLocations}
+                        onChange={(locations) => {
+                          if (locations.length > 10) {
+                            toast.error('Maximum 10 preferred locations allowed');
+                            return;
+                          }
+                          setPreferredLocations(locations);
+                        }}
+                        placeholder="Add preferred location (e.g., New York, Remote)..."
+                      />
+                      <p className="text-xs text-slate-500">
+                        {preferredLocations.length}/10 locations • Press Enter to add, click X to remove
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   {/* AI-Suggested Roles */}
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -1257,6 +1286,32 @@ export function CandidateOnboardingFlow({
                   <ReviewItem label="Expected Pay Rate" value={professionalForm.getValues('expected_salary') || 'Not provided'} />
                   <ReviewItem label="Skills" value={professionalForm.getValues('skills') || 'Not provided'} />
                 </ReviewSection>
+
+                {preferredRoles.length > 0 && (
+                  <>
+                    <Separator />
+                    <ReviewSection title="Preferred Roles">
+                      <div className="flex flex-wrap gap-2">
+                        {preferredRoles.map((role, idx) => (
+                          <Badge key={idx} variant="secondary">{role}</Badge>
+                        ))}
+                      </div>
+                    </ReviewSection>
+                  </>
+                )}
+
+                {preferredLocations.length > 0 && (
+                  <>
+                    <Separator />
+                    <ReviewSection title="Preferred Locations">
+                      <div className="flex flex-wrap gap-2">
+                        {preferredLocations.map((loc, idx) => (
+                          <Badge key={idx} variant="outline">{loc}</Badge>
+                        ))}
+                      </div>
+                    </ReviewSection>
+                  </>
+                )}
 
                 {professionalForm.getValues('work_experience') && (
                   <>

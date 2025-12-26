@@ -21,7 +21,7 @@ import { InvitationDetailsPage, OnboardingPage } from '@/pages';
 import InvitationReviewPage from '@/pages/invitations/InvitationReviewPage';
 import DocumentsPage from '@/pages/DocumentsPage';
 import { RolesPage } from '@/pages/RolesPage';
-import { ManageTeamPage, YourCandidatesPageNew, CandidateManagementPage, EmailJobsPage } from '@/pages';
+import { ManageTeamPage, YourCandidatesPageNew, CandidateManagementPage, EmailJobsPage, KanbanBoardPage } from '@/pages';
 import { Loader2 } from 'lucide-react';
 import { env } from '@/lib/env';
 import './App.css';
@@ -100,7 +100,9 @@ function App() {
                       <Route path="/users/roles" element={<RolesPage />} />
                       <Route path="/manage-team" element={<ManageTeamPage />} />
                       <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
+                      <Route path="/pipeline" element={<KanbanBoardPage />} />
                       <Route path="/email-jobs" element={<EmailJobsPage />} />
+                      <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="*" element={<Navigate to="/dashboard" replace />} />

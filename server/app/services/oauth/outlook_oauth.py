@@ -211,6 +211,7 @@ class OutlookOAuthService:
         access_token: str,
         folder: str = "inbox",
         top: int = 50,
+        skip: int = 0,
         filter_query: Optional[str] = None,
         select_fields: Optional[list] = None,
     ) -> list:
@@ -220,7 +221,8 @@ class OutlookOAuthService:
         Args:
             access_token: Valid access token
             folder: Mail folder to fetch from ('inbox', 'sentitems', etc.)
-            top: Maximum number of messages to return
+            top: Maximum number of messages to return per page
+            skip: Number of messages to skip (for pagination)
             filter_query: OData filter query (e.g., "receivedDateTime ge 2024-01-01")
             select_fields: List of fields to select
             
@@ -231,6 +233,9 @@ class OutlookOAuthService:
         
         # Build query parameters
         params = {"$top": top}
+        
+        if skip > 0:
+            params["$skip"] = skip
         
         if filter_query:
             params["$filter"] = filter_query

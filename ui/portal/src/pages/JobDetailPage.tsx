@@ -27,6 +27,7 @@ import {
   Users,
   Globe,
   Sparkles,
+  Mail,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -51,6 +52,9 @@ export function JobDetailPage() {
   
   const jobIdNum = parseInt(jobId || '0', 10);
   const candidateIdNum = candidateId ? parseInt(candidateId, 10) : undefined;
+  
+  // Determine if coming from email-jobs page
+  const isFromEmailJobs = location.pathname.startsWith('/email-jobs/');
 
   // Fetch job details
   const {
@@ -66,6 +70,8 @@ export function JobDetailPage() {
   const handleBack = () => {
     if (candidateIdNum) {
       navigate(`/candidates/${candidateIdNum}/matches`);
+    } else if (isFromEmailJobs) {
+      navigate('/email-jobs');
     } else {
       navigate('/jobs');
     }
@@ -160,7 +166,7 @@ export function JobDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <Button variant="ghost" onClick={handleBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to {candidateIdNum ? 'Matches' : 'Jobs'}
+          Back to {candidateIdNum ? 'Matches' : isFromEmailJobs ? 'Email Jobs' : 'Jobs'}
         </Button>
         <div className="flex gap-2">
           {(job as any)?.job_url && (
@@ -363,7 +369,9 @@ export function JobDetailPage() {
                 <Globe className="h-4 w-4" />
                 Job Source
               </h3>
-              <p className="text-muted-foreground">{job.source}</p>
+              <p className="text-muted-foreground">
+                {(job as any)?.is_email_sourced ? 'Email Integration' : job.source}
+              </p>
             </div>
 
             {job.posted_date && (
@@ -378,6 +386,41 @@ export function JobDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Email Source Info (for email-sourced jobs) */}
+          {(job as any)?.is_email_sourced && (
+            <>
+              <Separator />
+              <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                <h3 className="font-semibold mb-4 flex items-center gap-2 text-blue-900">
+                  <Mail className="h-5 w-5" />
+                  Email Source
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  {(job as any)?.source_email_subject && (
+                    <div>
+                      <p className="text-blue-700 font-medium">Subject</p>
+                      <p className="text-blue-900">{(job as any).source_email_subject}</p>
+                    </div>
+                  )}
+                  {(job as any)?.source_email_sender && (
+                    <div>
+                      <p className="text-blue-700 font-medium">From</p>
+                      <p className="text-blue-900">{(job as any).source_email_sender}</p>
+                    </div>
+                  )}
+                  {(job as any)?.source_email_date && (
+                    <div>
+                      <p className="text-blue-700 font-medium">Received</p>
+                      <p className="text-blue-900">
+                        {format(new Date((job as any).source_email_date), 'MMMM dd, yyyy h:mm a')}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           <Separator />
 

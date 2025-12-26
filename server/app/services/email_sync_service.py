@@ -2,73 +2,145 @@
 
 Handles fetching emails from connected accounts, filtering for job-related emails,
 and coordinating with the parser service.
+
+SCALABILITY IMPROVEMENTS (Phases 1-7):
+- Phase 2: Gmail Batch API for reduced API calls
+- Phase 3: Redis caching for tenant roles
+- Phase 5: Incremental sync using Gmail History API
+- Phase 7: Circuit breakers for fault tolerance
+
+FILTERING STRATEGY:
+- Only match emails where subject contains EXACT role names from:
+  1. Candidate.preferred_roles in the tenant
+  2. GlobalRoles linked to candidates in the tenant (via CandidateGlobalRole)
+- Skip if no roles configured in tenant
+- No generic pattern/keyword matching (reduces noise)
 """
 
 import base64
+import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app import db
 from app.models.candidate import Candidate
+from app.models.candidate_global_role import CandidateGlobalRole
+from app.models.global_role import GlobalRole
 from app.models.processed_email import ProcessedEmail
 from app.models.user_email_integration import UserEmailIntegration
 from app.services.email_integration_service import email_integration_service
 from app.services.oauth.gmail_oauth import gmail_oauth_service
 from app.services.oauth.outlook_oauth import outlook_oauth_service
+from app.utils.circuit_breaker import gmail_circuit_breaker, outlook_circuit_breaker, CircuitBreakerError
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# Redis cache TTL for tenant roles (1 hour)
+TENANT_ROLES_CACHE_TTL = 3600
+
 
 class EmailSyncService:
-    """Service for syncing and filtering job-related emails."""
+    """Service for syncing and filtering job-related emails.
     
-    # Common job-related keywords in email subjects
-    JOB_KEYWORDS = [
-        "job",
-        "position",
-        "opening",
-        "opportunity",
-        "requirement",
-        "hiring",
-        "developer",
-        "engineer",
-        "analyst",
-        "consultant",
-        "manager",
-        "lead",
-        "architect",
-        "admin",
-        "specialist",
-        "coordinator",
+    Uses ROLE-BASED filtering only:
+    - Matches emails where subject contains exact role names from tenant
+    - No generic pattern/keyword matching (reduces AI processing cost)
+    
+    Scalability features:
+    - Redis caching for tenant roles (Phase 3)
+    - Gmail Batch API for reduced API calls (Phase 2)
+    - Incremental sync using Gmail History API (Phase 5)
+    - Circuit breakers for external API fault tolerance (Phase 7)
+    """
+    
+    # Email senders to skip (marketing, newsletters, automated)
+    BLOCKED_SENDERS = [
+        "linkedin.com",
+        "e.linkedin.com",
+        "messages-noreply@linkedin.com",
+        "jobs-noreply@linkedin.com",
+        "noreply@",
+        "no-reply@",
+        "mailer-daemon@",
+        "newsletter@",
+        "notifications@",
+        "marketing@",
+        "promo@",
+        "substack.com",
+        "medium.com",
+        "mailchimp.com",
+        "sendgrid.net",
+        "amazonses.com",
     ]
     
-    # Patterns that indicate job emails
-    JOB_PATTERNS = [
-        r"urgent\s+requirement",
-        r"hot\s+requirement",
-        r"immediate\s+need",
-        r"looking\s+for",
-        r"need\s+a?\s*\w+\s*(developer|engineer|analyst)",
-        r"\b(c2c|w2|corp.to.corp|1099)\b",
-        r"rate:\s*\$?\d+",
-        r"duration:\s*\d+",
-        r"location:\s*\w+",
+    # Subject patterns to skip (automated emails, not actual job requirements)
+    BLOCKED_SUBJECT_PATTERNS = [
+        r"^new jobs similar to",
+        r"jobs? you may be interested in",
+        r"job alert",
+        r"job recommendations?",
+        r"people you may know",
+        r"people also viewed",
+        r"your weekly",
+        r"your daily",
+        r"digest",
+        r"newsletter",
+        r"unsubscribe",
+        r"confirm your",
+        r"verify your",
+        r"reset password",
+        r"security alert",
     ]
     
     def __init__(self):
         """Initialize email sync service."""
-        self.lookback_days = settings.email_sync_lookback_days
-        self.max_emails = settings.email_sync_max_emails
+        self.initial_lookback_days = settings.email_sync_initial_lookback_days  # 2 days for first scan
+        self.max_emails_per_page = settings.email_sync_max_emails_per_page  # Gmail pagination size
+    
+    def update_sync_timestamp(
+        self, 
+        integration_id: int, 
+        new_history_id: Optional[str] = None
+    ) -> bool:
+        """
+        Update the last_synced_at timestamp after successful workflow completion.
+        
+        This should be called AFTER all emails have been processed successfully,
+        not during the sync step. This ensures idempotency for Inngest retries.
+        
+        Args:
+            integration_id: Integration ID to update
+            new_history_id: Optional Gmail history ID for incremental sync
+            
+        Returns:
+            True if updated successfully
+        """
+        integration = db.session.get(UserEmailIntegration, integration_id)
+        if not integration:
+            logger.warning(f"Integration {integration_id} not found for timestamp update")
+            return False
+        
+        integration.last_synced_at = datetime.now(timezone.utc)
+        
+        if new_history_id and integration.provider == "gmail":
+            integration.gmail_history_id = new_history_id
+        
+        db.session.commit()
+        logger.info(f"Updated last_synced_at for integration {integration_id}")
+        return True
     
     def sync_integration(self, integration: UserEmailIntegration) -> dict:
         """
         Sync emails for a single integration.
+        
+        NOTE: This method does NOT update last_synced_at. Call update_sync_timestamp()
+        after the Inngest workflow completes successfully.
         
         Args:
             integration: UserEmailIntegration object
@@ -81,26 +153,40 @@ class EmailSyncService:
             return {"skipped": True, "reason": "inactive"}
         
         try:
+            # Get preferred roles for filtering FIRST - skip if none configured
+            # Phase 3: Uses Redis cache for performance
+            preferred_roles = self._get_tenant_roles_cached(integration.tenant_id)
+            
+            if not preferred_roles:
+                logger.info(f"Skipping integration {integration.id}: no roles configured in tenant")
+                return {
+                    "skipped": True, 
+                    "reason": "no_roles_configured",
+                    "message": "No candidate preferred roles or global roles found in tenant"
+                }
+            
+            logger.info(f"Integration {integration.id}: Found {len(preferred_roles)} roles to match: {preferred_roles[:5]}...")
+            
             # Get valid access token
             access_token = email_integration_service.get_valid_access_token(integration)
             
-            # Fetch emails based on provider
+            # Fetch emails based on provider (with circuit breaker protection)
+            # Phase 2: Gmail uses batch API, Phase 5: Gmail uses incremental sync
             if integration.provider == "gmail":
-                emails = self._fetch_gmail_emails(access_token, integration)
+                emails, new_history_id = self._fetch_gmail_emails_with_history(access_token, integration)
             else:
-                emails = self._fetch_outlook_emails(access_token, integration)
-            
-            # Get preferred roles for filtering
-            preferred_roles = self._get_preferred_roles_for_tenant(integration.tenant_id)
+                emails = self._fetch_outlook_emails_safe(access_token, integration)
+                new_history_id = None
             
             # Filter and process emails
             results = {
                 "fetched": len(emails),
                 "matched": 0,
-                "skipped": 0,
+                "skipped_count": 0,  # Renamed from "skipped" to avoid confusion with boolean
                 "already_processed": 0,
                 "errors": 0,
                 "emails_to_process": [],
+                "roles_searched": preferred_roles,
             }
             
             for email in emails:
@@ -111,11 +197,15 @@ class EmailSyncService:
                     results["already_processed"] += 1
                     continue
                 
-                # Check if matches job criteria
+                # Check if matches job criteria (ROLE-BASED only)
                 subject = email.get("subject", "")
-                matches, match_reason = self._matches_job_criteria(subject, preferred_roles)
+                sender = email.get("sender", "")
+                matches, match_reason = self._matches_job_criteria(subject, sender, preferred_roles)
                 
                 if not matches:
+                    # Log skipped emails for debugging
+                    logger.debug(f"Skipped email: subject='{subject[:60]}...', reason={match_reason}")
+                    
                     # Record as skipped
                     self._record_skipped_email(
                         integration=integration,
@@ -124,23 +214,36 @@ class EmailSyncService:
                         sender=email.get("sender", ""),
                         reason=match_reason or "no_match",
                     )
-                    results["skipped"] += 1
+                    results["skipped_count"] += 1
                     continue
                 
+                logger.info(f"Matched email: subject='{subject[:60]}...', reason={match_reason}")
+                
                 # Add to processing queue
+                received_at = email.get("received_at")
+                if isinstance(received_at, datetime):
+                    received_at = received_at.isoformat()
+                
                 results["emails_to_process"].append({
                     "email_id": email_id,
                     "thread_id": email.get("thread_id"),
                     "subject": subject,
                     "sender": email.get("sender", ""),
                     "body": email.get("body", ""),
-                    "received_at": email.get("received_at"),
+                    "received_at": received_at,
                     "match_reason": match_reason,
                 })
                 results["matched"] += 1
             
-            # Update integration sync time
-            integration.last_synced_at = datetime.now(timezone.utc)
+            # NOTE: Don't update last_synced_at here!
+            # It should be updated AFTER the Inngest workflow completes successfully.
+            # This ensures idempotency - if the Inngest step retries, we get the same emails.
+            
+            # Store the new history ID in results for later update
+            if new_history_id and integration.provider == "gmail":
+                results["new_history_id"] = new_history_id
+            
+            # Clear any previous errors (but don't commit yet)
             integration.consecutive_failures = 0
             integration.last_error = None
             db.session.commit()
@@ -148,10 +251,15 @@ class EmailSyncService:
             logger.info(
                 f"Synced integration {integration.id}: "
                 f"fetched={results['fetched']}, matched={results['matched']}, "
-                f"skipped={results['skipped']}, already_processed={results['already_processed']}"
+                f"skipped={results['skipped_count']}, already_processed={results['already_processed']}"
             )
             
             return results
+        
+        # Phase 7: Circuit breaker error handling
+        except CircuitBreakerError as e:
+            logger.warning(f"Circuit breaker open for integration {integration.id}: {e}")
+            return {"error": str(e), "circuit_breaker_open": True}
             
         except Exception as e:
             logger.error(f"Sync failed for integration {integration.id}: {e}")
@@ -165,13 +273,171 @@ class EmailSyncService:
             db.session.commit()
             return {"error": str(e)}
     
-    def _fetch_gmail_emails(
+    def _get_tenant_roles_cached(self, tenant_id: int) -> list[str]:
+        """
+        Get tenant roles with Redis caching.
+        
+        Phase 3: Caches tenant roles for 1 hour to reduce DB queries.
+        
+        Args:
+            tenant_id: Tenant ID
+            
+        Returns:
+            List of role names
+        """
+        from app import redis_client
+        
+        cache_key = f"tenant_roles:{tenant_id}"
+        
+        # Try to get from cache
+        if redis_client:
+            try:
+                cached = redis_client.get(cache_key)
+                if cached:
+                    logger.debug(f"Cache hit for tenant roles: {tenant_id}")
+                    # Redis returns string, need to deserialize JSON
+                    return json.loads(cached) if isinstance(cached, str) else cached
+            except Exception as e:
+                logger.warning(f"Redis cache read failed: {e}")
+        
+        # Cache miss - compute roles
+        roles = self._get_tenant_roles(tenant_id)
+        
+        # Store in cache - serialize list to JSON
+        if redis_client and roles:
+            try:
+                redis_client.set(cache_key, json.dumps(roles), ex=TENANT_ROLES_CACHE_TTL)
+                logger.debug(f"Cached {len(roles)} roles for tenant {tenant_id}")
+            except Exception as e:
+                logger.warning(f"Redis cache write failed: {e}")
+        
+        return roles
+    
+    @staticmethod
+    def invalidate_tenant_roles_cache(tenant_id: int) -> bool:
+        """
+        Invalidate tenant roles cache when candidates/roles change.
+        
+        Should be called when:
+        - Candidate preferred_roles are updated
+        - CandidateGlobalRole associations change
+        - GlobalRole is updated
+        
+        Args:
+            tenant_id: Tenant ID
+            
+        Returns:
+            True if cache was invalidated
+        """
+        from app import redis_client
+        
+        if not redis_client:
+            return False
+        
+        try:
+            cache_key = f"tenant_roles:{tenant_id}"
+            redis_client.delete(cache_key)
+            logger.info(f"Invalidated roles cache for tenant {tenant_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to invalidate roles cache: {e}")
+            return False
+    
+    def _fetch_gmail_emails_with_history(
+        self,
+        access_token: str,
+        integration: UserEmailIntegration,
+    ) -> tuple[list[dict], Optional[str]]:
+        """
+        Fetch Gmail emails using incremental History API when possible.
+        
+        Phase 5: Uses Gmail History API for incremental sync, falling back
+        to full sync when history ID is not available or expired.
+        
+        Args:
+            access_token: Valid Gmail access token
+            integration: UserEmailIntegration object
+            
+        Returns:
+            Tuple of (emails list, new history_id for next sync)
+        """
+        service = gmail_oauth_service.build_gmail_service(access_token)
+        
+        # Get current profile to obtain latest history ID
+        try:
+            profile = service.users().getProfile(userId="me").execute()
+            latest_history_id = profile.get("historyId")
+        except Exception as e:
+            logger.warning(f"Failed to get Gmail profile: {e}")
+            latest_history_id = None
+        
+        # Try incremental sync if we have a history ID
+        if integration.gmail_history_id and latest_history_id:
+            try:
+                emails = self._fetch_gmail_emails_incremental(
+                    service, integration.gmail_history_id
+                )
+                logger.info(f"Incremental sync: fetched {len(emails)} new emails")
+                return emails, latest_history_id
+            except Exception as e:
+                # History ID expired or invalid, fall back to full sync
+                logger.info(f"Incremental sync failed, falling back to full: {e}")
+        
+        # Full sync with batch API
+        emails = self._fetch_gmail_emails_batch(access_token, integration)
+        return emails, latest_history_id
+    
+    @gmail_circuit_breaker
+    def _fetch_gmail_emails_incremental(
+        self,
+        service,
+        start_history_id: str,
+    ) -> list[dict]:
+        """
+        Fetch only new emails since last sync using History API.
+        
+        Phase 5: Incremental sync reduces API calls and data transfer.
+        
+        Args:
+            service: Gmail API service
+            start_history_id: History ID from last sync
+            
+        Returns:
+            List of new email dictionaries
+        """
+        # Fetch history changes
+        response = service.users().history().list(
+            userId="me",
+            startHistoryId=start_history_id,
+            historyTypes=["messageAdded"],
+            maxResults=100,
+        ).execute()
+        
+        # Extract message IDs from history
+        message_ids = set()
+        for history in response.get("history", []):
+            for msg_added in history.get("messagesAdded", []):
+                message_ids.add(msg_added["message"]["id"])
+        
+        if not message_ids:
+            return []
+        
+        # Fetch full message details using batch API
+        return self._fetch_gmail_messages_batch(service, list(message_ids))
+    
+    @gmail_circuit_breaker
+    def _fetch_gmail_emails_batch(
         self,
         access_token: str,
         integration: UserEmailIntegration,
     ) -> list[dict]:
         """
-        Fetch emails from Gmail.
+        Fetch emails from Gmail using Batch API for efficiency.
+        
+        Time-based fetching strategy:
+        - First scan (no last_synced_at): Fetch ALL emails from past 2 days
+        - Subsequent syncs: Fetch ALL emails since last_synced_at
+        - No count limit - fetches all matching emails using pagination
         
         Args:
             access_token: Valid Gmail access token
@@ -182,49 +448,158 @@ class EmailSyncService:
         """
         service = gmail_oauth_service.build_gmail_service(access_token)
         
-        # Calculate date filter
-        after_date = datetime.now(timezone.utc) - timedelta(days=self.lookback_days)
-        query = f"after:{after_date.strftime('%Y/%m/%d')}"
+        # Determine time boundary based on sync state
+        is_initial_sync = integration.last_synced_at is None
         
-        # Search for messages
-        results = service.users().messages().list(
-            userId="me",
-            q=query,
-            maxResults=self.max_emails,
-        ).execute()
+        if is_initial_sync:
+            # First scan: Look back 2 days
+            after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
+            logger.info(f"Initial sync for integration {integration.id}: fetching emails from past {self.initial_lookback_days} days")
+        else:
+            # Subsequent syncs: Fetch since last sync time (with 15 min buffer for safety)
+            after_date = integration.last_synced_at - timedelta(minutes=15)
+            logger.info(f"Incremental sync for integration {integration.id}: fetching emails since {after_date.isoformat()}")
         
-        messages = results.get("messages", [])
+        # Build Gmail query with date filter
+        # Gmail uses epoch seconds for precise time filtering
+        after_timestamp = int(after_date.timestamp())
+        query = f"after:{after_timestamp}"
+        
+        logger.info(f"Gmail query: '{query}' (after_date={after_date.strftime('%Y-%m-%d %H:%M:%S UTC')})")
+        
+        # Fetch ALL messages using pagination (no maxResults limit on total)
+        # Note: By default, Gmail API searches all mail (not just inbox)
+        all_message_ids = []
+        page_token = None
+        
+        while True:
+            # Fetch a page of message IDs
+            # Include all labels to search everywhere (inbox, promotions, updates, etc.)
+            request_params = {
+                "userId": "me",
+                "q": query,
+                "maxResults": self.max_emails_per_page,  # Page size, not total limit
+                "includeSpamTrash": False,  # Exclude spam/trash
+            }
+            if page_token:
+                request_params["pageToken"] = page_token
+            
+            results = service.users().messages().list(**request_params).execute()
+            
+            messages = results.get("messages", [])
+            all_message_ids.extend([msg["id"] for msg in messages])
+            
+            logger.info(f"Gmail returned {len(messages)} messages in this page, total so far: {len(all_message_ids)}")
+            
+            # Check for more pages
+            page_token = results.get("nextPageToken")
+            if not page_token:
+                break
+            
+            logger.info(f"More pages available, continuing...")
+        
+        logger.info(f"Found {len(all_message_ids)} total emails since {after_date.strftime('%Y-%m-%d %H:%M')}")
+        
+        if not all_message_ids:
+            return []
+        
+        # Fetch all messages in batch
+        return self._fetch_gmail_messages_batch(service, all_message_ids)
+    
+    @gmail_circuit_breaker
+    def _fetch_gmail_messages_batch(
+        self,
+        service,
+        message_ids: list[str],
+    ) -> list[dict]:
+        """
+        Fetch multiple Gmail messages using batch API.
+        
+        Phase 2: Batch requests reduce N API calls to 1.
+        Phase 7: Protected by circuit breaker for fault tolerance.
+        
+        Args:
+            service: Gmail API service
+            message_ids: List of message IDs to fetch
+            
+        Returns:
+            List of parsed email dictionaries
+        """
+        from googleapiclient.http import BatchHttpRequest
+        
         emails = []
+        errors = []
         
-        for msg_info in messages:
+        def handle_message(request_id, response, exception):
+            """Callback for batch request."""
+            if exception:
+                errors.append({"id": request_id, "error": str(exception)})
+                return
+            
             try:
-                # Get full message
-                message = service.users().messages().get(
-                    userId="me",
-                    id=msg_info["id"],
-                    format="full",
-                ).execute()
-                
-                # Extract headers
-                headers = {h["name"].lower(): h["value"] for h in message.get("payload", {}).get("headers", [])}
-                
-                # Extract body
-                body = self._extract_gmail_body(message.get("payload", {}))
-                
-                emails.append({
-                    "id": message["id"],
-                    "thread_id": message.get("threadId"),
-                    "subject": headers.get("subject", ""),
-                    "sender": headers.get("from", ""),
-                    "body": body,
-                    "received_at": self._parse_gmail_date(headers.get("date", "")),
-                })
-                
+                email = self._parse_gmail_message(response)
+                if email:
+                    emails.append(email)
             except Exception as e:
-                logger.warning(f"Failed to fetch Gmail message {msg_info['id']}: {e}")
-                continue
+                errors.append({"id": request_id, "error": str(e)})
         
+        # Create batch request
+        batch = service.new_batch_http_request(callback=handle_message)
+        
+        for msg_id in message_ids:
+            batch.add(
+                service.users().messages().get(
+                    userId="me",
+                    id=msg_id,
+                    format="full",
+                ),
+                request_id=msg_id,
+            )
+        
+        # Execute batch request
+        batch.execute()
+        
+        if errors:
+            logger.warning(f"Batch fetch had {len(errors)} errors: {errors[:3]}")
+        
+        logger.info(f"Batch fetched {len(emails)} emails from {len(message_ids)} IDs")
         return emails
+    
+    def _parse_gmail_message(self, message: dict) -> Optional[dict]:
+        """Parse Gmail message into email dictionary."""
+        try:
+            headers = {h["name"].lower(): h["value"] for h in message.get("payload", {}).get("headers", [])}
+            body = self._extract_gmail_body(message.get("payload", {}))
+            
+            return {
+                "id": message["id"],
+                "thread_id": message.get("threadId"),
+                "subject": headers.get("subject", ""),
+                "sender": headers.get("from", ""),
+                "body": body,
+                "received_at": self._parse_gmail_date(headers.get("date", "")),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to parse Gmail message {message.get('id')}: {e}")
+            return None
+    
+    def _fetch_gmail_emails(
+        self,
+        access_token: str,
+        integration: UserEmailIntegration,
+    ) -> list[dict]:
+        """
+        DEPRECATED: Legacy N+1 fetch method. Use _fetch_gmail_emails_batch instead.
+        Kept for backwards compatibility.
+        
+        Args:
+            access_token: Valid Gmail access token
+            integration: UserEmailIntegration object
+            
+        Returns:
+            List of email dictionaries
+        """
+        return self._fetch_gmail_emails_batch(access_token, integration)
     
     def _extract_gmail_body(self, payload: dict) -> str:
         """Extract body text from Gmail message payload."""
@@ -259,13 +634,16 @@ class EmailSyncService:
         except Exception:
             return None
     
-    def _fetch_outlook_emails(
+    @outlook_circuit_breaker
+    def _fetch_outlook_emails_safe(
         self,
         access_token: str,
         integration: UserEmailIntegration,
     ) -> list[dict]:
         """
-        Fetch emails from Outlook.
+        Fetch emails from Outlook with circuit breaker protection.
+        
+        Phase 7: Wraps Outlook fetch with circuit breaker for fault tolerance.
         
         Args:
             access_token: Valid Outlook access token
@@ -274,110 +652,201 @@ class EmailSyncService:
         Returns:
             List of email dictionaries
         """
-        # Calculate date filter
-        after_date = datetime.now(timezone.utc) - timedelta(days=self.lookback_days)
+        return self._fetch_outlook_emails(access_token, integration)
+    
+    def _fetch_outlook_emails(
+        self,
+        access_token: str,
+        integration: UserEmailIntegration,
+    ) -> list[dict]:
+        """
+        Fetch emails from Outlook with time-based logic.
+        
+        Time-based fetching strategy:
+        - First scan (no last_synced_at): Fetch ALL emails from past 2 days
+        - Subsequent syncs: Fetch ALL emails since last_synced_at
+        
+        Args:
+            access_token: Valid Outlook access token
+            integration: UserEmailIntegration object
+            
+        Returns:
+            List of email dictionaries
+        """
+        # Determine time boundary based on sync state
+        is_initial_sync = integration.last_synced_at is None
+        
+        if is_initial_sync:
+            # First scan: Look back 2 days
+            after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
+            logger.info(f"Initial Outlook sync for integration {integration.id}: fetching emails from past {self.initial_lookback_days} days")
+        else:
+            # Subsequent syncs: Fetch since last sync time (with 15 min buffer for safety)
+            after_date = integration.last_synced_at - timedelta(minutes=15)
+            logger.info(f"Incremental Outlook sync for integration {integration.id}: fetching emails since {after_date.isoformat()}")
+        
         filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
         
-        # Fetch messages
-        messages = outlook_oauth_service.get_messages(
-            access_token=access_token,
-            top=self.max_emails,
-            filter_query=filter_query,
-        )
+        # Fetch ALL messages using pagination
+        all_emails = []
+        skip = 0
+        page_size = self.max_emails_per_page
         
-        emails = []
-        for msg in messages:
-            try:
-                # Extract body
-                body = ""
-                if msg.get("body"):
-                    body = msg["body"].get("content", "")
-                    if msg["body"].get("contentType") == "html":
-                        body = re.sub(r"<[^>]+>", " ", body)
-                        body = re.sub(r"\s+", " ", body)
-                
-                # Extract sender
-                sender = ""
-                if msg.get("from", {}).get("emailAddress"):
-                    sender_info = msg["from"]["emailAddress"]
-                    sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
-                
-                emails.append({
-                    "id": msg["id"],
-                    "thread_id": msg.get("conversationId"),
-                    "subject": msg.get("subject", ""),
-                    "sender": sender,
-                    "body": body.strip()[:10000],
-                    "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
-                })
-                
-            except Exception as e:
-                logger.warning(f"Failed to process Outlook message: {e}")
-                continue
+        while True:
+            messages = outlook_oauth_service.get_messages(
+                access_token=access_token,
+                top=page_size,
+                skip=skip,
+                filter_query=filter_query,
+            )
+            
+            if not messages:
+                break
+            
+            for msg in messages:
+                try:
+                    # Extract body
+                    body = ""
+                    if msg.get("body"):
+                        body = msg["body"].get("content", "")
+                        if msg["body"].get("contentType") == "html":
+                            body = re.sub(r"<[^>]+>", " ", body)
+                            body = re.sub(r"\s+", " ", body)
+                    
+                    # Extract sender
+                    sender = ""
+                    if msg.get("from", {}).get("emailAddress"):
+                        sender_info = msg["from"]["emailAddress"]
+                        sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
+                    
+                    all_emails.append({
+                        "id": msg["id"],
+                        "thread_id": msg.get("conversationId"),
+                        "subject": msg.get("subject", ""),
+                        "sender": sender,
+                        "body": body.strip()[:10000],
+                        "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
+                    })
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to process Outlook message: {e}")
+                    continue
+            
+            # Check if we got a full page (more might exist)
+            if len(messages) < page_size:
+                break
+            
+            skip += page_size
+            logger.debug(f"Fetched {len(all_emails)} Outlook emails so far, continuing...")
         
-        return emails
+        logger.info(f"Found {len(all_emails)} total Outlook emails since {after_date.strftime('%Y-%m-%d %H:%M')}")
+        return all_emails
     
-    def _get_preferred_roles_for_tenant(self, tenant_id: int) -> list[str]:
+    def _get_tenant_roles(self, tenant_id: int) -> list[str]:
         """
-        Get preferred roles from approved candidates in tenant.
+        Get all roles to search for in this tenant.
+        
+        Sources:
+        1. Candidate.preferred_roles from all candidates in tenant
+        2. GlobalRole.name for roles linked to candidates in tenant
         
         Args:
             tenant_id: Tenant ID
             
         Returns:
-            List of normalized role names
+            List of normalized role names (lowercase, unique)
         """
-        stmt = select(Candidate.preferred_role).where(
+        roles = set()
+        
+        # Source 1: Candidate preferred_roles (ARRAY column)
+        stmt = select(func.unnest(Candidate.preferred_roles)).where(
             Candidate.tenant_id == tenant_id,
-            Candidate.status == "approved",
-            Candidate.preferred_role.isnot(None),
+            Candidate.preferred_roles.isnot(None),
         ).distinct()
         
-        roles = list(db.session.scalars(stmt).all())
-        
-        # Normalize roles
-        normalized = []
-        for role in roles:
+        candidate_roles = list(db.session.scalars(stmt).all())
+        for role in candidate_roles:
             if role:
-                # Split compound roles
-                for part in re.split(r"[,/|]", role):
-                    normalized.append(part.strip().lower())
+                roles.add(role.strip().lower())
         
-        return list(set(normalized))
+        # Source 2: GlobalRoles linked to candidates in this tenant
+        stmt = select(GlobalRole.name).join(
+            CandidateGlobalRole,
+            CandidateGlobalRole.global_role_id == GlobalRole.id
+        ).join(
+            Candidate,
+            Candidate.id == CandidateGlobalRole.candidate_id
+        ).where(
+            Candidate.tenant_id == tenant_id,
+        ).distinct()
+        
+        global_roles = list(db.session.scalars(stmt).all())
+        for role in global_roles:
+            if role:
+                roles.add(role.strip().lower())
+        
+        # Also add GlobalRole aliases
+        stmt = select(func.unnest(GlobalRole.aliases)).join(
+            CandidateGlobalRole,
+            CandidateGlobalRole.global_role_id == GlobalRole.id
+        ).join(
+            Candidate,
+            Candidate.id == CandidateGlobalRole.candidate_id
+        ).where(
+            Candidate.tenant_id == tenant_id,
+            GlobalRole.aliases.isnot(None),
+        ).distinct()
+        
+        aliases = list(db.session.scalars(stmt).all())
+        for alias in aliases:
+            if alias:
+                roles.add(alias.strip().lower())
+        
+        return list(roles)
     
     def _matches_job_criteria(
         self,
         subject: str,
+        sender: str,
         preferred_roles: list[str],
     ) -> tuple[bool, Optional[str]]:
         """
-        Check if email subject matches job criteria.
+        Check if email subject matches job criteria using ONLY role-based filtering.
+        
+        This method implements strict role-based matching:
+        - Only emails with subject containing exact role names (case-insensitive) are matched
+        - No generic patterns or keywords - prevents fetching unrelated emails
+        - Blocked senders and subjects are still filtered out
         
         Args:
             subject: Email subject line
-            preferred_roles: List of preferred roles to match
+            sender: Email sender address
+            preferred_roles: List of preferred roles to match (from tenant candidates + GlobalRoles)
             
         Returns:
             Tuple of (matches, reason)
         """
         subject_lower = subject.lower()
+        sender_lower = sender.lower()
         
-        # Check for preferred roles match (highest priority)
+        # First, check if sender is blocked (marketing, newsletters, etc.)
+        for blocked in self.BLOCKED_SENDERS:
+            if blocked in sender_lower:
+                return False, f"blocked_sender:{blocked}"
+        
+        # Check if subject matches blocked patterns (automated emails)
+        for pattern in self.BLOCKED_SUBJECT_PATTERNS:
+            if re.search(pattern, subject_lower, re.IGNORECASE):
+                return False, f"blocked_subject:{pattern}"
+        
+        # ONLY match if subject contains one of the preferred roles (exact match)
+        # No generic patterns or keywords - this ensures we only fetch relevant jobs
         for role in preferred_roles:
             if role and role in subject_lower:
                 return True, f"role_match:{role}"
         
-        # Check for job patterns
-        for pattern in self.JOB_PATTERNS:
-            if re.search(pattern, subject_lower, re.IGNORECASE):
-                return True, f"pattern_match:{pattern}"
-        
-        # Check for job keywords
-        for keyword in self.JOB_KEYWORDS:
-            if keyword in subject_lower:
-                return True, f"keyword_match:{keyword}"
-        
-        return False, "no_match"
+        # If no role matches, reject the email
+        return False, "no_role_match"
     
     def _is_email_processed(self, integration_id: int, email_id: str) -> bool:
         """Check if email has already been processed."""

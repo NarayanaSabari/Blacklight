@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     
     # Google Gemini API Configuration
     google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
-    gemini_model: str = Field(default="gemini-2.5-flash", env="GEMINI_MODEL")  # For resume parsing & suggestions
+    gemini_model: str = Field(default="gemini-1.5-flash", env="GEMINI_MODEL")  # For resume parsing & suggestions
     gemini_embedding_model: str = Field(default="models/embedding-001", env="GEMINI_EMBEDDING_MODEL")
     gemini_embedding_dimension: int = Field(default=768, env="GEMINI_EMBEDDING_DIMENSION")
     
@@ -124,8 +124,8 @@ class Settings(BaseSettings):
     # Email Integration - Sync Settings
     email_sync_enabled: bool = Field(default=True, env="EMAIL_SYNC_ENABLED")
     email_sync_frequency_minutes: int = Field(default=15, env="EMAIL_SYNC_FREQUENCY_MINUTES")
-    email_sync_lookback_days: int = Field(default=7, env="EMAIL_SYNC_LOOKBACK_DAYS")
-    email_sync_max_emails: int = Field(default=50, env="EMAIL_SYNC_MAX_EMAILS_PER_BATCH")
+    email_sync_initial_lookback_days: int = Field(default=2, env="EMAIL_SYNC_INITIAL_LOOKBACK_DAYS")  # First scan: 2 days
+    email_sync_max_emails_per_page: int = Field(default=100, env="EMAIL_SYNC_MAX_EMAILS_PER_PAGE")  # Gmail pagination size
     
     class Config:
         """Pydantic configuration."""

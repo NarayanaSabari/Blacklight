@@ -313,19 +313,23 @@ def get_candidate_matches(candidate_id: int):
     """
     Get job matches for a specific candidate.
     
-    GET /api/job-matches/candidates/:id?page=1&per_page=20&status=SUGGESTED&job_status=ACTIVE
+    Fetches jobs linked to the candidate's preferred roles (via RoleJobMapping)
+    and calculates match scores on-the-fly. No pre-computation required.
+    
+    GET /api/job-matches/candidates/:id?page=1&per_page=20&min_score=0
     
     Query params:
     - page: Page number (default 1)
     - per_page: Matches per page (default 20, max 100)
-    - status: Filter by match status (SUGGESTED, VIEWED, APPLIED, etc.)
-    - job_status: Filter by job posting status (ACTIVE, EXPIRED, etc.)
-    - min_score: Minimum match score filter
-    - sort_by: Sort field (match_score, created_at, default: match_score)
+    - min_score: Minimum match score filter (default 0)
+    - sort_by: Sort field (match_score, posted_date, default: match_score)
     - sort_order: Sort order (asc, desc, default: desc)
     
     Permissions: candidates.view
     """
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.role_job_mapping import RoleJobMapping
+    
     try:
         tenant_id = g.tenant_id
         
@@ -340,9 +344,7 @@ def get_candidate_matches(candidate_id: int):
         # Parse query parameters
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
-        match_status = request.args.get('status')
-        job_status = request.args.get('job_status')
-        min_score = request.args.get('min_score', type=float)
+        min_score = request.args.get('min_score', 0, type=float)
         sort_by = request.args.get('sort_by', 'match_score')
         sort_order = request.args.get('sort_order', 'desc')
         
@@ -352,62 +354,175 @@ def get_candidate_matches(candidate_id: int):
         if page < 1:
             return error_response("page must be >= 1")
         
-        # Build query for total count
-        count_query = select(func.count(CandidateJobMatch.id)).where(
-            CandidateJobMatch.candidate_id == candidate_id
+        # Get candidate's global roles
+        global_role_query = select(CandidateGlobalRole.global_role_id).where(
+            CandidateGlobalRole.candidate_id == candidate_id
+        )
+        global_role_ids = [row[0] for row in db.session.execute(global_role_query).all()]
+        
+        logger.info(
+            f"[JOB-MATCHES] Candidate {candidate_id}: global_role_ids={global_role_ids}"
         )
         
-        if match_status:
-            count_query = count_query.where(CandidateJobMatch.status == match_status)
+        if not global_role_ids:
+            # Check if candidate has preferred_roles that haven't been normalized yet
+            preferred_roles = candidate.preferred_roles or []
+            
+            logger.warning(
+                f"[JOB-MATCHES] Candidate {candidate_id} has no CandidateGlobalRole links. "
+                f"preferred_roles={preferred_roles}"
+            )
+            
+            return jsonify({
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': 0,
+                'matches': [],
+                'message': 'No preferred roles assigned to this candidate. Assign roles to see job matches.',
+                'debug': {
+                    'preferred_roles': preferred_roles,
+                    'global_role_ids': [],
+                    'hint': 'Roles need to be normalized first. This happens on candidate approval.'
+                }
+            }), 200
         
-        if min_score is not None:
-            count_query = count_query.where(CandidateJobMatch.match_score >= min_score)
+        # Get all job IDs mapped to these roles via RoleJobMapping
+        job_mapping_query = select(RoleJobMapping.job_posting_id).where(
+            RoleJobMapping.global_role_id.in_(global_role_ids)
+        ).distinct()
+        job_ids = [row[0] for row in db.session.execute(job_mapping_query).all()]
         
-        if job_status:
-            count_query = count_query.join(JobPosting).where(JobPosting.status == job_status)
-        
-        total_matches = db.session.execute(count_query).scalar()
-        
-        # Build query for matches
-        query = select(CandidateJobMatch).where(
-            CandidateJobMatch.candidate_id == candidate_id
+        logger.info(
+            f"[JOB-MATCHES] Candidate {candidate_id}: Found {len(job_ids)} jobs for roles {global_role_ids}"
         )
         
-        if match_status:
-            query = query.where(CandidateJobMatch.status == match_status)
+        if not job_ids:
+            # Get role names for debug
+            from app.models.global_role import GlobalRole
+            role_names = []
+            for role_id in global_role_ids:
+                role = db.session.get(GlobalRole, role_id)
+                if role:
+                    role_names.append(role.name)
+            
+            return jsonify({
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': 0,
+                'matches': [],
+                'message': 'No jobs found for assigned roles. Jobs will appear here when scraped or received via email.',
+                'debug': {
+                    'global_role_ids': global_role_ids,
+                    'global_role_names': role_names,
+                    'hint': 'Jobs are linked to roles via RoleJobMapping. Check if scraper/email imported jobs for these roles.'
+                }
+            }), 200
         
-        if min_score is not None:
-            query = query.where(CandidateJobMatch.match_score >= min_score)
+        # Fetch ACTIVE jobs
+        job_query = select(JobPosting).where(
+            JobPosting.id.in_(job_ids),
+            JobPosting.status == 'ACTIVE'
+        )
+        jobs = db.session.execute(job_query).scalars().all()
         
-        if job_status:
-            query = query.join(JobPosting).where(JobPosting.status == job_status)
+        if not jobs:
+            return jsonify({
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': 0,
+                'matches': [],
+                'message': 'No active jobs found for assigned roles.'
+            }), 200
         
-        # Sorting
+        # Initialize matching service and calculate scores on-the-fly
+        service = JobMatchingService(tenant_id=tenant_id)
+        scored_matches = []
+        
+        for job in jobs:
+            match_result = service.calculate_match_score(candidate, job)
+            overall_score = match_result.get('overall_score', 0)
+            
+            # Apply min_score filter
+            if overall_score >= min_score:
+                scored_matches.append({
+                    'job': job,
+                    'match_result': match_result
+                })
+        
+        # Sort matches
+        reverse_order = (sort_order != 'asc')
         if sort_by == 'match_score':
-            sort_column = CandidateJobMatch.match_score
-        elif sort_by == 'created_at':
-            sort_column = CandidateJobMatch.created_at
+            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=reverse_order)
+        elif sort_by == 'posted_date':
+            from datetime import datetime as dt
+            scored_matches.sort(
+                key=lambda x: x['job'].posted_date or dt.min.date(), 
+                reverse=reverse_order
+            )
         else:
-            sort_column = CandidateJobMatch.match_score
+            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=reverse_order)
         
-        if sort_order == 'asc':
-            query = query.order_by(sort_column.asc())
-        else:
-            query = query.order_by(sort_column.desc())
+        # Total count (after filtering)
+        total_matches = len(scored_matches)
+        total_pages = (total_matches + per_page - 1) // per_page if total_matches > 0 else 0
         
         # Pagination
-        offset = (page - 1) * per_page
-        query = query.offset(offset).limit(per_page)
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated_matches = scored_matches[start:end]
         
-        matches = db.session.execute(query).scalars().all()
+        # Format response to match expected JobMatch interface
+        matches_response = []
+        for m in paginated_matches:
+            job = m['job']
+            result = m['match_result']
+            matches_response.append({
+                'id': job.id,  # Use job ID as match ID (for on-the-fly matches)
+                'candidate_id': candidate_id,
+                'job_posting_id': job.id,
+                'match_score': round(result['overall_score'], 2),
+                'skill_match_score': round(result['skill_match_score'], 2),
+                'experience_match_score': round(result['experience_match_score'], 2),
+                'location_match_score': round(result['location_match_score'], 2),
+                'salary_match_score': round(result['salary_match_score'], 2),
+                'semantic_similarity': round(result['semantic_similarity'], 2),
+                'matched_skills': result['matched_skills'],
+                'missing_skills': result['missing_skills'],
+                'match_grade': result['match_grade'],
+                'status': 'SUGGESTED',
+                'is_recommended': True,
+                'job_posting': {
+                    'id': job.id,
+                    'title': job.title,
+                    'company': job.company,
+                    'location': job.location,
+                    'salary_range': job.salary_range,
+                    'salary_min': job.salary_min,
+                    'salary_max': job.salary_max,
+                    'job_type': job.job_type,
+                    'is_remote': job.is_remote,
+                    'skills': job.skills or [],
+                    'description': job.description[:500] if job.description else None,
+                    'job_url': job.job_url,
+                    'platform': job.platform,
+                    'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                    'status': job.status,
+                }
+            })
         
         return jsonify({
             'candidate_id': candidate_id,
             'total_matches': total_matches,
             'page': page,
             'per_page': per_page,
-            'total_pages': (total_matches + per_page - 1) // per_page if total_matches > 0 else 0,
-            'matches': [match.to_dict(include_job=True) for match in matches]
+            'total_pages': total_pages,
+            'matches': matches_response
         }), 200
         
     except Exception as e:

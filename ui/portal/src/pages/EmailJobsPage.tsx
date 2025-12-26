@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -70,6 +70,7 @@ import {
 
 export function EmailJobsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [page, setPage] = useState(1);
@@ -136,14 +137,17 @@ export function EmailJobsPage() {
   };
 
   const formatRate = (job: EmailJob) => {
-    if (job.min_rate && job.max_rate) {
-      return `$${job.min_rate} - $${job.max_rate}/hr`;
+    if (job.salary_range) {
+      return job.salary_range;
     }
-    if (job.min_rate) {
-      return `$${job.min_rate}/hr`;
+    if (job.salary_min && job.salary_max) {
+      return `$${(job.salary_min / 1000).toFixed(0)}k - $${(job.salary_max / 1000).toFixed(0)}k/yr`;
     }
-    if (job.min_salary && job.max_salary) {
-      return `$${(job.min_salary / 1000).toFixed(0)}k - $${(job.max_salary / 1000).toFixed(0)}k/yr`;
+    if (job.salary_min) {
+      return `$${(job.salary_min / 1000).toFixed(0)}k/yr`;
+    }
+    if (job.salary_max) {
+      return `$${(job.salary_max / 1000).toFixed(0)}k/yr`;
     }
     return '-';
   };
@@ -256,12 +260,12 @@ export function EmailJobsPage() {
                   <Search className="h-4 w-4" />
                 </Button>
               </form>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter || "all"} onValueChange={(val) => setStatusFilter(val === "all" ? "" : val)}>
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="active">Active</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>
@@ -310,7 +314,11 @@ export function EmailJobsPage() {
                 </TableHeader>
                 <TableBody>
                   {jobsData.jobs.map((job) => (
-                    <TableRow key={job.id}>
+                    <TableRow 
+                      key={job.id} 
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => navigate(`/email-jobs/${job.id}`)}
+                    >
                       <TableCell>
                         <div className="font-medium">{job.title}</div>
                         {job.skills && job.skills.length > 0 && (

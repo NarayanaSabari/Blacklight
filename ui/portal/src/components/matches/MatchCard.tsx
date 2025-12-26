@@ -16,6 +16,7 @@ import {
   XCircle,
   Clock,
   Sparkles,
+  Mail,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { JobMatch, MatchGrade } from '@/types';
@@ -142,7 +143,15 @@ export function MatchCard({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-1">
-            <h3 className="text-lg font-semibold leading-tight">{job.title}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold leading-tight">{job.title}</h3>
+              {job.is_email_sourced && (
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                  <Mail className="h-3 w-3 mr-1" />
+                  Email
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground font-medium">{job.company}</p>
           </div>
           <div className="flex flex-col items-end gap-2">

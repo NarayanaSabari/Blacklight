@@ -20,6 +20,22 @@ export interface JobPosting {
   posted_date: string | null;
   created_at: string;
   updated_at: string;
+  // Additional fields
+  job_type?: string | null;
+  salary_range?: string | null;
+  experience_required?: string | null;
+  requirements?: string | null;
+  snippet?: string | null;
+  job_url?: string | null;
+  platform?: string | null;
+  // Email source fields
+  is_email_sourced?: boolean;
+  source_tenant_id?: number | null;
+  sourced_by_user_id?: number | null;
+  source_email_id?: string | null;
+  source_email_subject?: string | null;
+  source_email_sender?: string | null;
+  source_email_date?: string | null;
 }
 
 export interface JobMatch {

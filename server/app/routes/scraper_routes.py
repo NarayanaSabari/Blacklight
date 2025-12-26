@@ -3,9 +3,10 @@ Scraper API Routes
 
 External API endpoints for job scrapers to:
 1. Fetch next role from queue (GET /api/scraper/queue/next-role) - includes platform list
-2. Post jobs for a platform (POST /api/scraper/queue/jobs) - per-platform submission
-3. Complete session (POST /api/scraper/queue/complete) - finalize and trigger matching
-4. Report platform failure (POST /api/scraper/queue/fail) - report failure for a platform
+2. Fetch next role+location from queue (GET /api/scraper/queue/next-role-location) - location-specific scraping
+3. Post jobs for a platform (POST /api/scraper/queue/jobs) - per-platform submission
+4. Complete session (POST /api/scraper/queue/complete) - finalize and trigger matching
+5. Report platform failure (POST /api/scraper/queue/fail) - report failure for a platform
 
 Authentication: X-Scraper-API-Key header
 """
@@ -120,6 +121,65 @@ def get_next_role():
         }), 500
 
 
+@scraper_bp.route('/queue/next-role-location', methods=['GET'])
+@require_scraper_auth
+def get_next_role_location():
+    """
+    Get next role+location combination from the scrape queue with platform checklist.
+    
+    This is the location-aware version of /queue/next-role.
+    Returns role+location combinations for location-specific job scraping.
+    
+    Note: A scraper can only have ONE active session at a time.
+    Complete or terminate the current session before requesting a new role+location.
+    
+    Response (200 OK):
+    {
+        "session_id": "uuid",
+        "role": {
+            "id": 1,
+            "name": "Python Developer",
+            "aliases": ["Python Dev", "Python Engineer"],
+            "category": "Engineering",
+            "candidate_count": 50
+        },
+        "location": "New York, NY",
+        "role_location_queue_id": 42,
+        "platforms": [
+            { "id": 1, "name": "linkedin", "display_name": "LinkedIn" },
+            { "id": 2, "name": "monster", "display_name": "Monster" },
+            ...
+        ]
+    }
+    
+    Returns 204 No Content if queue is empty.
+    Returns 409 Conflict if scraper already has an active session.
+    """
+    try:
+        result = ScrapeQueueService.get_next_role_location_with_platforms(g.scraper_key)
+        
+        if not result:
+            return '', 204  # No content - queue empty
+        
+        return jsonify(result), 200
+    
+    except ValueError as e:
+        # Scraper already has an active session
+        logger.warning(f"Scraper blocked from getting new role+location: {e}")
+        return jsonify({
+            "error": "Conflict",
+            "message": str(e),
+            "code": "ACTIVE_SESSION_EXISTS"
+        }), 409
+        
+    except Exception as e:
+        logger.error(f"Error getting next role+location: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
 @scraper_bp.route('/queue/current-session', methods=['GET'])
 @require_scraper_auth
 def get_current_session():
@@ -172,6 +232,8 @@ def get_current_session():
                 "session_id": str(active_session.session_id),
                 "role_name": active_session.role_name,
                 "role_id": active_session.global_role_id,
+                "location": active_session.location,
+                "role_location_queue_id": active_session.role_location_queue_id,
                 "status": active_session.status,
                 "started_at": active_session.started_at.isoformat() if active_session.started_at else None,
                 "platforms_total": active_session.platforms_total or 0,
@@ -457,6 +519,8 @@ def complete_session_endpoint():
             "message": "Session completion triggered",
             "session_id": session_id,
             "role_name": session.role_name,
+            "location": session.location,
+            "role_location_queue_id": session.role_location_queue_id,
             "summary": {
                 "total_platforms": session.platforms_total,
                 "successful_platforms": session.platforms_completed - session.platforms_failed,
@@ -560,6 +624,33 @@ def get_queue_stats():
         return jsonify(stats), 200
     except Exception as e:
         logger.error(f"Error getting queue stats: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_bp.route('/queue/location-stats', methods=['GET'])
+@require_scraper_auth
+def get_role_location_queue_stats():
+    """
+    Get role+location queue statistics.
+    
+    Response:
+    {
+        "by_status": {"pending": 50, "approved": 20, "processing": 3, "completed": 200},
+        "by_priority": {"urgent": 5, "high": 15, "normal": 30, "low": 10},
+        "total_location_entries": 60,
+        "unique_roles": 15,
+        "unique_locations": 8,
+        "queue_depth": 20
+    }
+    """
+    try:
+        stats = ScrapeQueueService.get_role_location_queue_stats()
+        return jsonify(stats), 200
+    except Exception as e:
+        logger.error(f"Error getting role+location queue stats: {e}")
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)

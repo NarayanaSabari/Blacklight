@@ -101,6 +101,11 @@ class JobPosting(db.Model):
         nullable=True,
         index=True
     )  # Which user's email integration found this job
+    additional_source_users = db.Column(
+        JSONB,
+        nullable=True,
+        default=list
+    )  # Additional recruiters who received the same job email: [{"user_id": 1, "email_id": "abc", "received_at": "2025-01-01T00:00:00Z"}]
     source_email_id = db.Column(String(255), nullable=True, index=True)  # Email Message-ID for dedup
     source_email_subject = db.Column(String(500), nullable=True)
     source_email_sender = db.Column(String(255), nullable=True)
@@ -162,6 +167,7 @@ class JobPosting(db.Model):
             'is_email_sourced': self.is_email_sourced,
             'source_tenant_id': self.source_tenant_id,
             'sourced_by_user_id': self.sourced_by_user_id,
+            'additional_source_users': self.additional_source_users or [],
             'source_email_id': self.source_email_id,
             'source_email_subject': self.source_email_subject,
             'source_email_sender': self.source_email_sender,

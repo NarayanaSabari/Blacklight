@@ -58,7 +58,8 @@ class AIRoleNormalizationService:
     def normalize_candidate_role(
         self,
         raw_role: str,
-        candidate_id: int
+        candidate_id: int,
+        preferred_locations: Optional[List[str]] = None
     ) -> Tuple[GlobalRole, float, str]:
         """
         Normalize a candidate's preferred role and link to candidate.
@@ -66,6 +67,8 @@ class AIRoleNormalizationService:
         Args:
             raw_role: Raw role name from candidate (e.g., "Senior Python Developer")
             candidate_id: Candidate ID to link
+            preferred_locations: Optional list of candidate's preferred work locations
+                                 Used to create RoleLocationQueue entries for scraping
         
         Returns:
             Tuple of (GlobalRole, similarity_score, method)
@@ -134,8 +137,8 @@ class AIRoleNormalizationService:
             
             method = "ai_created"
         
-        # Step 4: Link candidate to role
-        self._link_candidate_to_role(candidate_id, global_role)
+        # Step 4: Link candidate to role (with location queue entries if provided)
+        self._link_candidate_to_role(candidate_id, global_role, preferred_locations)
         
         db.session.commit()
         
@@ -276,12 +279,24 @@ Return ONLY the normalized job title, nothing else."""
         # Title case the result
         return ' '.join(word.capitalize() for word in normalized_words)
     
-    def _link_candidate_to_role(self, candidate_id: int, global_role: GlobalRole):
+    def _link_candidate_to_role(
+        self, 
+        candidate_id: int, 
+        global_role: GlobalRole,
+        preferred_locations: Optional[List[str]] = None
+    ):
         """
         Link a candidate to a global role.
         
         Creates CandidateGlobalRole record and increments candidate_count.
         Also ensures the role is in the scraping queue.
+        If preferred_locations are provided, creates RoleLocationQueue entries
+        for each role+location combination.
+        
+        Args:
+            candidate_id: The candidate's ID
+            global_role: The GlobalRole to link to
+            preferred_locations: Optional list of candidate's preferred work locations
         """
         # Check if link already exists
         existing_link = CandidateGlobalRole.query.filter_by(
@@ -293,6 +308,9 @@ Return ONLY the normalized job title, nothing else."""
             logger.debug(f"Candidate {candidate_id} already linked to role {global_role.id}")
             # Still ensure role is in queue even if link exists
             self._ensure_role_in_queue(global_role)
+            # Create location queue entries even if role link exists
+            if preferred_locations:
+                self._ensure_role_location_queue_entries(global_role, preferred_locations)
             return
         
         # Create link
@@ -307,6 +325,10 @@ Return ONLY the normalized job title, nothing else."""
         
         # Ensure role is in the scraping queue
         self._ensure_role_in_queue(global_role)
+        
+        # Create RoleLocationQueue entries for each role+location combination
+        if preferred_locations:
+            self._ensure_role_location_queue_entries(global_role, preferred_locations)
         
         logger.info(
             f"Linked candidate {candidate_id} to role '{global_role.name}' "
@@ -328,6 +350,64 @@ Return ONLY the normalized job title, nothing else."""
                 f"Added role '{global_role.name}' to scraping queue "
                 f"(was: {old_status or 'none'}, now: pending)"
             )
+    
+    def _ensure_role_location_queue_entries(
+        self, 
+        global_role: GlobalRole, 
+        locations: List[str]
+    ):
+        """
+        Ensure RoleLocationQueue entries exist for each role+location combination.
+        
+        Creates queue entries for location-specific job scraping:
+        - DevOps Engineer + New York → one queue entry
+        - DevOps Engineer + Los Angeles → another queue entry
+        
+        If an entry already exists, increments candidate_count.
+        
+        Args:
+            global_role: The GlobalRole to create location entries for
+            locations: List of location strings (e.g., ["New York, NY", "Remote"])
+        """
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        if not locations:
+            return
+        
+        for location in locations:
+            if not location or not location.strip():
+                continue
+            
+            normalized_location = location.strip()
+            
+            # Check if entry already exists
+            existing_entry = RoleLocationQueue.query.filter_by(
+                global_role_id=global_role.id,
+                location=normalized_location
+            ).first()
+            
+            if existing_entry:
+                # Increment candidate count for existing entry
+                existing_entry.increment_candidate_count()
+                logger.info(
+                    f"Incremented candidate count for role+location: "
+                    f"'{global_role.name}' + '{normalized_location}' "
+                    f"(count now: {existing_entry.candidate_count})"
+                )
+            else:
+                # Create new queue entry
+                new_entry = RoleLocationQueue(
+                    global_role_id=global_role.id,
+                    location=normalized_location,
+                    queue_status='pending',  # New entries need review
+                    priority='normal',
+                    candidate_count=1
+                )
+                db.session.add(new_entry)
+                logger.info(
+                    f"Created role+location queue entry: "
+                    f"'{global_role.name}' + '{normalized_location}'"
+                )
     
     def normalize_candidate_roles(
         self,
@@ -498,3 +578,151 @@ Return ONLY the normalized job title, nothing else."""
             "candidates_updated": total_candidates_updated,
             "new_aliases": all_new_aliases
         }
+    
+    def normalize_job_title(
+        self,
+        job_title: str,
+        job_posting_id: int
+    ) -> Tuple[Optional[GlobalRole], float, str]:
+        """
+        Normalize a job posting's title and link it to a GlobalRole via RoleJobMapping.
+        
+        This enables job matching: candidates with matching preferred roles will
+        automatically see jobs linked to the same GlobalRole.
+        
+        Args:
+            job_title: Raw job title (e.g., "Senior Python Developer")
+            job_posting_id: Job posting ID to link
+        
+        Returns:
+            Tuple of (GlobalRole, similarity_score, method)
+            method: "embedding_match" or "ai_created"
+            Returns (None, 0.0, "error") if normalization fails
+        """
+        from app.models.role_job_mapping import RoleJobMapping
+        from app.models.job_posting import JobPosting
+        
+        logger.info(f"Normalizing job title '{job_title}' for job {job_posting_id}")
+        
+        try:
+            # Step 1: Generate embedding for job title
+            job_embedding = self.embedding_service.generate_embedding(
+                job_title,
+                task_type="SEMANTIC_SIMILARITY"
+            )
+            
+            # Step 2: Search for similar existing roles (FAST PATH)
+            similar_role = self._find_similar_role(job_embedding)
+            
+            if similar_role:
+                global_role = similar_role["role"]
+                similarity = similar_role["similarity"]
+                method = "embedding_match"
+                
+                logger.info(
+                    f"Found existing role '{global_role.name}' with {similarity:.2%} similarity for job title"
+                )
+                
+                # Add job title to aliases if not already there
+                if job_title.lower() not in [alias.lower() for alias in (global_role.aliases or [])]:
+                    aliases = list(global_role.aliases or [])
+                    aliases.append(job_title)
+                    global_role.aliases = aliases
+            else:
+                # Step 3: No match - call Gemini AI to normalize (SLOW PATH)
+                canonical_name = self._ai_normalize_role(job_title)
+                
+                logger.info(f"AI normalized job title '{job_title}' to '{canonical_name}'")
+                
+                # Check if AI-normalized name already exists
+                existing = GlobalRole.query.filter_by(name=canonical_name).first()
+                
+                if existing:
+                    # AI normalized to an existing role
+                    global_role = existing
+                    similarity = 1.0  # Exact match after AI
+                    
+                    # Add job title to aliases
+                    if job_title.lower() not in [alias.lower() for alias in (existing.aliases or [])]:
+                        aliases = list(existing.aliases or [])
+                        aliases.append(job_title)
+                        existing.aliases = aliases
+                else:
+                    # Create new global role
+                    role_embedding = self.embedding_service.generate_embedding(
+                        canonical_name,
+                        task_type="SEMANTIC_SIMILARITY"
+                    )
+                    
+                    global_role = GlobalRole(
+                        name=canonical_name,
+                        embedding=role_embedding,
+                        aliases=[job_title] if job_title.lower() != canonical_name.lower() else [],
+                        queue_status='approved',  # Job-sourced roles are auto-approved (real jobs exist)
+                        priority='normal'
+                    )
+                    db.session.add(global_role)
+                    db.session.flush()  # Get ID
+                    similarity = 1.0
+                
+                method = "ai_created"
+            
+            # Step 4: Link job to role via RoleJobMapping
+            self._link_job_to_role(job_posting_id, global_role)
+            
+            # Step 5: Update job's normalized_role_id directly
+            job = db.session.get(JobPosting, job_posting_id)
+            if job:
+                job.normalized_role_id = global_role.id
+            
+            db.session.commit()
+            
+            logger.info(
+                f"✅ Job {job_posting_id} linked to role '{global_role.name}' "
+                f"(similarity: {similarity:.2%}, method: {method})"
+            )
+            
+            return global_role, similarity, method
+            
+        except Exception as e:
+            logger.error(f"Failed to normalize job title '{job_title}': {e}", exc_info=True)
+            try:
+                db.session.rollback()
+            except:
+                pass
+            return None, 0.0, "error"
+    
+    def _link_job_to_role(self, job_posting_id: int, global_role: GlobalRole):
+        """
+        Link a job posting to a global role via RoleJobMapping.
+        
+        Creates RoleJobMapping record and increments total_jobs_scraped.
+        """
+        from app.models.role_job_mapping import RoleJobMapping
+        
+        # Check if link already exists
+        existing_link = RoleJobMapping.query.filter_by(
+            job_posting_id=job_posting_id,
+            global_role_id=global_role.id
+        ).first()
+        
+        if existing_link:
+            logger.debug(f"Job {job_posting_id} already linked to role {global_role.id}")
+            return
+        
+        # Create link
+        link = RoleJobMapping(
+            job_posting_id=job_posting_id,
+            global_role_id=global_role.id
+        )
+        db.session.add(link)
+        
+        # Increment job count for the role
+        if global_role.total_jobs_scraped is None:
+            global_role.total_jobs_scraped = 0
+        global_role.total_jobs_scraped += 1
+        
+        logger.info(
+            f"Linked job {job_posting_id} to role '{global_role.name}' "
+            f"(total jobs: {global_role.total_jobs_scraped})"
+        )

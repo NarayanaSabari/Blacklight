@@ -24,6 +24,8 @@ export interface ScrapeSession {
   scraperKeyName: string;
   globalRoleId: number;
   roleName: string;
+  location: string | null;  // Location for location-specific scraping
+  roleLocationQueueId: number | null;  // Reference to role_location_queue entry
   status: 'in_progress' | 'completed' | 'failed' | 'terminated';
   jobsFound: number;
   jobsImported: number;
@@ -219,6 +221,27 @@ export const dashboardApi = {
 // Scraper Monitoring API
 // ============================================================================
 
+export interface LocationStats {
+  location: string;
+  jobsFound: number;
+  jobsImported: number;
+  sessionCount: number;
+}
+
+export interface LocationAnalytics {
+  sessionsWithLocation: number;
+  sessionsWithoutLocation: number;
+  topLocations: LocationStats[];
+  queue: {
+    total: number;
+    pending: number;
+    approved: number;
+    processing: number;
+    completed: number;
+    uniqueLocations: number;
+  };
+}
+
 export interface ScraperStats {
   activeScrapers: number;
   pendingQueue: number;
@@ -238,6 +261,7 @@ export interface ScraperStats {
   avgDurationSeconds: number;
   totalApiKeys: number;
   activeApiKeys: number;
+  locationAnalytics: LocationAnalytics;
 }
 
 export const scraperMonitoringApi = {
@@ -247,6 +271,7 @@ export const scraperMonitoringApi = {
   getStats: async (): Promise<ScraperStats> => {
     const response = await apiClient.get('/api/scraper-monitoring/stats');
     const data = response.data;
+    const locationData = data.location_analytics || {};
     return {
       activeScrapers: data.active_scrapers || 0,
       pendingQueue: data.pending_queue || 0,
@@ -266,6 +291,24 @@ export const scraperMonitoringApi = {
       avgDurationSeconds: data.avg_duration_seconds || 0,
       totalApiKeys: data.total_api_keys || 0,
       activeApiKeys: data.active_api_keys || 0,
+      locationAnalytics: {
+        sessionsWithLocation: locationData.sessions_with_location || 0,
+        sessionsWithoutLocation: locationData.sessions_without_location || 0,
+        topLocations: (locationData.top_locations || []).map((loc: Record<string, unknown>) => ({
+          location: loc.location as string,
+          jobsFound: (loc.jobs_found ?? 0) as number,
+          jobsImported: (loc.jobs_imported ?? 0) as number,
+          sessionCount: (loc.session_count ?? 0) as number,
+        })),
+        queue: {
+          total: locationData.queue?.total || 0,
+          pending: locationData.queue?.pending || 0,
+          approved: locationData.queue?.approved || 0,
+          processing: locationData.queue?.processing || 0,
+          completed: locationData.queue?.completed || 0,
+          uniqueLocations: locationData.queue?.unique_locations || 0,
+        },
+      },
     };
   },
 
@@ -522,6 +565,8 @@ function mapSession(data: Record<string, unknown>): ScrapeSession {
     scraperKeyName: (data.scraper_key_name || data.scraper_name) as string,
     globalRoleId: (data.global_role_id || data.role_id) as number,
     roleName: data.role_name as string,
+    location: (data.location as string | null) || null,  // Location for location-specific scraping
+    roleLocationQueueId: (data.role_location_queue_id as number | null) || null,
     status: data.status as ScrapeSession['status'],
     jobsFound: (data.jobs_found ?? 0) as number,
     jobsImported: (data.jobs_imported ?? 0) as number,
@@ -938,6 +983,190 @@ export const jobPostingsApi = {
       uniqueCompanies: response.data.unique_companies,
       jobsToday: response.data.jobs_today,
       jobsThisWeek: response.data.jobs_this_week,
+    };
+  },
+};
+
+// ============================================================================
+// Role Location Queue Types
+// ============================================================================
+
+export interface RoleLocationQueueEntry {
+  id: number;
+  globalRoleId: number;
+  roleName: string | null;
+  location: string;
+  queueStatus: 'pending' | 'approved' | 'processing' | 'completed' | 'rejected';
+  priority: 'urgent' | 'high' | 'normal' | 'low';
+  candidateCount: number;
+  totalJobsScraped: number;
+  lastScrapedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface RoleLocationQueueListResponse {
+  entries: RoleLocationQueueEntry[];
+  total: number;
+  page: number;
+  perPage: number;
+  stats: {
+    byStatus: Record<string, number>;
+    totalEntries: number;
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapRoleLocationQueueEntry(data: any): RoleLocationQueueEntry {
+  return {
+    id: data.id,
+    globalRoleId: data.global_role_id,
+    roleName: data.role_name,
+    location: data.location,
+    queueStatus: data.queue_status,
+    priority: data.priority,
+    candidateCount: data.candidate_count || 0,
+    totalJobsScraped: data.total_jobs_scraped || 0,
+    lastScrapedAt: data.last_scraped_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+// ============================================================================
+// Role Location Queue API
+// ============================================================================
+
+export const roleLocationQueueApi = {
+  /**
+   * Get role+location queue entries
+   */
+  getEntries: async (params?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<RoleLocationQueueListResponse> => {
+    const queryParams = new URLSearchParams();
+    
+    if (params?.status && params.status !== 'all') {
+      queryParams.set('status', params.status);
+    }
+    if (params?.search) queryParams.set('search', params.search);
+    if (params?.page) queryParams.set('page', params.page.toString());
+    if (params?.perPage) queryParams.set('per_page', params.perPage.toString());
+    
+    const response = await apiClient.get(
+      `/api/scraper-monitoring/role-location-queue?${queryParams.toString()}`
+    );
+    
+    return {
+      entries: response.data.entries.map(mapRoleLocationQueueEntry),
+      total: response.data.total,
+      page: response.data.page,
+      perPage: response.data.per_page,
+      stats: {
+        byStatus: response.data.stats.by_status,
+        totalEntries: response.data.stats.total_entries,
+      },
+    };
+  },
+
+  /**
+   * Approve a role+location queue entry
+   */
+  approveEntry: async (entryId: number): Promise<RoleLocationQueueEntry> => {
+    const response = await apiClient.post(
+      `/api/scraper-monitoring/role-location-queue/${entryId}/approve`
+    );
+    return mapRoleLocationQueueEntry(response.data.entry);
+  },
+
+  /**
+   * Reject a role+location queue entry
+   */
+  rejectEntry: async (entryId: number): Promise<RoleLocationQueueEntry> => {
+    const response = await apiClient.post(
+      `/api/scraper-monitoring/role-location-queue/${entryId}/reject`
+    );
+    return mapRoleLocationQueueEntry(response.data.entry);
+  },
+
+  /**
+   * Update priority of a role+location queue entry
+   */
+  updatePriority: async (
+    entryId: number,
+    priority: string
+  ): Promise<RoleLocationQueueEntry> => {
+    const response = await apiClient.patch(
+      `/api/scraper-monitoring/role-location-queue/${entryId}/priority`,
+      { priority }
+    );
+    return mapRoleLocationQueueEntry(response.data.entry);
+  },
+
+  /**
+   * Delete a role+location queue entry
+   */
+  deleteEntry: async (entryId: number): Promise<void> => {
+    await apiClient.delete(
+      `/api/scraper-monitoring/role-location-queue/${entryId}`
+    );
+  },
+
+  /**
+   * Bulk approve pending entries
+   */
+  bulkApprove: async (entryIds?: number[]): Promise<{ approvedCount: number }> => {
+    const response = await apiClient.post(
+      '/api/scraper-monitoring/role-location-queue/bulk-approve',
+      { entry_ids: entryIds }
+    );
+    return { approvedCount: response.data.approved_count };
+  },
+
+  /**
+   * Get all locations for a specific role
+   */
+  getLocationsForRole: async (roleId: number): Promise<{
+    roleId: number;
+    roleName: string;
+    locations: Array<{
+      id: number;
+      location: string;
+      queueStatus: string;
+      priority: string;
+      candidateCount: number;
+      totalJobsScraped: number;
+      lastScrapedAt: string | null;
+    }>;
+    totalLocations: number;
+  }> => {
+    const response = await apiClient.get(
+      `/api/scraper-monitoring/role-location-queue/by-role/${roleId}`
+    );
+    return {
+      roleId: response.data.role_id,
+      roleName: response.data.role_name,
+      locations: response.data.locations.map((loc: {
+        id: number;
+        location: string;
+        queue_status: string;
+        priority: string;
+        candidate_count: number;
+        total_jobs_scraped: number;
+        last_scraped_at: string | null;
+      }) => ({
+        id: loc.id,
+        location: loc.location,
+        queueStatus: loc.queue_status,
+        priority: loc.priority,
+        candidateCount: loc.candidate_count,
+        totalJobsScraped: loc.total_jobs_scraped,
+        lastScrapedAt: loc.last_scraped_at,
+      })),
+      totalLocations: response.data.total_locations,
     };
   },
 };

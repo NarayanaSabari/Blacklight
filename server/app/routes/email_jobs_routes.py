@@ -13,6 +13,7 @@ from sqlalchemy import and_, desc, func, or_, select
 
 from app import db
 from app.middleware.portal_auth import require_portal_auth, require_permission
+from app.middleware.tenant_context import with_tenant_context
 from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
@@ -38,6 +39,7 @@ def error_response(message: str, status: int = 400, details: dict = None):
 
 @bp.route("", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def list_email_jobs():
     """
     List jobs sourced from email integrations for the tenant.
@@ -123,6 +125,7 @@ def list_email_jobs():
 
 @bp.route("/<int:job_id>", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def get_email_job(job_id: int):
     """
     Get details of an email-sourced job.
@@ -162,6 +165,7 @@ def get_email_job(job_id: int):
 
 @bp.route("/<int:job_id>", methods=["PUT"])
 @require_portal_auth
+@with_tenant_context
 @require_permission("candidates.update")
 def update_email_job(job_id: int):
     """
@@ -208,6 +212,7 @@ def update_email_job(job_id: int):
 
 @bp.route("/<int:job_id>", methods=["DELETE"])
 @require_portal_auth
+@with_tenant_context
 @require_permission("candidates.delete")
 def delete_email_job(job_id: int):
     """
@@ -243,6 +248,7 @@ def delete_email_job(job_id: int):
 
 @bp.route("/stats", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def get_email_jobs_stats():
     """
     Get statistics for email-sourced jobs in the tenant.
@@ -327,6 +333,7 @@ def get_email_jobs_stats():
 
 @bp.route("/emails", methods=["GET"])
 @require_portal_auth
+@with_tenant_context
 def list_processed_emails():
     """
     List processed emails for the tenant.

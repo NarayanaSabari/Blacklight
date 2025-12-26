@@ -70,6 +70,7 @@ class GlobalRole(db.Model):
     candidate_links = db.relationship('CandidateGlobalRole', back_populates='global_role', cascade='all, delete-orphan')
     scrape_sessions = db.relationship('ScrapeSession', back_populates='global_role', cascade='all, delete-orphan')
     role_job_mappings = db.relationship('RoleJobMapping', back_populates='global_role', cascade='all, delete-orphan')
+    location_queue_entries = db.relationship('RoleLocationQueue', back_populates='global_role', cascade='all, delete-orphan')
     
     # Indexes
     __table_args__ = (

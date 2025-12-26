@@ -45,22 +45,45 @@ export interface IntegrationStatus {
 
 export interface EmailJob {
   id: number;
+  external_job_id: string;
+  platform: string;
   title: string;
   company: string | null;
   location: string | null;
   description: string | null;
+  snippet: string | null;
+  requirements: string | null;
   job_type: string | null;
-  remote_type: string | null;
-  skills: string[];
-  min_rate: number | null;
-  max_rate: number | null;
-  min_salary: number | null;
-  max_salary: number | null;
+  is_remote: boolean;
+  skills: string[] | null;
+  keywords: string[] | null;
+  // Salary
+  salary_range: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string | null;
+  // Experience
+  experience_required: string | null;
+  experience_min: number | null;
+  experience_max: number | null;
+  // Status & Dates
   status: string;
+  posted_date: string | null;
+  expires_at: string | null;
   created_at: string;
+  updated_at: string | null;
+  // Email source fields
+  is_email_sourced: boolean;
+  source_tenant_id: number | null;
+  sourced_by_user_id: number | null;
+  source_email_id: string | null;
   source_email_subject: string | null;
   source_email_sender: string | null;
   source_email_date: string | null;
+  // URLs
+  job_url: string | null;
+  apply_url: string | null;
+  // Extended by route
   sourced_by?: {
     id: number;
     name: string;
