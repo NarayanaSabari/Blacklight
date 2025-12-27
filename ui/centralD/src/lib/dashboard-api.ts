@@ -869,6 +869,7 @@ export interface JobListResponse {
   filters: {
     platforms: string[];
     statuses: string[];
+    locations?: string[];
   };
 }
 
@@ -887,6 +888,7 @@ export interface JobListParams {
   perPage?: number;
   search?: string;
   platform?: string;
+  location?: string;
   status?: string;
   isRemote?: boolean;
   roleId?: number;
@@ -944,6 +946,7 @@ export const jobPostingsApi = {
     if (params.perPage) queryParams.set('per_page', params.perPage.toString());
     if (params.search) queryParams.set('search', params.search);
     if (params.platform) queryParams.set('platform', params.platform);
+    if (params.location) queryParams.set('location', params.location);
     if (params.status) queryParams.set('status', params.status);
     if (params.isRemote !== undefined) queryParams.set('is_remote', params.isRemote.toString());
     if (params.roleId) queryParams.set('role_id', params.roleId.toString());

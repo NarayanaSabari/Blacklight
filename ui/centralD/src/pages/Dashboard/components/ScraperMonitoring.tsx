@@ -427,7 +427,7 @@ function ActiveSessionsList() {
   const { data: sessions, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['active-scraper-sessions'],
     queryFn: scraperMonitoringApi.getActiveSessions,
-    refetchInterval: 5000, // Refresh every 5 seconds for active sessions
+    refetchInterval: 15000, // Refresh every 15 seconds for active sessions
     enabled: !authLoading && isAuthenticated,
   });
 

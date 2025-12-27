@@ -316,6 +316,27 @@ export function JobsPage() {
               </Select>
             </div>
 
+            {/* Location filter */}
+            <div className="w-full md:w-48">
+              <label className="text-sm font-medium mb-2 block">Location</label>
+              <Select
+                value={filters.location || 'all'}
+                onValueChange={(value) => handleFilterChange('location', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All locations" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  {jobsData?.filters.locations?.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Remote filter */}
             <div className="w-full md:w-32">
               <label className="text-sm font-medium mb-2 block">Remote</label>

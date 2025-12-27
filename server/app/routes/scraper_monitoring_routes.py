@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func, desc
 
-from app import db
+from app import db, limiter
 from app.models.scraper_api_key import ScraperApiKey
 from app.models.scrape_session import ScrapeSession
 from app.models.session_platform_status import SessionPlatformStatus
@@ -25,8 +25,14 @@ scraper_monitoring_bp = Blueprint(
     url_prefix='/api/scraper-monitoring'
 )
 
+# Apply higher rate limits for monitoring routes (admin dashboard polling)
+# These are admin-only routes, so we can be more permissive
+# 240/min = 4 requests per second (sufficient for 15s polling with multiple endpoints)
+MONITORING_RATE_LIMIT = "240 per minute"
+
 
 @scraper_monitoring_bp.route('/stats', methods=['GET'])
+@limiter.limit(MONITORING_RATE_LIMIT)
 @require_pm_admin
 def get_scraper_stats():
     """
@@ -228,6 +234,7 @@ def get_scraper_stats():
 
 
 @scraper_monitoring_bp.route('/sessions', methods=['GET'])
+@limiter.limit(MONITORING_RATE_LIMIT)
 @require_pm_admin
 def get_recent_sessions():
     """
@@ -793,6 +800,7 @@ def list_all_jobs():
     - per_page: Items per page (default: 50, max: 100)
     - search: Search in title, company, location
     - platform: Filter by platform (linkedin, indeed, monster, dice, glassdoor, techfetch)
+    - location: Filter by location (exact match or contains)
     - status: Filter by status (ACTIVE, EXPIRED, CLOSED)
     - is_remote: Filter remote jobs (true/false)
     - role_id: Filter by normalized role ID
@@ -808,7 +816,8 @@ def list_all_jobs():
         "pages": 31,
         "filters": {
             "platforms": ["linkedin", "indeed", ...],
-            "statuses": ["ACTIVE", "EXPIRED"]
+            "statuses": ["ACTIVE", "EXPIRED"],
+            "locations": ["New York, NY", "San Francisco, CA", ...]
         }
     }
     """
@@ -820,6 +829,7 @@ def list_all_jobs():
         per_page = min(request.args.get('per_page', 50, type=int), 100)
         search = request.args.get('search', '').strip()
         platform = request.args.get('platform')
+        location = request.args.get('location', '').strip()
         status = request.args.get('status')
         is_remote = request.args.get('is_remote')
         role_id = request.args.get('role_id', type=int)
@@ -840,6 +850,9 @@ def list_all_jobs():
                 JobPosting.location.ilike(f'%{search}%')
             )
             filters.append(search_filter)
+        
+        if location:
+            filters.append(JobPosting.location.ilike(f'%{location}%'))
         
         if platform:
             filters.append(JobPosting.platform == platform)
@@ -899,6 +912,17 @@ def list_all_jobs():
             .order_by(JobPosting.status)
         ).all()
         
+        # Get top 50 most common locations for filter dropdown
+        location_counts = db.session.execute(
+            db.select(JobPosting.location, func.count(JobPosting.id).label('count'))
+            .where(JobPosting.location.isnot(None))
+            .where(JobPosting.location != '')
+            .group_by(JobPosting.location)
+            .order_by(desc(func.count(JobPosting.id)))
+            .limit(50)
+        ).all()
+        locations = [loc[0] for loc in location_counts]
+        
         return jsonify({
             "jobs": [job.to_dict(include_description=False) for job in jobs],
             "total": total,
@@ -907,7 +931,8 @@ def list_all_jobs():
             "pages": (total + per_page - 1) // per_page if total > 0 else 0,
             "filters": {
                 "platforms": list(platforms),
-                "statuses": list(statuses)
+                "statuses": list(statuses),
+                "locations": locations
             }
         }), 200
         
