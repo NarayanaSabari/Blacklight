@@ -151,13 +151,19 @@ async def complete_scrape_session_fn(ctx: inngest.Context) -> dict:
         lambda: finalize_session(session_id, scraper_key_id, session_stats)
     )
     
-    # Step 3: Update role status
+    # Step 3: Update role status (GlobalRole)
     await ctx.step.run(
         "update-role-status",
         lambda: update_role_status(session_stats["global_role_id"], session_stats["total_imported"])
     )
     
-    # Step 4: Trigger job matching if jobs were imported
+    # Step 4: Update RoleLocationQueue status (for location-based scraping)
+    await ctx.step.run(
+        "update-role-location-queue",
+        lambda: update_role_location_queue_status(session_id, session_stats["total_imported"])
+    )
+    
+    # Step 5: Trigger job matching if jobs were imported
     if session_stats["total_imported"] > 0:
         await ctx.step.run(
             "trigger-job-matching",
@@ -702,6 +708,52 @@ def update_role_status(global_role_id: int, jobs_imported: int) -> None:
         logger.info(
             f"[JOB-IMPORT] Role '{role.name}' scraped successfully. "
             f"Stays approved for next cycle. Total jobs: {role.total_jobs_scraped}"
+        )
+
+
+def update_role_location_queue_status(session_id: str, jobs_imported: int) -> None:
+    """
+    Update RoleLocationQueue entry stats and reset to approved for continuous rotation.
+    
+    This ensures the location-based scraping queue rotates continuously - once a 
+    role+location is scraped, it stays approved and ready for the next scrape cycle.
+    """
+    from app.models.role_location_queue import RoleLocationQueue
+    
+    session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
+    
+    if not session:
+        logger.warning(f"[JOB-IMPORT] Session {session_id} not found for queue update")
+        return
+    
+    # Get the role_location_queue_id from the session (direct column, not metadata)
+    role_location_queue_id = session.role_location_queue_id
+    
+    if not role_location_queue_id:
+        logger.debug(
+            f"[JOB-IMPORT] Session {session_id} has no role_location_queue_id - "
+            f"this is a role-based (not location-based) scrape"
+        )
+        return
+    
+    queue_entry = db.session.get(RoleLocationQueue, role_location_queue_id)
+    
+    if queue_entry:
+        # Reset to approved for next rotation (continuous scraping)
+        queue_entry.queue_status = "approved"
+        queue_entry.last_scraped_at = datetime.utcnow()
+        queue_entry.total_jobs_scraped = (queue_entry.total_jobs_scraped or 0) + jobs_imported
+        queue_entry.last_scrape_session_id = str(session.session_id)
+        db.session.commit()
+        
+        logger.info(
+            f"[JOB-IMPORT] RoleLocationQueue entry {role_location_queue_id} updated: "
+            f"'{queue_entry.location}' stays approved for next cycle. "
+            f"Total jobs: {queue_entry.total_jobs_scraped}"
+        )
+    else:
+        logger.warning(
+            f"[JOB-IMPORT] RoleLocationQueue entry {role_location_queue_id} not found"
         )
 
 

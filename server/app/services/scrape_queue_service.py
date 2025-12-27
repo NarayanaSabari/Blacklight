@@ -527,10 +527,13 @@ class ScrapeQueueService:
         
         # Update RoleLocationQueue if this was a location-specific scrape
         # Reset to "approved" for automatic rotation - allows continuous scraping
-        role_location_queue_id = None
-        if session.metadata and session.metadata.get("role_location_queue_id"):
+        # Check direct column first, then fallback to metadata for backwards compatibility
+        role_location_queue_id = session.role_location_queue_id
+        if not role_location_queue_id and session.metadata:
+            role_location_queue_id = session.metadata.get("role_location_queue_id")
+        
+        if role_location_queue_id:
             from app.models.role_location_queue import RoleLocationQueue
-            role_location_queue_id = session.metadata["role_location_queue_id"]
             queue_entry = db.session.get(RoleLocationQueue, role_location_queue_id)
             if queue_entry:
                 # Reset to approved for next rotation (continuous scraping)
@@ -561,9 +564,14 @@ class ScrapeQueueService:
                 }
                 
                 # Add location info if this was a location-specific scrape
-                if session.metadata and session.metadata.get("location"):
-                    event_data["location"] = session.metadata["location"]
-                    event_data["role_location_queue_id"] = session.metadata.get("role_location_queue_id")
+                # Check direct column first, then fallback to metadata
+                location = session.location
+                if not location and session.metadata:
+                    location = session.metadata.get("location")
+                
+                if location:
+                    event_data["location"] = location
+                    event_data["role_location_queue_id"] = role_location_queue_id
                 
                 inngest_client.send_sync(
                     inngest.Event(
