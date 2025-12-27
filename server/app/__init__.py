@@ -17,7 +17,7 @@ from config.base import BaseConfig
 db = SQLAlchemy()
 cors = CORS()
 
-# Custom key function for rate limiting that exempts Inngest endpoints
+# Custom key function for rate limiting that exempts certain endpoints
 def _get_rate_limit_key():
     """
     Get key for rate limiting. Returns None for exempt endpoints.
@@ -26,6 +26,9 @@ def _get_rate_limit_key():
     if has_request_context() and request.path:
         # Exempt Inngest endpoint from rate limiting (heartbeat + function execution)
         if request.path.startswith('/api/inngest'):
+            return None
+        # Exempt scraper monitoring routes (admin dashboard polling)
+        if request.path.startswith('/api/scraper-monitoring'):
             return None
     # For all other endpoints, use remote address
     return get_remote_address()

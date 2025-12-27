@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 from sqlalchemy import func, desc
 
-from app import db, limiter
+from app import db
 from app.models.scraper_api_key import ScraperApiKey
 from app.models.scrape_session import ScrapeSession
 from app.models.session_platform_status import SessionPlatformStatus
@@ -25,14 +25,8 @@ scraper_monitoring_bp = Blueprint(
     url_prefix='/api/scraper-monitoring'
 )
 
-# Apply higher rate limits for monitoring routes (admin dashboard polling)
-# These are admin-only routes, so we can be more permissive
-# 240/min = 4 requests per second (sufficient for 15s polling with multiple endpoints)
-MONITORING_RATE_LIMIT = "240 per minute"
-
 
 @scraper_monitoring_bp.route('/stats', methods=['GET'])
-@limiter.limit(MONITORING_RATE_LIMIT)
 @require_pm_admin
 def get_scraper_stats():
     """
@@ -234,7 +228,6 @@ def get_scraper_stats():
 
 
 @scraper_monitoring_bp.route('/sessions', methods=['GET'])
-@limiter.limit(MONITORING_RATE_LIMIT)
 @require_pm_admin
 def get_recent_sessions():
     """
