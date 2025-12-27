@@ -137,10 +137,15 @@ GET /api/scraper/queue/current-session
         "session_id": "a1b2c3d4-...",
         "role_name": "Python Developer",
         "role_id": 42,
+        "location": "New York, NY",
+        "role_location_queue_id": 123,
         "status": "in_progress",
+        "started_at": "2025-12-26T10:00:00Z",
         "platforms_total": 6,
         "platforms_completed": 2,
-        "platforms_failed": 0
+        "platforms_failed": 0,
+        "jobs_found": 47,
+        "jobs_imported": 45
     }
 }
 ```

@@ -518,27 +518,29 @@ class ScrapeQueueService:
             jobs_skipped=import_result["skipped"]
         )
         
-        # Update role status
+        # Update role status - reset to approved for rotation (continuous scraping)
         role = db.session.get(GlobalRole, session.global_role_id)
         if role:
-            role.queue_status = "completed"
+            role.queue_status = "approved"  # Reset for next rotation
             role.last_scraped_at = datetime.utcnow()
             role.total_jobs_scraped += import_result["imported"]
         
         # Update RoleLocationQueue if this was a location-specific scrape
+        # Reset to "approved" for automatic rotation - allows continuous scraping
         role_location_queue_id = None
         if session.metadata and session.metadata.get("role_location_queue_id"):
             from app.models.role_location_queue import RoleLocationQueue
             role_location_queue_id = session.metadata["role_location_queue_id"]
             queue_entry = db.session.get(RoleLocationQueue, role_location_queue_id)
             if queue_entry:
-                queue_entry.queue_status = "completed"
+                # Reset to approved for next rotation (continuous scraping)
+                queue_entry.queue_status = "approved"
                 queue_entry.last_scraped_at = datetime.utcnow()
                 queue_entry.total_jobs_scraped = (queue_entry.total_jobs_scraped or 0) + import_result["imported"]
                 queue_entry.last_scrape_session_id = str(session.session_id)
                 logger.info(
                     f"Updated RoleLocationQueue entry {role_location_queue_id}: "
-                    f"jobs_scraped={queue_entry.total_jobs_scraped}"
+                    f"jobs_scraped={queue_entry.total_jobs_scraped}, reset to approved for rotation"
                 )
         
         # Record API key usage with job count
