@@ -285,6 +285,16 @@ def import_jobs_batch_for_platform(
             external_id = job_data.get("jobId") or job_data.get("job_id") or job_data.get("external_job_id") or job_data.get("external_id")
             platform = job_data.get("platform", platform_name)
             
+            # Truncate external_id if too long (VARCHAR(255) limit)
+            # Use hash suffix for very long IDs to maintain uniqueness
+            if external_id and len(str(external_id)) > 255:
+                import hashlib
+                ext_id_str = str(external_id)
+                # Use first 200 chars + hash of full ID to maintain uniqueness
+                id_hash = hashlib.md5(ext_id_str.encode()).hexdigest()[:32]
+                external_id = f"{ext_id_str[:200]}...{id_hash}"
+                logger.debug(f"[JOB-IMPORT] Truncated long external_id to {len(external_id)} chars")
+            
             # Validate required fields
             title = job_data.get("title")
             company = job_data.get("company")
