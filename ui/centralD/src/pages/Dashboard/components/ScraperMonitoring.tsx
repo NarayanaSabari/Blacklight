@@ -408,7 +408,7 @@ function SessionCard({ session, onTerminate, isTerminating }: {
           </div>
           <div className="flex items-center gap-2">
             <SessionDetailsDialog session={session} />
-            <Link to={`/sessions/${session.id}`}>
+            <Link to={`/sessions/${session.sessionId}`}>
               <Button variant="ghost" size="sm" className="h-7 gap-1.5">
                 <FileText className="h-3.5 w-3.5" />
                 <span className="text-xs">Job Logs</span>
