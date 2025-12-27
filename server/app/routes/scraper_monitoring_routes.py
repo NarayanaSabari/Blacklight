@@ -1447,3 +1447,339 @@ def bulk_approve_role_location_entries():
             "error": "Internal Server Error",
             "message": str(e)
         }), 500
+
+
+# ============================================================================
+# SESSION JOB LOGS ENDPOINTS
+# ============================================================================
+
+@scraper_monitoring_bp.route('/sessions/<session_id>/jobs', methods=['GET'])
+@require_pm_admin
+def get_session_job_logs(session_id: str):
+    """
+    Get all job logs for a session with detailed import status.
+    
+    Query params:
+    - status: Filter by status (imported, skipped, error, all)
+    - skip_reason: Filter by specific skip reason
+    - page: Page number (default: 1)
+    - per_page: Items per page (default: 50)
+    - include_raw_data: Include raw job data (default: false)
+    - include_duplicate: Include duplicate job details (default: true)
+    
+    Response:
+    {
+        "session_id": "uuid",
+        "session_info": {...},
+        "summary": {
+            "total": 100,
+            "imported": 10,
+            "skipped": 88,
+            "error": 2,
+            "skip_reasons": {...}
+        },
+        "jobs": [...],
+        "pagination": {...}
+    }
+    """
+    try:
+        from uuid import UUID
+        from app.models.session_job_log import SessionJobLog
+        
+        # Validate session exists
+        session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
+        if not session:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Session {session_id} not found"
+            }), 404
+        
+        # Parse query params
+        status_filter = request.args.get('status', 'all')
+        skip_reason_filter = request.args.get('skip_reason')
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 50, type=int), 100)
+        include_raw_data = request.args.get('include_raw_data', 'false').lower() == 'true'
+        include_duplicate = request.args.get('include_duplicate', 'true').lower() == 'true'
+        
+        # Build query
+        query = SessionJobLog.query.filter_by(session_id=UUID(session_id))
+        
+        if status_filter != 'all':
+            query = query.filter_by(status=status_filter)
+        
+        if skip_reason_filter:
+            query = query.filter_by(skip_reason=skip_reason_filter)
+        
+        # Order by job index
+        query = query.order_by(SessionJobLog.job_index)
+        
+        # Paginate
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Get summary stats
+        summary = SessionJobLog.get_session_summary(UUID(session_id))
+        
+        # Format response
+        jobs = [
+            log.to_dict(include_raw_data=include_raw_data, include_duplicate=include_duplicate)
+            for log in pagination.items
+        ]
+        
+        # Get session info
+        session_info = {
+            "session_id": str(session.session_id),
+            "role_name": session.role_name,
+            "location": session.location,
+            "status": session.status,
+            "scraper_name": session.scraper_name,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "duration_seconds": session.duration_seconds,
+            "platforms_total": session.platforms_total,
+            "platforms_completed": session.platforms_completed,
+            "platforms_failed": session.platforms_failed,
+            "jobs_found": session.jobs_found,
+            "jobs_imported": session.jobs_imported,
+            "jobs_skipped": session.jobs_skipped
+        }
+        
+        return jsonify({
+            "session_id": session_id,
+            "session_info": session_info,
+            "summary": summary,
+            "jobs": jobs,
+            "pagination": {
+                "page": pagination.page,
+                "per_page": pagination.per_page,
+                "total": pagination.total,
+                "pages": pagination.pages,
+                "has_next": pagination.has_next,
+                "has_prev": pagination.has_prev
+            }
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": f"Invalid session ID: {e}"
+        }), 400
+    except Exception as e:
+        logger.error(f"Error getting session job logs: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/sessions/<session_id>/jobs/<int:job_log_id>', methods=['GET'])
+@require_pm_admin
+def get_session_job_log_detail(session_id: str, job_log_id: int):
+    """
+    Get detailed information for a single job log entry.
+    
+    Includes:
+    - Raw job data as received from scraper
+    - Full duplicate job details if applicable
+    - Comparison between incoming and existing job
+    
+    Response:
+    {
+        "job_log": {...},
+        "raw_job_data": {...},
+        "duplicate_job": {...},
+        "comparison": {...}  // Side-by-side comparison if duplicate
+    }
+    """
+    try:
+        from uuid import UUID
+        from app.models.session_job_log import SessionJobLog
+        
+        # Get job log
+        job_log = SessionJobLog.query.filter_by(
+            id=job_log_id,
+            session_id=UUID(session_id)
+        ).first()
+        
+        if not job_log:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Job log {job_log_id} not found in session {session_id}"
+            }), 404
+        
+        # Build response
+        response = {
+            "job_log": job_log.to_dict(include_raw_data=True, include_duplicate=True),
+            "raw_job_data": job_log.raw_job_data
+        }
+        
+        # Add comparison if this was a duplicate skip
+        if job_log.duplicate_job_id and job_log.duplicate_job:
+            dup = job_log.duplicate_job
+            incoming = job_log.raw_job_data
+            
+            response["duplicate_job"] = {
+                "id": dup.id,
+                "title": dup.title,
+                "company": dup.company,
+                "location": dup.location,
+                "description": dup.description,
+                "platform": dup.platform,
+                "external_job_id": dup.external_job_id,
+                "job_url": dup.job_url,
+                "posted_date": dup.posted_date.isoformat() if dup.posted_date else None,
+                "created_at": dup.created_at.isoformat() if dup.created_at else None,
+                "skills": dup.skills,
+                "salary_range": dup.salary_range,
+                "experience_required": dup.experience_required,
+                "is_remote": dup.is_remote
+            }
+            
+            # Create side-by-side comparison
+            response["comparison"] = {
+                "title": {
+                    "incoming": incoming.get("title"),
+                    "existing": dup.title,
+                    "match": (incoming.get("title") or "").lower().strip() == (dup.title or "").lower().strip()
+                },
+                "company": {
+                    "incoming": incoming.get("company"),
+                    "existing": dup.company,
+                    "match": (incoming.get("company") or "").lower().strip() == (dup.company or "").lower().strip()
+                },
+                "location": {
+                    "incoming": incoming.get("location"),
+                    "existing": dup.location,
+                    "match": (incoming.get("location") or "").lower().strip() == (dup.location or "").lower().strip()
+                },
+                "platform": {
+                    "incoming": incoming.get("platform"),
+                    "existing": dup.platform,
+                    "match": incoming.get("platform") == dup.platform
+                },
+                "external_id": {
+                    "incoming": incoming.get("jobId") or incoming.get("job_id") or incoming.get("external_job_id"),
+                    "existing": dup.external_job_id,
+                    "match": str(incoming.get("jobId") or incoming.get("job_id") or incoming.get("external_job_id") or "") == str(dup.external_job_id or "")
+                },
+                "description_preview": {
+                    "incoming": (incoming.get("description") or "")[:200],
+                    "existing": (dup.description or "")[:200],
+                    "match": (incoming.get("description") or "")[:100].lower().strip() == (dup.description or "")[:100].lower().strip()
+                }
+            }
+        
+        # If imported, include the created job details
+        if job_log.imported_job_id and job_log.imported_job:
+            imp = job_log.imported_job
+            response["imported_job"] = {
+                "id": imp.id,
+                "title": imp.title,
+                "company": imp.company,
+                "location": imp.location,
+                "platform": imp.platform,
+                "external_job_id": imp.external_job_id,
+                "job_url": imp.job_url,
+                "created_at": imp.created_at.isoformat() if imp.created_at else None
+            }
+        
+        return jsonify(response), 200
+        
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": f"Invalid session ID: {e}"
+        }), 400
+    except Exception as e:
+        logger.error(f"Error getting job log detail: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500
+
+
+@scraper_monitoring_bp.route('/sessions/<session_id>/summary', methods=['GET'])
+@require_pm_admin
+def get_session_summary(session_id: str):
+    """
+    Get a summary of job import results for a session.
+    
+    Response:
+    {
+        "session_info": {...},
+        "summary": {...},
+        "platform_breakdown": [...],
+        "skip_reasons_chart": [...]
+    }
+    """
+    try:
+        from uuid import UUID
+        from app.models.session_job_log import SessionJobLog
+        
+        # Validate session exists
+        session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
+        if not session:
+            return jsonify({
+                "error": "Not Found",
+                "message": f"Session {session_id} not found"
+            }), 404
+        
+        # Get summary
+        summary = SessionJobLog.get_session_summary(UUID(session_id))
+        
+        # Get platform statuses
+        platform_statuses = SessionPlatformStatus.query.filter_by(
+            session_id=UUID(session_id)
+        ).all()
+        
+        platform_breakdown = []
+        for ps in platform_statuses:
+            platform_breakdown.append({
+                "platform_name": ps.platform_name,
+                "status": ps.status,
+                "jobs_found": ps.jobs_found,
+                "jobs_imported": ps.jobs_imported,
+                "jobs_skipped": ps.jobs_skipped,
+                "error_message": ps.error_message,
+                "completed_at": ps.completed_at.isoformat() if ps.completed_at else None
+            })
+        
+        # Format skip reasons for chart
+        skip_reasons_chart = [
+            {"reason": "Platform + ID Duplicate", "count": summary["skip_reasons"]["duplicate_platform_id"]},
+            {"reason": "Title + Company + Location", "count": summary["skip_reasons"]["duplicate_title_company_location"]},
+            {"reason": "Title + Company + Description", "count": summary["skip_reasons"]["duplicate_title_company_description"]},
+            {"reason": "Missing Required Fields", "count": summary["skip_reasons"]["missing_required"]},
+            {"reason": "Error During Import", "count": summary["skip_reasons"]["error"]}
+        ]
+        
+        # Session info
+        session_info = {
+            "session_id": str(session.session_id),
+            "role_name": session.role_name,
+            "location": session.location,
+            "status": session.status,
+            "scraper_name": session.scraper_name,
+            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "duration_seconds": session.duration_seconds
+        }
+        
+        return jsonify({
+            "session_info": session_info,
+            "summary": summary,
+            "platform_breakdown": platform_breakdown,
+            "skip_reasons_chart": skip_reasons_chart
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": f"Invalid session ID: {e}"
+        }), 400
+    except Exception as e:
+        logger.error(f"Error getting session summary: {e}")
+        return jsonify({
+            "error": "Internal Server Error",
+            "message": str(e)
+        }), 500

@@ -4,6 +4,7 @@
  */
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -405,7 +406,15 @@ function SessionCard({ session, onTerminate, isTerminating }: {
               )}
             </span>
           </div>
-          <SessionDetailsDialog session={session} />
+          <div className="flex items-center gap-2">
+            <SessionDetailsDialog session={session} />
+            <Link to={`/sessions/${session.id}`}>
+              <Button variant="ghost" size="sm" className="h-7 gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                <span className="text-xs">Job Logs</span>
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 

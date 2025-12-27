@@ -87,6 +87,7 @@ from app.models.role_job_mapping import RoleJobMapping
 from app.models.scraper_platform import ScraperPlatform
 from app.models.session_platform_status import SessionPlatformStatus
 from app.models.role_location_queue import RoleLocationQueue
+from app.models.session_job_log import SessionJobLog
 
 # Import resume tailor models
 from app.models.tailored_resume import TailoredResume, TailoredResumeStatus

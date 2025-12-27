@@ -18,6 +18,7 @@ import { PlansPage } from '@/pages/PlansPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { JobsPage } from '@/pages/JobsPage';
+import { SessionDetailPage } from '@/pages/SessionDetailPage';
 import { env } from '@/lib/env';
 
 // Create React Query client
@@ -52,6 +53,7 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admins" element={<AdminsPage />} />
                 <Route path="/jobs" element={<JobsPage />} />
+                <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
               </Route>
             </Route>
           </Routes>

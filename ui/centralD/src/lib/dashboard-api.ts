@@ -1173,3 +1173,351 @@ export const roleLocationQueueApi = {
     };
   },
 };
+
+// ============================================================================
+// Session Job Logs Types
+// ============================================================================
+
+export interface SessionJobLog {
+  id: number;
+  sessionId: string;
+  platformName: string;
+  jobIndex: number;
+  externalJobId: string | null;
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  status: 'pending' | 'imported' | 'skipped' | 'error';
+  importedJobId: number | null;
+  skipReason: string | null;
+  skipReasonDetail: string | null;
+  duplicateJobId: number | null;
+  errorMessage: string | null;
+  processedAt: string | null;
+  createdAt: string | null;
+  rawJobData?: Record<string, unknown>;
+  duplicateJob?: {
+    id: number;
+    title: string;
+    company: string;
+    location: string;
+    platform: string;
+    externalJobId: string;
+    description: string;
+    postedDate: string | null;
+    createdAt: string | null;
+    jobUrl: string;
+  };
+}
+
+export interface SessionJobLogSummary {
+  total: number;
+  imported: number;
+  skipped: number;
+  error: number;
+  pending: number;
+  skipReasons: {
+    duplicate_platform_id: number;
+    duplicate_title_company_location: number;
+    duplicate_title_company_description: number;
+    missing_required: number;
+    error: number;
+  };
+  byPlatform: Record<string, {
+    total: number;
+    imported: number;
+    skipped: number;
+    error: number;
+  }>;
+}
+
+export interface SessionJobLogsResponse {
+  sessionId: string;
+  sessionInfo: {
+    sessionId: string;
+    roleName: string;
+    location: string | null;
+    status: string;
+    scraperName: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    durationSeconds: number | null;
+    platformsTotal: number;
+    platformsCompleted: number;
+    platformsFailed: number;
+    jobsFound: number;
+    jobsImported: number;
+    jobsSkipped: number;
+  };
+  summary: SessionJobLogSummary;
+  jobs: SessionJobLog[];
+  pagination: {
+    page: number;
+    perPage: number;
+    total: number;
+    pages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
+
+export interface SessionJobLogDetailResponse {
+  jobLog: SessionJobLog;
+  rawJobData: Record<string, unknown>;
+  duplicateJob?: {
+    id: number;
+    title: string;
+    company: string;
+    location: string;
+    description: string;
+    platform: string;
+    externalJobId: string;
+    jobUrl: string;
+    postedDate: string | null;
+    createdAt: string | null;
+    skills: string[];
+    salaryRange: string | null;
+    experienceRequired: string | null;
+    isRemote: boolean;
+  };
+  importedJob?: {
+    id: number;
+    title: string;
+    company: string;
+    location: string;
+    platform: string;
+    externalJobId: string;
+    jobUrl: string;
+    createdAt: string | null;
+  };
+  comparison?: {
+    title: { incoming: string; existing: string; match: boolean };
+    company: { incoming: string; existing: string; match: boolean };
+    location: { incoming: string; existing: string; match: boolean };
+    platform: { incoming: string; existing: string; match: boolean };
+    externalId: { incoming: string; existing: string; match: boolean };
+    descriptionPreview: { incoming: string; existing: string; match: boolean };
+  };
+}
+
+export interface SessionSummaryResponse {
+  sessionInfo: {
+    sessionId: string;
+    roleName: string;
+    location: string | null;
+    status: string;
+    scraperName: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    durationSeconds: number | null;
+  };
+  summary: SessionJobLogSummary;
+  platformBreakdown: Array<{
+    platformName: string;
+    status: string;
+    jobsFound: number;
+    jobsImported: number;
+    jobsSkipped: number;
+    errorMessage: string | null;
+    completedAt: string | null;
+  }>;
+  skipReasonsChart: Array<{
+    reason: string;
+    count: number;
+  }>;
+}
+
+// ============================================================================
+// Session Job Logs API
+// ============================================================================
+
+const mapSessionJobLog = (data: Record<string, unknown>): SessionJobLog => ({
+  id: data.id as number,
+  sessionId: data.session_id as string,
+  platformName: data.platform_name as string,
+  jobIndex: data.job_index as number,
+  externalJobId: data.external_job_id as string | null,
+  title: data.title as string | null,
+  company: data.company as string | null,
+  location: data.location as string | null,
+  status: data.status as SessionJobLog['status'],
+  importedJobId: data.imported_job_id as number | null,
+  skipReason: data.skip_reason as string | null,
+  skipReasonDetail: data.skip_reason_detail as string | null,
+  duplicateJobId: data.duplicate_job_id as number | null,
+  errorMessage: data.error_message as string | null,
+  processedAt: data.processed_at as string | null,
+  createdAt: data.created_at as string | null,
+  rawJobData: data.raw_job_data as Record<string, unknown> | undefined,
+  duplicateJob: data.duplicate_job ? {
+    id: (data.duplicate_job as Record<string, unknown>).id as number,
+    title: (data.duplicate_job as Record<string, unknown>).title as string,
+    company: (data.duplicate_job as Record<string, unknown>).company as string,
+    location: (data.duplicate_job as Record<string, unknown>).location as string,
+    platform: (data.duplicate_job as Record<string, unknown>).platform as string,
+    externalJobId: (data.duplicate_job as Record<string, unknown>).external_job_id as string,
+    description: (data.duplicate_job as Record<string, unknown>).description as string,
+    postedDate: (data.duplicate_job as Record<string, unknown>).posted_date as string | null,
+    createdAt: (data.duplicate_job as Record<string, unknown>).created_at as string | null,
+    jobUrl: (data.duplicate_job as Record<string, unknown>).job_url as string,
+  } : undefined,
+});
+
+export const sessionJobLogsApi = {
+  /**
+   * Get job logs for a session with pagination and filtering
+   */
+  getSessionJobLogs: async (
+    sessionId: string,
+    params?: {
+      status?: 'all' | 'imported' | 'skipped' | 'error';
+      skipReason?: string;
+      page?: number;
+      perPage?: number;
+      includeRawData?: boolean;
+      includeDuplicate?: boolean;
+    }
+  ): Promise<SessionJobLogsResponse> => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.skipReason) queryParams.append('skip_reason', params.skipReason);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.perPage) queryParams.append('per_page', params.perPage.toString());
+    if (params?.includeRawData !== undefined) queryParams.append('include_raw_data', params.includeRawData.toString());
+    if (params?.includeDuplicate !== undefined) queryParams.append('include_duplicate', params.includeDuplicate.toString());
+
+    const response = await apiClient.get(
+      `/api/scraper-monitoring/sessions/${sessionId}/jobs?${queryParams.toString()}`
+    );
+
+    return {
+      sessionId: response.data.session_id,
+      sessionInfo: {
+        sessionId: response.data.session_info.session_id,
+        roleName: response.data.session_info.role_name,
+        location: response.data.session_info.location,
+        status: response.data.session_info.status,
+        scraperName: response.data.session_info.scraper_name,
+        startedAt: response.data.session_info.started_at,
+        completedAt: response.data.session_info.completed_at,
+        durationSeconds: response.data.session_info.duration_seconds,
+        platformsTotal: response.data.session_info.platforms_total,
+        platformsCompleted: response.data.session_info.platforms_completed,
+        platformsFailed: response.data.session_info.platforms_failed,
+        jobsFound: response.data.session_info.jobs_found,
+        jobsImported: response.data.session_info.jobs_imported,
+        jobsSkipped: response.data.session_info.jobs_skipped,
+      },
+      summary: {
+        total: response.data.summary.total,
+        imported: response.data.summary.imported,
+        skipped: response.data.summary.skipped,
+        error: response.data.summary.error,
+        pending: response.data.summary.pending,
+        skipReasons: response.data.summary.skip_reasons,
+        byPlatform: response.data.summary.by_platform,
+      },
+      jobs: response.data.jobs.map(mapSessionJobLog),
+      pagination: {
+        page: response.data.pagination.page,
+        perPage: response.data.pagination.per_page,
+        total: response.data.pagination.total,
+        pages: response.data.pagination.pages,
+        hasNext: response.data.pagination.has_next,
+        hasPrev: response.data.pagination.has_prev,
+      },
+    };
+  },
+
+  /**
+   * Get detailed information for a single job log
+   */
+  getJobLogDetail: async (
+    sessionId: string,
+    jobLogId: number
+  ): Promise<SessionJobLogDetailResponse> => {
+    const response = await apiClient.get(
+      `/api/scraper-monitoring/sessions/${sessionId}/jobs/${jobLogId}`
+    );
+
+    return {
+      jobLog: mapSessionJobLog(response.data.job_log),
+      rawJobData: response.data.raw_job_data,
+      duplicateJob: response.data.duplicate_job ? {
+        id: response.data.duplicate_job.id,
+        title: response.data.duplicate_job.title,
+        company: response.data.duplicate_job.company,
+        location: response.data.duplicate_job.location,
+        description: response.data.duplicate_job.description,
+        platform: response.data.duplicate_job.platform,
+        externalJobId: response.data.duplicate_job.external_job_id,
+        jobUrl: response.data.duplicate_job.job_url,
+        postedDate: response.data.duplicate_job.posted_date,
+        createdAt: response.data.duplicate_job.created_at,
+        skills: response.data.duplicate_job.skills,
+        salaryRange: response.data.duplicate_job.salary_range,
+        experienceRequired: response.data.duplicate_job.experience_required,
+        isRemote: response.data.duplicate_job.is_remote,
+      } : undefined,
+      importedJob: response.data.imported_job ? {
+        id: response.data.imported_job.id,
+        title: response.data.imported_job.title,
+        company: response.data.imported_job.company,
+        location: response.data.imported_job.location,
+        platform: response.data.imported_job.platform,
+        externalJobId: response.data.imported_job.external_job_id,
+        jobUrl: response.data.imported_job.job_url,
+        createdAt: response.data.imported_job.created_at,
+      } : undefined,
+      comparison: response.data.comparison ? {
+        title: response.data.comparison.title,
+        company: response.data.comparison.company,
+        location: response.data.comparison.location,
+        platform: response.data.comparison.platform,
+        externalId: response.data.comparison.external_id,
+        descriptionPreview: response.data.comparison.description_preview,
+      } : undefined,
+    };
+  },
+
+  /**
+   * Get session summary with skip reasons chart
+   */
+  getSessionSummary: async (sessionId: string): Promise<SessionSummaryResponse> => {
+    const response = await apiClient.get(
+      `/api/scraper-monitoring/sessions/${sessionId}/summary`
+    );
+
+    return {
+      sessionInfo: {
+        sessionId: response.data.session_info.session_id,
+        roleName: response.data.session_info.role_name,
+        location: response.data.session_info.location,
+        status: response.data.session_info.status,
+        scraperName: response.data.session_info.scraper_name,
+        startedAt: response.data.session_info.started_at,
+        completedAt: response.data.session_info.completed_at,
+        durationSeconds: response.data.session_info.duration_seconds,
+      },
+      summary: {
+        total: response.data.summary.total,
+        imported: response.data.summary.imported,
+        skipped: response.data.summary.skipped,
+        error: response.data.summary.error,
+        pending: response.data.summary.pending,
+        skipReasons: response.data.summary.skip_reasons,
+        byPlatform: response.data.summary.by_platform,
+      },
+      platformBreakdown: response.data.platform_breakdown.map((p: Record<string, unknown>) => ({
+        platformName: p.platform_name as string,
+        status: p.status as string,
+        jobsFound: p.jobs_found as number,
+        jobsImported: p.jobs_imported as number,
+        jobsSkipped: p.jobs_skipped as number,
+        errorMessage: p.error_message as string | null,
+        completedAt: p.completed_at as string | null,
+      })),
+      skipReasonsChart: response.data.skip_reasons_chart,
+    };
+  },
+};

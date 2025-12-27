@@ -263,6 +263,7 @@ def import_jobs_batch_for_platform(
         Dict with imported count, skipped count, and job IDs
     """
     from app.services.job_import_service import JobImportService
+    from app.models.session_job_log import SessionJobLog
     
     job_import_service = JobImportService()
     scraper_key = db.session.get(ScraperApiKey, session_data["scraper_key_id"])
@@ -292,6 +293,15 @@ def import_jobs_batch_for_platform(
         return value
     
     for idx, job_data in enumerate(jobs_data):
+        # Create job log entry for tracking
+        job_log = SessionJobLog.log_job(
+            session_id=UUID(session_data["session_id"]),
+            platform_name=platform_name,
+            job_index=idx,
+            raw_job_data=job_data,
+            platform_status_id=session_data.get("platform_status_id")
+        )
+        
         try:
             # Map your schema field names to our internal names
             external_id = job_data.get("jobId") or job_data.get("job_id") or job_data.get("external_job_id") or job_data.get("external_id")
@@ -315,6 +325,10 @@ def import_jobs_batch_for_platform(
             
             if not title or not company:
                 logger.warning(f"[JOB-IMPORT] Skipping job {idx+1}: Missing title or company")
+                job_log.mark_skipped(
+                    reason="missing_required",
+                    detail=f"Missing required field: {'title' if not title else 'company'}"
+                )
                 skipped_count += 1
                 skip_reasons["missing_required"] += 1
                 continue
@@ -335,6 +349,11 @@ def import_jobs_batch_for_platform(
                 
                 if existing:
                     logger.info(f"[JOB-IMPORT] Skipping duplicate (platform+id): platform={platform}, id={external_id}")
+                    job_log.mark_skipped(
+                        reason="duplicate_platform_id",
+                        detail=f"Exact duplicate: same platform '{platform}' and external_job_id '{external_id}'",
+                        duplicate_job_id=existing.id
+                    )
                     skipped_count += 1
                     skip_reasons["duplicate_platform_id"] += 1
                     continue
@@ -369,6 +388,11 @@ def import_jobs_batch_for_platform(
                     f"[JOB-IMPORT] Skipping duplicate (title+company+location): "
                     f"'{title}' at '{company}' in '{location}' (existing job id={existing_by_content.id})"
                 )
+                job_log.mark_skipped(
+                    reason="duplicate_title_company_location",
+                    detail=f"Duplicate by title+company+location: '{title}' at '{company}' in '{location}'",
+                    duplicate_job_id=existing_by_content.id
+                )
                 skipped_count += 1
                 skip_reasons["duplicate_title_company_location"] += 1
                 continue
@@ -388,6 +412,11 @@ def import_jobs_batch_for_platform(
                     logger.info(
                         f"[JOB-IMPORT] Skipping duplicate (title+company+description): "
                         f"'{title}' at '{company}' (existing job id={existing_similar.id})"
+                    )
+                    job_log.mark_skipped(
+                        reason="duplicate_title_company_description",
+                        detail=f"Duplicate by title+company+description: '{title}' at '{company}' - same description prefix",
+                        duplicate_job_id=existing_similar.id
                     )
                     skipped_count += 1
                     skip_reasons["duplicate_title_company_description"] += 1
@@ -470,6 +499,9 @@ def import_jobs_batch_for_platform(
             )
             db.session.add(role_mapping)
             
+            # Mark job log as imported
+            job_log.mark_imported(job.id)
+            
             job_ids.append(job.id)
             imported_count += 1
             
@@ -479,6 +511,7 @@ def import_jobs_batch_for_platform(
             
         except Exception as e:
             logger.error(f"[JOB-IMPORT] Failed to import job {idx+1}: {e}")
+            job_log.mark_error(str(e))
             skipped_count += 1
             skip_reasons["error"] += 1
     
