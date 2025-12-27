@@ -248,10 +248,12 @@ export function MatchCard({
         )}
 
         {/* Match Date */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2">
-          <Clock className="h-3.5 w-3.5" />
-          <span>Matched {format(new Date(match.matched_at || match.match_date || match.created_at), 'MMM dd, yyyy')}</span>
-        </div>
+        {(match.matched_at || match.match_date || match.created_at) && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2">
+            <Clock className="h-3.5 w-3.5" />
+            <span>Matched {format(new Date(match.matched_at || match.match_date || match.created_at), 'MMM dd, yyyy')}</span>
+          </div>
+        )}
       </CardContent>
 
       {showActions && (
