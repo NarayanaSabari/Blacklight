@@ -42,7 +42,7 @@ class JobPosting(db.Model):
     # Job Metadata
     posted_date = db.Column(Date, index=True)
     expires_at = db.Column(Date)
-    job_type = db.Column(String(50))  # Full-time, Contract, Part-time
+    job_type = db.Column(String(255))  # Full-time, Contract, Part-time, H1B sponsorship info, etc.
     is_remote = db.Column(Boolean, default=False, index=True)
     experience_required = db.Column(String(100))  # "3-5 years"
     experience_min = db.Column(Integer)  # Parsed: 3

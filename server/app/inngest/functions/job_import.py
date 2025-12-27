@@ -279,6 +279,12 @@ def import_jobs_batch_for_platform(
         "error": 0
     }
     
+    # Helper to truncate strings to fit database varchar limits
+    def truncate_str(value, max_len):
+        if value and isinstance(value, str) and len(value) > max_len:
+            return value[:max_len]
+        return value
+    
     for idx, job_data in enumerate(jobs_data):
         try:
             # Map your schema field names to our internal names
@@ -413,26 +419,29 @@ def import_jobs_batch_for_platform(
             if apply_url == "N/A":
                 apply_url = None
             
-            # Create job posting
+            # Get job_type and truncate to fit database limits
+            job_type_raw = job_data.get("jobType", job_data.get("job_type"))
+            
+            # Create job posting with truncated fields to fit varchar limits
             job = JobPosting(
                 external_job_id=str(external_id) if external_id else f"scraper-{session_data['session_id']}-{platform_name}-{idx}",
-                platform=platform,
-                title=title,
-                company=company,
-                location=job_data.get("location"),
+                platform=truncate_str(platform, 50),
+                title=truncate_str(title, 500),
+                company=truncate_str(company, 255),
+                location=truncate_str(job_data.get("location"), 255),
                 description=description,
                 snippet=job_data.get("snippet"),
                 requirements=job_data.get("requirements"),
-                salary_range=salary_str if salary_str and salary_str.upper() != "N/A" else None,
+                salary_range=truncate_str(salary_str if salary_str and salary_str.upper() != "N/A" else None, 255),
                 salary_min=salary_min,
                 salary_max=salary_max,
-                salary_currency=currency,
-                experience_required=experience_str if experience_str and experience_str.upper() != "N/A" else None,
+                salary_currency=truncate_str(currency, 10),
+                experience_required=truncate_str(experience_str if experience_str and experience_str.upper() != "N/A" else None, 100),
                 experience_min=exp_min,
                 experience_max=exp_max,
                 skills=normalized_skills,
                 keywords=job_import_service.generate_keywords(title, description, normalized_skills),
-                job_type=job_data.get("jobType", job_data.get("job_type")),
+                job_type=truncate_str(job_type_raw, 255),
                 is_remote=is_remote,
                 job_url=job_url,
                 apply_url=apply_url,
