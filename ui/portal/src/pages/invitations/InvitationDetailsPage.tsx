@@ -33,7 +33,7 @@ export default function InvitationDetailsPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate('/invitations')}
+          onClick={() => navigate('/email-invitations')}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
