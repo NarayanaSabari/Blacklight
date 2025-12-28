@@ -10,12 +10,10 @@ export { LoginPage } from './auth/LoginPage';
 export { DashboardPage } from './dashboard/DashboardPage';
 
 // Candidates
-export { CandidatesPage } from './candidates/CandidatesPage';
 export { CandidateDetailPage } from './candidates/CandidateDetailPage';
 export { AddCandidatePage } from './candidates/AddCandidatePage';
 export { EditCandidatePage } from './candidates/EditCandidatePage';
 export { CandidateManagementPage } from './candidates/CandidateManagementPage';
-export { OnboardCandidatesPage } from './candidates/OnboardCandidatesPage';
 export { YourCandidatesPage } from './candidates/YourCandidatesPage';
 export { YourCandidatesPageNew } from './candidates/YourCandidatesPageNew';
 export { KanbanBoardPage } from './candidates/KanbanBoardPage';
@@ -38,7 +36,6 @@ export { SettingsPage } from './settings/SettingsPage';
 export { default as DocumentsPage } from './settings/DocumentsPage';
 
 // Invitations
-export { default as InvitationsPage } from './invitations/InvitationsPage';
 export { default as InvitationDetailsPage } from './invitations/InvitationDetailsPage';
 export { default as InvitationReviewPage } from './invitations/InvitationReviewPage';
 

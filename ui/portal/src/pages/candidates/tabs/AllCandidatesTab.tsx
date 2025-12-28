@@ -1,6 +1,6 @@
 /**
- * Candidates Page
- * Manage and track candidates with resume parsing
+ * All Candidates Tab
+ * Unified layout: Search/Filter bar → Table → Pagination
  */
 
 import { useState } from 'react';
@@ -40,6 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Users, Search, MoreVertical, Pencil, Trash2, Eye, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { candidateApi } from '@/lib/candidateApi';
@@ -60,11 +61,10 @@ const STATUS_COLORS: Record<CandidateStatus, string> = {
   ready_for_assignment: 'bg-cyan-100 text-cyan-800',
 };
 
-export function CandidatesPage() {
+export function AllCandidatesTab() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  // State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -73,7 +73,6 @@ export function CandidatesPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [candidateToAssign, setCandidateToAssign] = useState<CandidateListItem | null>(null);
 
-  // Fetch candidates
   const { data: candidatesData, isLoading } = useQuery({
     queryKey: ['candidates', { page, status: statusFilter, search: searchQuery }],
     queryFn: () =>
@@ -83,36 +82,27 @@ export function CandidatesPage() {
         status: statusFilter !== 'all' ? (statusFilter as CandidateStatus) : undefined,
         search: searchQuery || undefined,
       }),
-    staleTime: 0, // Always refetch to ensure fresh data after mutations
+    staleTime: 0,
   });
 
-  // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: (id: number) => candidateApi.deleteCandidate(id),
     onSuccess: async () => {
-      // Force immediate refetch of data
       await queryClient.refetchQueries({ queryKey: ['candidates'] });
-      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
+      await queryClient.refetchQueries({ queryKey: ['onboarding-stats'] });
       toast.success('Candidate deleted successfully');
       setDeleteDialogOpen(false);
       setCandidateToDelete(null);
     },
     onError: async (error: any) => {
-      // Log the error for debugging
-      console.error('Delete error:', error);
-
-      // If 404, the candidate doesn't exist (already deleted) - treat as success
-      if (error.response?.status === 404 || error.message?.includes('404')) {
+      if (error.response?.status === 404) {
         toast.success('Candidate deleted successfully');
       } else {
         toast.error(error.message || 'Failed to delete candidate');
       }
-
       setDeleteDialogOpen(false);
       setCandidateToDelete(null);
-      // Force refetch anyway in case the candidate was actually deleted
       await queryClient.refetchQueries({ queryKey: ['candidates'] });
-      await queryClient.refetchQueries({ queryKey: ['candidate-stats'] });
     },
   });
 
@@ -131,12 +121,12 @@ export function CandidatesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Search and Filters */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search candidates..."
               value={searchQuery}
@@ -145,22 +135,18 @@ export function CandidatesPage() {
             />
           </div>
         </div>
-
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full md:w-48">
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-            <SelectItem value="pending_review">Pending Review</SelectItem>
             <SelectItem value="new">New</SelectItem>
             <SelectItem value="screening">Screening</SelectItem>
             <SelectItem value="interviewed">Interviewed</SelectItem>
             <SelectItem value="offered">Offered</SelectItem>
             <SelectItem value="hired">Hired</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
-            <SelectItem value="withdrawn">Withdrawn</SelectItem>
             <SelectItem value="onboarded">Onboarded</SelectItem>
             <SelectItem value="ready_for_assignment">Ready for Assignment</SelectItem>
           </SelectContent>
@@ -169,14 +155,14 @@ export function CandidatesPage() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="space-y-2">
-          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
-          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
-          <div className="h-12 w-full bg-slate-100 rounded animate-pulse" />
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
         </div>
       ) : candidatesData?.candidates.length === 0 ? (
-        <div className="text-center py-12 text-slate-500">
-          <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
+        <div className="text-center py-12 text-muted-foreground">
+          <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
           <p className="text-lg font-medium">No candidates found</p>
           <p className="text-sm mt-1">
             {searchQuery || statusFilter !== 'all'
@@ -210,10 +196,8 @@ export function CandidatesPage() {
                       {candidate.status.replace(/_/g, ' ')}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm text-slate-600">
-                      {formatDate(candidate.created_at)}
-                    </div>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {formatDate(candidate.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -258,8 +242,8 @@ export function CandidatesPage() {
 
           {/* Pagination */}
           {candidatesData && candidatesData.pages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-slate-600">
+            <div className="flex items-center justify-between pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
                 Page {candidatesData.page} of {candidatesData.pages}
               </div>
               <div className="flex gap-2">
@@ -286,13 +270,12 @@ export function CandidatesPage() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      < AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} >
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this candidate and their resume. This action cannot be
-              undone.
+              This will permanently delete this candidate and their resume. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -305,23 +288,21 @@ export function CandidatesPage() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog >
+      </AlertDialog>
 
       {/* Candidate Assignment Dialog */}
-      {
-        candidateToAssign && (
-          <CandidateAssignmentDialog
-            candidateId={candidateToAssign.id}
-            candidateName={candidateToAssign.full_name || `${candidateToAssign.first_name} ${candidateToAssign.last_name}`}
-            open={assignDialogOpen}
-            onOpenChange={setAssignDialogOpen}
-            onSuccess={() => {
-              toast.success('Candidate assigned successfully!');
-              setCandidateToAssign(null);
-            }}
-          />
-        )
-      }
-    </div >
+      {candidateToAssign && (
+        <CandidateAssignmentDialog
+          candidateId={candidateToAssign.id}
+          candidateName={candidateToAssign.full_name || `${candidateToAssign.first_name} ${candidateToAssign.last_name}`}
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+          onSuccess={() => {
+            toast.success('Candidate assigned successfully!');
+            setCandidateToAssign(null);
+          }}
+        />
+      )}
+    </div>
   );
 }

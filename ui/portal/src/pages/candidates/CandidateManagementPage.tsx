@@ -1,6 +1,7 @@
 /**
  * Unified Candidate Management Page - Tab Navigation Layout
  * HR-focused workflow with horizontal tabs and quick stats
+ * All tabs share the same consistent layout pattern
  */
 
 import { useState, useEffect } from 'react';
@@ -20,9 +21,10 @@ import {
 } from 'lucide-react';
 import { invitationApi } from '@/lib/api/invitationApi';
 import { onboardingApi } from '@/lib/onboardingApi';
-import { CandidatesPage } from './CandidatesPage';
-import { OnboardCandidatesPage } from './OnboardCandidatesPage';
-import InvitationsPage from '../invitations/InvitationsPage';
+import { AllCandidatesTab } from './tabs/AllCandidatesTab';
+import { ReviewSubmissionsTab } from './tabs/ReviewSubmissionsTab';
+import { ReadyToAssignTab } from './tabs/ReadyToAssignTab';
+import { EmailInvitationsTab } from './tabs/EmailInvitationsTab';
 
 type SectionType = 'all-candidates' | 'review-submissions' | 'ready-to-assign' | 'email-invitations';
 
@@ -66,7 +68,10 @@ export function CandidateManagementPage() {
     <div className="space-y-6">
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('all-candidates')}>
+        <Card 
+          className={`cursor-pointer hover:shadow-md transition-all ${activeSection === 'all-candidates' ? 'ring-2 ring-primary' : ''}`} 
+          onClick={() => handleSectionChange('all-candidates')}
+        >
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-100">
@@ -80,7 +85,10 @@ export function CandidateManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('review-submissions')}>
+        <Card 
+          className={`cursor-pointer hover:shadow-md transition-all ${activeSection === 'review-submissions' ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => handleSectionChange('review-submissions')}
+        >
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-100">
@@ -94,7 +102,10 @@ export function CandidateManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('ready-to-assign')}>
+        <Card 
+          className={`cursor-pointer hover:shadow-md transition-all ${activeSection === 'ready-to-assign' ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => handleSectionChange('ready-to-assign')}
+        >
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-100">
@@ -108,7 +119,10 @@ export function CandidateManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('email-invitations')}>
+        <Card 
+          className={`cursor-pointer hover:shadow-md transition-all ${activeSection === 'email-invitations' ? 'ring-2 ring-primary' : ''}`}
+          onClick={() => handleSectionChange('email-invitations')}
+        >
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-purple-100">
@@ -166,13 +180,15 @@ export function CandidateManagementPage() {
         </Button>
       </div>
 
-      {/* Content Area */}
-      <div>
-        {activeSection === 'all-candidates' && <CandidatesPage />}
-        {activeSection === 'review-submissions' && <OnboardCandidatesPage defaultTab="review-submissions" hideTabNavigation={true} />}
-        {activeSection === 'ready-to-assign' && <OnboardCandidatesPage defaultTab="ready-to-assign" hideTabNavigation={true} />}
-        {activeSection === 'email-invitations' && <InvitationsPage />}
-      </div>
+      {/* Content Area - All tabs use same layout pattern */}
+      <Card>
+        <CardContent className="p-6">
+          {activeSection === 'all-candidates' && <AllCandidatesTab />}
+          {activeSection === 'review-submissions' && <ReviewSubmissionsTab />}
+          {activeSection === 'ready-to-assign' && <ReadyToAssignTab />}
+          {activeSection === 'email-invitations' && <EmailInvitationsTab />}
+        </CardContent>
+      </Card>
     </div>
   );
 }
