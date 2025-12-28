@@ -43,15 +43,30 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Action Button */}
-      {canManageUsers && (
-        <div className="flex justify-end">
-          <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Invite User
-          </Button>
+      {/* Header with Search and Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Team Members</h1>
+          <p className="text-slate-600 mt-1">Manage your organization's users and permissions</p>
         </div>
-      )}
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search users..."
+              className="pl-9 w-64"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          {canManageUsers && (
+            <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Invite User
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Permission Warning */}
       {!canManageUsers && (
@@ -64,47 +79,55 @@ export function UsersPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Total Users</CardDescription>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Total Users</CardDescription>
+            <div className="p-2 rounded-lg bg-blue-100">
+              <Users className="h-4 w-4 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoading ? <Skeleton className="h-9 w-12" /> : stats.total}
             </CardTitle>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Active</CardDescription>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Active</CardDescription>
+            <div className="p-2 rounded-lg bg-green-100">
+              <UserCheck className="h-4 w-4 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoading ? <Skeleton className="h-9 w-12" /> : stats.active}
             </CardTitle>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Recruiters</CardDescription>
-            <UserCog className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Recruiters</CardDescription>
+            <div className="p-2 rounded-lg bg-purple-100">
+              <UserCog className="h-4 w-4 text-purple-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoading ? <Skeleton className="h-9 w-12" /> : stats.recruiters}
             </CardTitle>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-gradient-to-br from-orange-50 to-white border-orange-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Managers</CardDescription>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Managers</CardDescription>
+            <div className="p-2 rounded-lg bg-orange-100">
+              <Shield className="h-4 w-4 text-orange-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoading ? <Skeleton className="h-9 w-12" /> : stats.managers}
             </CardTitle>
           </CardContent>
@@ -113,42 +136,35 @@ export function UsersPage() {
 
       {/* Main Content */}
       <Card>
-        <CardHeader>
+        <CardHeader className="border-b">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Team Members</CardTitle>
+              <CardTitle>All Users</CardTitle>
               <CardDescription>Manage users and their permissions</CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search users..."
-                  className="pl-8 w-[200px]"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="p-6 space-y-3">
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : error ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Failed to load users. Please try again later.
-              </AlertDescription>
-            </Alert>
+            <div className="p-6">
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Failed to load users. Please try again later.
+                </AlertDescription>
+              </Alert>
+            </div>
           ) : users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <UserCog className="h-12 w-12 text-slate-400 mb-4" />
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="p-4 rounded-full bg-slate-100 mb-4">
+                <UserCog className="h-12 w-12 text-slate-400" />
+              </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 {searchQuery ? 'No users found' : 'No team members yet'}
               </h3>
@@ -165,25 +181,32 @@ export function UsersPage() {
               )}
             </div>
           ) : (
-            <UsersTable
-              users={users}
-              onResetPassword={(user) => setResetPasswordUser(user)}
-            />
+            <div className="p-0">
+              <UsersTable
+                users={users}
+                onResetPassword={(user) => setResetPasswordUser(user)}
+              />
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Link to Roles Management Page */}
+      {/* Roles Management Link */}
       {canManageUsers && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Roles & Permissions</CardTitle>
-              <CardDescription>Manage custom roles and assign permissions.</CardDescription>
+        <Card className="bg-gradient-to-r from-slate-50 to-white">
+          <CardHeader className="flex flex-row items-center justify-between py-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-slate-100">
+                <Shield className="h-5 w-5 text-slate-600" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Roles & Permissions</CardTitle>
+                <CardDescription>Manage custom roles and assign permissions</CardDescription>
+              </div>
             </div>
-            <Button asChild>
+            <Button asChild variant="outline">
               <Link to="/users/roles">
-                <UserCog className="mr-2 h-4 w-4" /> Manage Roles
+                Manage Roles
               </Link>
             </Button>
           </CardHeader>

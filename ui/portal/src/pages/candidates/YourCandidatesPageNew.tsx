@@ -16,7 +16,6 @@ import {
   Users,
   ChevronRight,
   Search,
-  UserCircle2,
   Mail,
   Phone,
   Eye,
@@ -143,82 +142,110 @@ export function YourCandidatesPageNew() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Your Candidates</h1>
+          <p className="text-slate-600 mt-1">
+            {hasNoTeamMembers 
+              ? 'View and manage your assigned candidates' 
+              : 'View team members and their assigned candidates'}
+          </p>
+        </div>
+      </div>
+
       {/* If user has no team members, show only their candidates */}
       {hasNoTeamMembers ? (
-        <Card className="h-[calc(100vh-12rem)]">
+        <Card>
           <div className="p-6 border-b">
-            <h3 className="font-semibold text-slate-900">
-              Your Assigned Candidates
-            </h3>
-            <p className="text-sm text-slate-600 mt-1">
-              {currentCandidates.length} candidates assigned to you
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-900">Your Assigned Candidates</h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  {currentCandidates.length} candidates assigned to you
+                </p>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search candidates..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-64"
+                />
+              </div>
+            </div>
           </div>
           
-          <div className="overflow-y-auto p-6 space-y-3" style={{ maxHeight: 'calc(100vh - 18rem)' }}>
+          <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
             {isLoadingOwnCandidates ? (
               <>
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-32 w-full" />
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-40 w-full" />
                 ))}
               </>
             ) : currentCandidates.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <UserCog className="h-16 w-16 text-slate-300 mb-4" />
-                <p className="text-slate-600 font-medium">No candidates assigned</p>
-                <p className="text-sm text-slate-500 mt-1">
+              <div className="col-span-2 flex flex-col items-center justify-center py-16 text-center">
+                <div className="p-4 rounded-full bg-slate-100 mb-4">
+                  <UserCog className="h-12 w-12 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">No candidates assigned</h3>
+                <p className="text-slate-600 max-w-sm">
                   You don't have any candidates assigned to you yet
                 </p>
               </div>
             ) : (
               currentCandidates.map((candidate) => (
-                <div
+                <Card
                   key={candidate.id}
-                  className="p-4 rounded-lg border-2 border-slate-200 bg-white hover:shadow-md transition-all"
+                  className="hover:shadow-lg transition-all hover:border-primary/50 group cursor-pointer"
+                  onClick={() => handleViewCandidate(candidate.id)}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h4 className="font-semibold text-slate-900 text-lg">
-                            {candidate.first_name} {candidate.last_name}
-                          </h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge
-                              className={ONBOARDING_STATUS_COLORS[candidate.onboarding_status || 'PENDING_ASSIGNMENT']}
-                            >
-                              {(candidate.onboarding_status || 'PENDING_ASSIGNMENT').replace(/_/g, ' ')}
-                            </Badge>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <h4 className="font-semibold text-slate-900 text-lg group-hover:text-primary transition-colors">
+                              {candidate.first_name} {candidate.last_name}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge
+                                className={ONBOARDING_STATUS_COLORS[candidate.onboarding_status || 'PENDING_ASSIGNMENT']}
+                              >
+                                {(candidate.onboarding_status || 'PENDING_ASSIGNMENT').replace(/_/g, ' ')}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="space-y-2 text-sm text-slate-600">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          <span>{candidate.email}</span>
-                        </div>
-                        {candidate.phone && (
+                        <div className="space-y-2 text-sm text-slate-600">
                           <div className="flex items-center gap-2">
-                            <Phone className="h-4 w-4" />
-                            <span>{candidate.phone}</span>
+                            <Mail className="h-4 w-4" />
+                            <span>{candidate.email}</span>
                           </div>
-                        )}
+                          {candidate.phone && (
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4" />
+                              <span>{candidate.phone}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewCandidate(candidate.id)}
-                      className="gap-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      View Details
-                    </Button>
-                  </div>
-                </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); handleViewCandidate(candidate.id); }}
+                        className="gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               ))
             )}
           </div>
@@ -227,25 +254,25 @@ export function YourCandidatesPageNew() {
         <>
           {/* Breadcrumb Navigation */}
           {navigationStack.length > 0 && (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
+            <div className="flex items-center gap-2 text-sm bg-slate-50 rounded-lg px-4 py-2">
               <button
                 onClick={() => {
                   setNavigationStack([]);
                   setSelectedMemberId(null);
                 }}
-                className="hover:text-slate-900"
+                className="hover:text-primary font-medium"
               >
                 Home
               </button>
               {navigationStack.map((member, index) => (
                 <div key={member.id} className="flex items-center gap-2">
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
                   <button
                     onClick={() => {
                       setNavigationStack(navigationStack.slice(0, index + 1));
                       setSelectedMemberId(null);
                     }}
-                    className="hover:text-slate-900"
+                    className="hover:text-primary font-medium"
                   >
                     {member.full_name}
                   </button>
@@ -257,37 +284,37 @@ export function YourCandidatesPageNew() {
       {/* Two Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Column 1: Team Members */}
-        <Card className="h-[calc(100vh-16rem)] flex flex-col">
+        <Card className="h-[calc(100vh-14rem)] flex flex-col">
           <div className="p-6 border-b space-y-4 flex-shrink-0">
-            {/* Back Button */}
-            {currentMember && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBack}
-                className="gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Button>
-            )}
-
-            {/* Current Context Header */}
-            {currentMember && (
-              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                <UserCircle2 className="h-10 w-10 text-blue-600" />
-                <div>
-                  <div className="font-semibold text-slate-900">
-                    {currentMember.full_name}
+            {/* Back Button & Current Context */}
+            {currentMember ? (
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBack}
+                  className="gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </Button>
+                <div className="flex items-center gap-3 p-2 px-4 bg-primary/10 rounded-lg">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                    {currentMember.full_name.charAt(0).toUpperCase()}
                   </div>
-                  <div className="text-sm text-slate-600">
-                    {currentMember.role_name} • {currentMember.candidate_count} candidates
+                  <div>
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {currentMember.full_name}
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      {currentMember.role_name} • {currentMember.candidate_count} candidates
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h3 className="font-semibold text-slate-900">
                 {currentMember ? `${currentMember.full_name}'s Team` : 'My Team'}
               </h3>
@@ -304,16 +331,18 @@ export function YourCandidatesPageNew() {
           </div>
 
           {/* Team Members List */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {isLoadingTeam ? (
               <>
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-24 w-full" />
+                  <Skeleton key={i} className="h-20 w-full" />
                 ))}
               </>
             ) : filteredTeamMembers.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <Users className="h-16 w-16 text-slate-300 mb-4" />
+                <div className="p-4 rounded-full bg-slate-100 mb-4">
+                  <Users className="h-10 w-10 text-slate-400" />
+                </div>
                 <p className="text-slate-600 font-medium">No team members found</p>
                 <p className="text-sm text-slate-500 mt-1">
                   {searchQuery ? 'Try a different search term' : 'You have no direct reports'}
@@ -324,15 +353,15 @@ export function YourCandidatesPageNew() {
                 <button
                   key={member.id}
                   onClick={() => handleTeamMemberClick(member)}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all hover:shadow-md hover:scale-[1.02] ${
+                  className={`w-full text-left p-4 rounded-lg border transition-all hover:shadow-md ${
                     selectedMemberId === member.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
+                      ? 'border-primary bg-primary/5 shadow-md'
+                      : 'border-slate-200 bg-white hover:border-primary/50'
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
                         {member.full_name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -342,22 +371,22 @@ export function YourCandidatesPageNew() {
                         <div className="text-sm text-slate-600 truncate">
                           {member.email}
                         </div>
-                        <div className="flex items-center gap-3 mt-2">
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <Badge variant="secondary" className="text-xs">
                             {member.role_name}
                           </Badge>
                           <span className="text-xs text-slate-500">
-                            📊 {member.candidate_count} candidates
+                            {member.candidate_count} candidates
                           </span>
                           {member.has_team_members && (
-                            <span className="text-xs text-slate-500">
-                              👥 {member.team_member_count} team members
+                            <span className="text-xs text-primary font-medium">
+                              {member.team_member_count} team members →
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <ChevronRight className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                    <ChevronRight className={`h-5 w-5 flex-shrink-0 ${selectedMemberId === member.id ? 'text-primary' : 'text-slate-400'}`} />
                   </div>
                 </button>
               ))
@@ -366,10 +395,10 @@ export function YourCandidatesPageNew() {
         </Card>
 
         {/* Column 2: Candidates */}
-        <Card className="h-[calc(100vh-16rem)] flex flex-col">
+        <Card className="h-[calc(100vh-14rem)] flex flex-col">
           <div className="p-6 border-b flex-shrink-0">
             <h3 className="font-semibold text-slate-900">
-              {selectedMemberId ? 'Assigned Candidates' : 'Select a team member'}
+              {selectedMemberId ? 'Assigned Candidates' : 'Select a Team Member'}
             </h3>
             {selectedMemberId && (
               <p className="text-sm text-slate-600 mt-1">
@@ -379,26 +408,30 @@ export function YourCandidatesPageNew() {
           </div>
 
           {/* Candidates List */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {!selectedMemberId ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <UserCog className="h-16 w-16 text-slate-300 mb-4" />
+                <div className="p-4 rounded-full bg-slate-100 mb-4">
+                  <UserCog className="h-10 w-10 text-slate-400" />
+                </div>
                 <p className="text-slate-600 font-medium">
-                  ← Select a team member to view their candidates
+                  Select a team member
                 </p>
                 <p className="text-sm text-slate-500 mt-1">
-                  Click on any team member card on the left
+                  Click on any team member card to view their candidates
                 </p>
               </div>
             ) : isLoadingCandidates ? (
               <>
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-32 w-full" />
+                  <Skeleton key={i} className="h-28 w-full" />
                 ))}
               </>
             ) : currentCandidates.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                <Users className="h-16 w-16 text-slate-300 mb-4" />
+                <div className="p-4 rounded-full bg-slate-100 mb-4">
+                  <Users className="h-10 w-10 text-slate-400" />
+                </div>
                 <p className="text-slate-600 font-medium">No candidates assigned</p>
                 <p className="text-sm text-slate-500 mt-1">
                   This team member has no candidates yet
@@ -406,22 +439,26 @@ export function YourCandidatesPageNew() {
               </div>
             ) : (
               currentCandidates.map((candidate) => (
-                <Card key={candidate.id} className="hover:shadow-md transition-shadow">
+                <Card 
+                  key={candidate.id} 
+                  className="hover:shadow-lg transition-all hover:border-primary/50 cursor-pointer group"
+                  onClick={() => handleViewCandidate(candidate.id)}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h4 className="font-semibold text-slate-900 truncate">
+                            <h4 className="font-semibold text-slate-900 group-hover:text-primary transition-colors">
                               {candidate.first_name} {candidate.last_name}
                             </h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge
-                              className={ONBOARDING_STATUS_COLORS[candidate.onboarding_status || 'PENDING_ASSIGNMENT']}
-                            >
-                              {(candidate.onboarding_status || 'PENDING_ASSIGNMENT').replace(/_/g, ' ')}
-                            </Badge>
-                          </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge
+                                className={ONBOARDING_STATUS_COLORS[candidate.onboarding_status || 'PENDING_ASSIGNMENT']}
+                              >
+                                {(candidate.onboarding_status || 'PENDING_ASSIGNMENT').replace(/_/g, ' ')}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
 
@@ -437,19 +474,16 @@ export function YourCandidatesPageNew() {
                             </div>
                           )}
                         </div>
-
-                        <div className="mt-3 flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleViewCandidate(candidate.id)}
-                            className="gap-2"
-                          >
-                            <Eye className="h-4 w-4" />
-                            View Details
-                          </Button>
-                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); handleViewCandidate(candidate.id); }}
+                        className="gap-2"
+                      >
+                        <Eye className="h-4 w-4" />
+                        View
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

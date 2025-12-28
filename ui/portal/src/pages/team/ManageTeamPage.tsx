@@ -282,7 +282,7 @@ export function ManageTeamPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Team Management</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Team Management</h1>
           <p className="text-slate-600 mt-1">View and manage team hierarchy</p>
         </div>
         <Alert>
@@ -297,15 +297,43 @@ export function ManageTeamPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Team Management</h1>
+          <p className="text-slate-600 mt-1">View and manage your organization's reporting structure</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={expandAll}
+            disabled={isLoadingHierarchy}
+          >
+            Expand All
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={collapseAll}
+            disabled={isLoadingHierarchy}
+          >
+            Collapse All
+          </Button>
+        </div>
+      </div>
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Total Team Members</CardDescription>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Total Team Members</CardDescription>
+            <div className="p-2 rounded-lg bg-blue-100">
+              <Users className="h-4 w-4 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoadingHierarchy ? (
                 <Skeleton className="h-9 w-12" />
               ) : (
@@ -316,13 +344,15 @@ export function ManageTeamPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Managers</CardDescription>
-            <UserCog className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Managers</CardDescription>
+            <div className="p-2 rounded-lg bg-purple-100">
+              <UserCog className="h-4 w-4 text-purple-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoadingManagers ? (
                 <Skeleton className="h-9 w-12" />
               ) : (
@@ -332,13 +362,15 @@ export function ManageTeamPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Reporting Levels</CardDescription>
-            <GitBranch className="h-4 w-4 text-muted-foreground" />
+            <CardDescription className="font-medium text-slate-600">Reporting Levels</CardDescription>
+            <div className="p-2 rounded-lg bg-green-100">
+              <GitBranch className="h-4 w-4 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <CardTitle className="text-3xl">
+            <CardTitle className="text-3xl text-slate-900">
               {isLoadingHierarchy ? (
                 <Skeleton className="h-9 w-12" />
               ) : (
@@ -366,43 +398,29 @@ export function ManageTeamPage() {
 
       {/* Main Content */}
       <Tabs defaultValue="hierarchy" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="hierarchy">Team Hierarchy</TabsTrigger>
-          <TabsTrigger value="managers">Managers List</TabsTrigger>
+        <TabsList className="bg-muted/50">
+          <TabsTrigger value="hierarchy" className="gap-2">
+            <GitBranch className="h-4 w-4" />
+            Team Hierarchy
+          </TabsTrigger>
+          <TabsTrigger value="managers" className="gap-2">
+            <UserCog className="h-4 w-4" />
+            Managers List
+          </TabsTrigger>
         </TabsList>
 
         {/* Hierarchy Tab */}
         <TabsContent value="hierarchy" className="space-y-4">
           <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Organization Structure</CardTitle>
-                  <CardDescription>
-                    Visual representation of your team's reporting structure
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={expandAll}
-                    disabled={isLoadingHierarchy}
-                  >
-                    Expand All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={collapseAll}
-                    disabled={isLoadingHierarchy}
-                  >
-                    Collapse All
-                  </Button>
-                </div>
+            <CardHeader className="border-b">
+              <div>
+                <CardTitle>Organization Structure</CardTitle>
+                <CardDescription>
+                  Visual representation of your team's reporting structure
+                </CardDescription>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               {isLoadingHierarchy ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
@@ -421,9 +439,12 @@ export function ManageTeamPage() {
                   {hierarchyData.top_level_users.map((member) => renderTeamMember(member))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-slate-500">
-                  <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p>No team members found</p>
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 rounded-full bg-slate-100 mb-4">
+                    <Users className="h-12 w-12 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No team members found</h3>
+                  <p className="text-slate-600 max-w-sm">Start building your team by inviting users from the Users page</p>
                 </div>
               )}
             </CardContent>
@@ -433,13 +454,13 @@ export function ManageTeamPage() {
         {/* Managers Tab */}
         <TabsContent value="managers" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="border-b">
               <CardTitle>Managers Overview</CardTitle>
               <CardDescription>
                 Team members with direct reports
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-0">
               {isLoadingManagers ? (
                 <div className="space-y-2">
                   <Skeleton className="h-12 w-full" />
@@ -482,9 +503,12 @@ export function ManageTeamPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-12 text-slate-500">
-                  <UserCog className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p>No managers found</p>
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 rounded-full bg-slate-100 mb-4">
+                    <UserCog className="h-12 w-12 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No managers found</h3>
+                  <p className="text-slate-600 max-w-sm">Assign managers to team members to see them here</p>
                 </div>
               )}
             </CardContent>
