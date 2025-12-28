@@ -21,16 +21,18 @@ import {
   Search, 
   User,
   Target,
-  TrendingUp,
   AlertCircle,
   ChevronRight,
   ChevronLeft,
   ChevronsLeft,
   ChevronsRight,
+  LayoutGrid,
+  TableIcon,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { MatchCard } from '@/components/matches/MatchCard';
+import { JobMatchTable } from '@/components/matches/JobMatchTable';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -40,6 +42,7 @@ export function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Reset page when candidate changes
   useEffect(() => {
@@ -90,12 +93,6 @@ export function JobsPage() {
 
   const handleCandidateSelect = (candidateId: number) => {
     setSelectedCandidateId(candidateId);
-  };
-
-  const handleViewAllMatches = () => {
-    if (selectedCandidateId) {
-      navigate(`/candidates/${selectedCandidateId}/matches`);
-    }
   };
 
   const handlePageChange = (page: number) => {
@@ -217,6 +214,25 @@ export function JobsPage() {
                         <Target className="h-4 w-4 mr-1" />
                         {totalMatches} Matches
                       </Badge>
+                      {/* View Mode Toggle */}
+                      <div className="flex items-center border rounded-lg overflow-hidden">
+                        <Button
+                          variant={viewMode === 'table' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="rounded-none h-8"
+                          onClick={() => setViewMode('table')}
+                        >
+                          <TableIcon className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="rounded-none h-8"
+                          onClick={() => setViewMode('cards')}
+                        >
+                          <LayoutGrid className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -298,7 +314,7 @@ export function JobsPage() {
                 {loadingMatches ? (
                   <div className="space-y-4">
                     {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-64 w-full" />
+                      <Skeleton key={i} className="h-16 w-full" />
                     ))}
                   </div>
                 ) : matchesError ? (
@@ -308,17 +324,22 @@ export function JobsPage() {
                       Failed to load job matches. Please try again.
                     </AlertDescription>
                   </Alert>
+                ) : viewMode === 'table' ? (
+                  <JobMatchTable
+                    matches={matches}
+                    candidateId={selectedCandidateId}
+                    onViewDetails={(jobId) => {
+                      navigate(`/candidates/${selectedCandidateId}/matches/jobs/${jobId}`);
+                    }}
+                  />
                 ) : matches.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                      <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
+                      <Target className="h-12 w-12 text-muted-foreground mb-4" />
                       <h3 className="text-lg font-semibold mb-2">No Job Matches Yet</h3>
-                      <p className="text-muted-foreground mb-4 max-w-md">
-                        Generate AI-powered job matches for this candidate to see recommendations
+                      <p className="text-muted-foreground max-w-md">
+                        Jobs will appear here once they are matched to this candidate's roles
                       </p>
-                      <Button onClick={handleViewAllMatches}>
-                        Go to Matches Page
-                      </Button>
                     </CardContent>
                   </Card>
                 ) : (
