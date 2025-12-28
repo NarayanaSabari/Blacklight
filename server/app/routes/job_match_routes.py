@@ -343,14 +343,14 @@ def get_candidate_matches(candidate_id: int):
         
         # Parse query parameters
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = request.args.get('per_page', 25, type=int)  # Default 25 for pagination
         min_score = request.args.get('min_score', 0, type=float)
         sort_by = request.args.get('sort_by', 'match_score')
         sort_order = request.args.get('sort_order', 'desc')
         
         # Validate parameters
-        if per_page < 1 or per_page > 100:
-            return error_response("per_page must be between 1 and 100")
+        if per_page < 1 or per_page > 500:
+            return error_response("per_page must be between 1 and 500")
         if page < 1:
             return error_response("page must be >= 1")
         

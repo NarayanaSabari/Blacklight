@@ -73,10 +73,11 @@ export interface JobMatchListResponse {
   candidate_id: number;
   total_matches: number;
   matches: JobMatch[];
-  // Optional pagination fields (if backend supports)
+  // Pagination fields
   page?: number;
   per_page?: number;
-  pages?: number;
+  total_pages?: number;
+  pages?: number;  // Legacy alias for total_pages
 }
 
 export interface JobMatchStats {

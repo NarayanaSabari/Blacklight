@@ -2,10 +2,10 @@
  * Jobs Page
  * View candidates and their matched jobs
  * Left sidebar: Assigned candidates
- * Right panel: Job matches for selected candidate
+ * Right panel: Job matches for selected candidate with pagination
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Briefcase, 
   Search, 
@@ -23,15 +24,27 @@ import {
   TrendingUp,
   AlertCircle,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { MatchCard } from '@/components/matches/MatchCard';
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
 export function JobsPage() {
   const navigate = useNavigate();
   const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Reset page when candidate changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCandidateId]);
 
   // Fetch all candidates
   const { data: candidatesData, isLoading: loadingCandidates } = useQuery({
@@ -50,17 +63,18 @@ export function JobsPage() {
     return fullName.includes(searchLower) || email.includes(searchLower);
   });
 
-  // Fetch matches for selected candidate
+  // Fetch matches for selected candidate with pagination
   const { 
     data: matchesData, 
     isLoading: loadingMatches,
     error: matchesError 
   } = useQuery({
-    queryKey: ['jobMatches', selectedCandidateId],
+    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize],
     queryFn: async () => {
       if (!selectedCandidateId) return null;
       return jobMatchApi.getCandidateMatches(selectedCandidateId, { 
-        per_page: 50,
+        page: currentPage,
+        per_page: pageSize,
         sort_by: 'match_score',
         sort_order: 'desc'
       });
@@ -71,6 +85,7 @@ export function JobsPage() {
 
   const matches = matchesData?.matches || [];
   const totalMatches = matchesData?.total_matches || 0;
+  const totalPages = matchesData?.total_pages || 0;
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId);
 
   const handleCandidateSelect = (candidateId: number) => {
@@ -81,6 +96,15 @@ export function JobsPage() {
     if (selectedCandidateId) {
       navigate(`/candidates/${selectedCandidateId}/matches`);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: string) => {
+    setPageSize(parseInt(size));
+    setCurrentPage(1);
   };
 
   return (
@@ -193,15 +217,81 @@ export function JobsPage() {
                         <Target className="h-4 w-4 mr-1" />
                         {totalMatches} Matches
                       </Badge>
-                      {totalMatches > 0 && (
-                        <Button variant="outline" size="sm" onClick={handleViewAllMatches}>
-                          View All
-                        </Button>
-                      )}
                     </div>
                   </div>
                 </CardHeader>
               </Card>
+
+              {/* Pagination Controls - Top */}
+              {totalMatches > 0 && (
+                <Card>
+                  <CardContent className="py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Show</span>
+                        <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
+                          <SelectTrigger className="w-[80px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                              <SelectItem key={size} value={size.toString()}>
+                                {size}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span>per page</span>
+                        <span className="mx-2">•</span>
+                        <span>
+                          Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalMatches)} of {totalMatches}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handlePageChange(1)}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronsLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="px-3 text-sm font-medium">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage >= totalPages}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handlePageChange(totalPages)}
+                          disabled={currentPage >= totalPages}
+                        >
+                          <ChevronsRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Matches List */}
               <ScrollArea className="h-[calc(100vh-360px)]">
@@ -249,6 +339,78 @@ export function JobsPage() {
                   </div>
                 )}
               </ScrollArea>
+
+              {/* Pagination Controls - Bottom */}
+              {totalMatches > 0 && totalPages > 1 && (
+                <Card>
+                  <CardContent className="py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronsLeft className="h-4 w-4 mr-1" />
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1 mx-2">
+                        {/* Page number buttons */}
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              className="w-9"
+                              onClick={() => handlePageChange(pageNum)}
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Last
+                        <ChevronsRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </div>
