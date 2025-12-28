@@ -95,7 +95,7 @@ export function AddCandidatePage() {
       setInviteLastName('');
       setInviteMessage('');
       setDuplicateError(false);
-      navigate('/invitations');
+      navigate('/candidate-management?tab=email-invitations');
     },
     onError: (error: any) => {
       if (error?.status === 409 || error?.message?.includes('already exists')) {

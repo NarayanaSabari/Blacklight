@@ -19,7 +19,7 @@ export default function InvitationDetailsPage() {
       <div className="p-6">
         <div className="text-center">
           <h2 className="text-lg font-semibold">Invalid invitation ID</h2>
-          <Button onClick={() => navigate('/invitations')} className="mt-4">
+          <Button onClick={() => navigate('/candidate-management?tab=email-invitations')} className="mt-4">
             Back to Invitations
           </Button>
         </div>
@@ -33,7 +33,7 @@ export default function InvitationDetailsPage() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate('/email-invitations')}
+          onClick={() => navigate('/candidate-management?tab=email-invitations')}
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -47,7 +47,7 @@ export default function InvitationDetailsPage() {
 
       <InvitationDetails
         invitationId={invitationId}
-        onClose={() => navigate('/invitations')}
+        onClose={() => navigate('/candidate-management?tab=email-invitations')}
       />
     </div>
   );

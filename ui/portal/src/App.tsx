@@ -90,7 +90,7 @@ function App() {
                       {/* Legacy routes - redirect to unified page with tab param */}
                       <Route path="/candidates" element={<Navigate to="/candidate-management?tab=candidates" replace />} />
                       <Route path="/onboard-candidates" element={<Navigate to="/candidate-management?tab=onboarding" replace />} />
-                      <Route path="/invitations" element={<Navigate to="/candidate-management?tab=invitations" replace />} />
+                      <Route path="/invitations" element={<Navigate to="/candidate-management?tab=email-invitations" replace />} />
                       {/* Candidate detail routes */}
                       <Route path="/candidates/new" element={<AddCandidatePage />} />
                       <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
