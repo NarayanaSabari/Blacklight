@@ -100,20 +100,6 @@ const navigation: NavItem[] = [
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {
-    id: 'applications',
-    label: 'Applications',
-    icon: FileText,
-    href: '/applications',
-    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
-  },
-  {
-    id: 'interviews',
-    label: 'Interviews',
-    icon: Calendar,
-    href: '/interviews',
-    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
-  },
-  {
     id: 'users',
     label: 'Team Members',
     icon: UserCog,
