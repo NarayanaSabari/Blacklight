@@ -3,39 +3,44 @@
  * Centralized exports for all pages
  */
 
-export { LoginPage } from './LoginPage';
-export { DashboardPage } from './DashboardPage';
-export { CandidatesPage } from './CandidatesPage';
-export { CandidateDetailPage } from './CandidateDetailPage';
-export { CandidateMatchesPage } from './CandidateMatchesPage';
-export { JobDetailPage } from './JobDetailPage';
-export { JobsPage } from './JobsPage';
-export { ApplicationsPage } from './ApplicationsPage';
-export { InterviewsPage } from './InterviewsPage';
-export { UsersPage } from './UsersPage';
-export { SettingsPage } from './SettingsPage';
-export { default as DocumentsPage } from './DocumentsPage';
+// Auth
+export { LoginPage } from './auth/LoginPage';
+
+// Dashboard
+export { DashboardPage } from './dashboard/DashboardPage';
+
+// Candidates
+export { CandidatesPage } from './candidates/CandidatesPage';
+export { CandidateDetailPage } from './candidates/CandidateDetailPage';
+export { AddCandidatePage } from './candidates/AddCandidatePage';
+export { EditCandidatePage } from './candidates/EditCandidatePage';
+export { CandidateManagementPage } from './candidates/CandidateManagementPage';
+export { OnboardCandidatesPage } from './candidates/OnboardCandidatesPage';
+export { YourCandidatesPage } from './candidates/YourCandidatesPage';
+export { YourCandidatesPageNew } from './candidates/YourCandidatesPageNew';
+export { KanbanBoardPage } from './candidates/KanbanBoardPage';
+export { ApplicationsPage } from './candidates/ApplicationsPage';
+export { InterviewsPage } from './candidates/InterviewsPage';
+
+// Jobs
+export { JobsPage } from './jobs/JobsPage';
+export { JobDetailPage } from './jobs/JobDetailPage';
+export { EmailJobsPage } from './jobs/EmailJobsPage';
+export { ResumeTailorPage } from './jobs/ResumeTailorPage';
 
 // Team Management
-export { ManageTeamPage } from './ManageTeamPage';
+export { ManageTeamPage } from './team/ManageTeamPage';
 
-// Candidate Assignment & Onboarding
-export { YourCandidatesPage } from './YourCandidatesPage';
-export { YourCandidatesPageNew } from './YourCandidatesPageNew';
-export { OnboardCandidatesPage } from './OnboardCandidatesPage';
+// Settings & Admin
+export { UsersPage } from './settings/UsersPage';
+export { RolesPage } from './settings/RolesPage';
+export { SettingsPage } from './settings/SettingsPage';
+export { default as DocumentsPage } from './settings/DocumentsPage';
 
-// Unified Candidate Management
-export { CandidateManagementPage } from './CandidateManagementPage';
-
-// Invitation Management
+// Invitations
 export { default as InvitationsPage } from './invitations/InvitationsPage';
 export { default as InvitationDetailsPage } from './invitations/InvitationDetailsPage';
+export { default as InvitationReviewPage } from './invitations/InvitationReviewPage';
 
 // Public Pages
 export { default as OnboardingPage } from './public/OnboardingPage';
-
-// Email Jobs
-export { EmailJobsPage } from './EmailJobsPage';
-
-// Kanban Pipeline
-export { KanbanBoardPage } from './KanbanBoardPage';

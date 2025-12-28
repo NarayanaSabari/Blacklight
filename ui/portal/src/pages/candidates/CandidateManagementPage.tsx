@@ -19,7 +19,7 @@ import { invitationApi } from '@/lib/api/invitationApi';
 import { onboardingApi } from '@/lib/onboardingApi';
 import { CandidatesPage } from './CandidatesPage';
 import { OnboardCandidatesPage } from './OnboardCandidatesPage';
-import InvitationsPage from './invitations/InvitationsPage';
+import InvitationsPage from '../invitations/InvitationsPage';
 import { cn } from '@/lib/utils';
 
 type SectionType = 'all-candidates' | 'review-submissions' | 'ready-to-assign' | 'email-invitations';

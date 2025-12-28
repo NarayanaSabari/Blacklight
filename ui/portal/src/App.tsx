@@ -4,27 +4,35 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { PortalAuthProvider, usePortalAuth } from '@/contexts/PortalAuthContext';
 import { Toaster } from '@/components/ui/sonner';
 import { Layout } from '@/components/Layout';
-import { LoginPage } from '@/pages/LoginPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { AddCandidatePage } from '@/pages/AddCandidatePage';
-import { EditCandidatePage } from '@/pages/EditCandidatePage';
-import { CandidateDetailPage } from '@/pages/CandidateDetailPage';
-import { CandidateMatchesPage } from '@/pages/CandidateMatchesPage';
-import { JobDetailPage } from '@/pages/JobDetailPage';
-import { ResumeTailorPage } from '@/pages/ResumeTailorPage';
-import { JobsPage } from '@/pages/JobsPage';
-import { ApplicationsPage } from '@/pages/ApplicationsPage';
-import { InterviewsPage } from '@/pages/InterviewsPage';
-import { UsersPage } from '@/pages/UsersPage';
-import { SettingsPage } from '@/pages/SettingsPage';
-import { InvitationDetailsPage, OnboardingPage } from '@/pages';
-import InvitationReviewPage from '@/pages/invitations/InvitationReviewPage';
-import DocumentsPage from '@/pages/DocumentsPage';
-import { RolesPage } from '@/pages/RolesPage';
-import { ManageTeamPage, YourCandidatesPageNew, CandidateManagementPage, EmailJobsPage, KanbanBoardPage } from '@/pages';
 import { Loader2 } from 'lucide-react';
 import { env } from '@/lib/env';
 import './App.css';
+
+// Page imports from centralized index
+import {
+  LoginPage,
+  DashboardPage,
+  AddCandidatePage,
+  EditCandidatePage,
+  CandidateDetailPage,
+  CandidateManagementPage,
+  YourCandidatesPageNew,
+  KanbanBoardPage,
+  ApplicationsPage,
+  InterviewsPage,
+  JobsPage,
+  JobDetailPage,
+  EmailJobsPage,
+  ResumeTailorPage,
+  ManageTeamPage,
+  UsersPage,
+  RolesPage,
+  SettingsPage,
+  DocumentsPage,
+  InvitationDetailsPage,
+  InvitationReviewPage,
+  OnboardingPage,
+} from '@/pages';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -86,13 +94,12 @@ function App() {
                       {/* Candidate detail routes */}
                       <Route path="/candidates/new" element={<AddCandidatePage />} />
                       <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
-                      <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
                       <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/candidates/:candidateId/matches/jobs/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
-                      <Route path="/candidates/:candidateId/jobs" element={<JobsPage />} />
                       <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
+                      <Route path="/jobs/candidate/:candidateId" element={<JobsPage />} />
                       <Route path="/jobs" element={<JobsPage />} />
                       <Route path="/applications" element={<ApplicationsPage />} />
                       <Route path="/interviews" element={<InterviewsPage />} />

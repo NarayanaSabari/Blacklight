@@ -104,7 +104,7 @@ export function JobsPage() {
   // Update URL when candidate is selected
   const handleCandidateSelect = (candidateId: number) => {
     setSelectedCandidateId(candidateId);
-    navigate(`/candidates/${candidateId}/jobs`, { replace: true });
+    navigate(`/jobs/candidate/${candidateId}`, { replace: true });
   };
 
   // Reset page when candidate changes
