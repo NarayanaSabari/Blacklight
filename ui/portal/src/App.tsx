@@ -89,6 +89,7 @@ function App() {
                       <Route path="/candidates/:candidateId/matches" element={<CandidateMatchesPage />} />
                       <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/candidates/:candidateId/matches/jobs/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
+                      <Route path="/candidates/:candidateId/jobs" element={<JobsPage />} />
                       <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />

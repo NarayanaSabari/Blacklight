@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -83,10 +83,29 @@ const formatSalary = (min?: number | null, max?: number | null, range?: string |
 
 export function JobsPage() {
   const navigate = useNavigate();
-  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const { candidateId: urlCandidateId } = useParams<{ candidateId: string }>();
+  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(
+    urlCandidateId ? parseInt(urlCandidateId, 10) : null
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Update selected candidate from URL param
+  useEffect(() => {
+    if (urlCandidateId) {
+      const candidateId = parseInt(urlCandidateId, 10);
+      if (candidateId !== selectedCandidateId) {
+        setSelectedCandidateId(candidateId);
+      }
+    }
+  }, [urlCandidateId]);
+
+  // Update URL when candidate is selected
+  const handleCandidateSelect = (candidateId: number) => {
+    setSelectedCandidateId(candidateId);
+    navigate(`/candidates/${candidateId}/jobs`, { replace: true });
+  };
 
   // Reset page when candidate changes
   useEffect(() => {
@@ -195,7 +214,7 @@ export function JobsPage() {
                       {filteredCandidates.map((candidate) => (
                         <button
                           key={candidate.id}
-                          onClick={() => setSelectedCandidateId(candidate.id)}
+                          onClick={() => handleCandidateSelect(candidate.id)}
                           className={`w-full text-left px-3 py-2.5 rounded-md transition-colors ${
                             selectedCandidateId === candidate.id
                               ? 'bg-primary text-primary-foreground'
