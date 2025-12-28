@@ -165,6 +165,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import resume_tailor_routes
     from app.routes import email_integration_routes
     from app.routes import email_jobs_routes
+    from app.routes import dashboard_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -229,6 +230,9 @@ def register_blueprints(app: Flask) -> None:
     
     # Email Jobs routes (jobs sourced from email)
     app.register_blueprint(email_jobs_routes.bp)
+    
+    # Dashboard routes (portal dashboard stats)
+    app.register_blueprint(dashboard_routes.dashboard_bp)
 
 
 def register_inngest(app: Flask) -> None:
