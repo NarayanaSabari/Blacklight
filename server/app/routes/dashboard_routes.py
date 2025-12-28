@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 from flask import Blueprint, g, jsonify
 
 from app import db
-from app.middleware.portal_auth import require_portal_auth, with_tenant_context
+from app.middleware.portal_auth import require_portal_auth
+from app.middleware.tenant_context import with_tenant_context
 from app.models.candidate import Candidate
 from app.models.candidate_assignment import CandidateAssignment
 from app.models.candidate_invitation import CandidateInvitation
