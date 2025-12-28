@@ -43,19 +43,15 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Team Members</h1>
-          <p className="text-slate-600 mt-1">Manage users and roles</p>
-        </div>
-        {canManageUsers && (
+      {/* Action Button */}
+      {canManageUsers && (
+        <div className="flex justify-end">
           <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
             <Plus className="h-4 w-4" />
             Invite User
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Permission Warning */}
       {!canManageUsers && (

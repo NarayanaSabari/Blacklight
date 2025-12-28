@@ -144,20 +144,6 @@ export function YourCandidatesPageNew() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Your Candidates</h1>
-          <p className="text-slate-600 mt-1">
-            {hasNoTeamMembers 
-              ? 'View your assigned candidates'
-              : currentMember 
-              ? `Viewing ${currentMember.full_name}'s team` 
-              : 'View your team and their assigned candidates'}
-          </p>
-        </div>
-      </div>
-
       {/* If user has no team members, show only their candidates */}
       {hasNoTeamMembers ? (
         <Card className="h-[calc(100vh-12rem)]">

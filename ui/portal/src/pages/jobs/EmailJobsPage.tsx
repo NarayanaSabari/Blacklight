@@ -154,17 +154,8 @@ export function EmailJobsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
-            <Mail className="h-8 w-8" />
-            Email Jobs
-          </h1>
-          <p className="text-slate-600 mt-1">
-            Jobs discovered from your email integrations
-          </p>
-        </div>
+      {/* Action Bar */}
+      <div className="flex justify-end">
         <Link to="/settings">
           <Button variant="outline">
             <Settings className="mr-2 h-4 w-4" />

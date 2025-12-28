@@ -132,13 +132,6 @@ export function CandidatesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Candidates</h1>
-        <p className="text-slate-600 mt-1">Manage and track your candidate pipeline</p>
-      </div>
-
-
       {/* Search and Filters */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">

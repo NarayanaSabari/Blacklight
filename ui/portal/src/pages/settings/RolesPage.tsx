@@ -314,8 +314,7 @@ export function RolesPage() {
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Roles Management</h1>
+      <div className="flex justify-end mb-6">
         <Button onClick={openCreateForm}>
           <PlusCircle className="mr-2 h-4 w-4" /> Create New Role
         </Button>

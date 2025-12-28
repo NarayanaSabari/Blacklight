@@ -92,29 +92,15 @@ export function CandidateManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0 flex-1">
-            <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              <Users className="h-8 w-8" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 truncate">HR Candidate Management</h1>
-              <p className="text-lg text-slate-600 mt-1">
-                Manage recruitment workflow and candidate pipeline
-              </p>
-            </div>
-          </div>
-
-          <Button
-            onClick={() => navigate('/candidates/new')}
-            className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex-shrink-0"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add Candidate
-          </Button>
-        </div>
+      {/* Action Bar */}
+      <div className="flex justify-end">
+        <Button
+          onClick={() => navigate('/candidates/new')}
+          className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+        >
+          <UserPlus className="h-4 w-4" />
+          Add Candidate
+        </Button>
       </div>
 
       {/* Sidebar Layout */}

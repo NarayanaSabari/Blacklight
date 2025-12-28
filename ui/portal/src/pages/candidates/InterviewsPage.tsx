@@ -10,12 +10,8 @@ import { Calendar, Plus, Search, Filter } from 'lucide-react';
 export function InterviewsPage() {
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Interviews</h1>
-          <p className="text-slate-600 mt-1">Schedule and manage candidate interviews</p>
-        </div>
+      {/* Action Button */}
+      <div className="flex justify-end">
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Schedule Interview

@@ -30,12 +30,6 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-600 mt-1">Manage your account and organization settings</p>
-      </div>
-
       {/* Settings Tabs */}
       <Tabs defaultValue={defaultTab} className="space-y-4">
         <TabsList>

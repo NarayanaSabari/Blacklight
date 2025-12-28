@@ -166,14 +166,6 @@ export function JobsPage() {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-[calc(100vh-120px)]">
-        {/* Page Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Job Matches</h1>
-            <p className="text-slate-600 text-sm">View AI-powered job recommendations for candidates</p>
-          </div>
-        </div>
-
         {/* Main Layout */}
         <div className="flex gap-4 flex-1 min-h-0">
           {/* Left Sidebar: Candidates */}

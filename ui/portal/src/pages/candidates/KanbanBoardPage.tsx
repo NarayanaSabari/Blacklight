@@ -60,7 +60,6 @@ import {
 } from '@/components/ui/tooltip';
 import {
   Search,
-  LayoutGrid,
   User,
   MapPin,
   Briefcase,
@@ -751,18 +750,12 @@ export function KanbanBoardPage() {
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-4 h-full">
-        {/* Page Header */}
+        {/* Action Bar */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <LayoutGrid className="h-6 w-6" />
-              Candidate Pipeline
-            </h1>
-            <p className="text-muted-foreground">
-              {totalInPipeline} candidates in pipeline
-              {hasActiveFilters && ' (filtered)'}
-            </p>
-          </div>
+          <p className="text-muted-foreground">
+            {totalInPipeline} candidates in pipeline
+            {hasActiveFilters && ' (filtered)'}
+          </p>
           <Button 
             variant="outline" 
             size="sm" 
