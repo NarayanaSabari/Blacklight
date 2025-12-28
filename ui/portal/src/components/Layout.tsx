@@ -15,8 +15,6 @@ import {
   BarChart3,
   Settings,
   Building2,
-  FileText,
-  Calendar,
   UserCog,
   FolderOpen,
   Network,
