@@ -281,10 +281,6 @@ export function ManageTeamPage() {
   if (!canViewTeam) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Team Management</h1>
-          <p className="text-slate-600 mt-1">View and manage team hierarchy</p>
-        </div>
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -297,13 +293,8 @@ export function ManageTeamPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Team Management</h1>
-          <p className="text-slate-600 mt-1">View and manage your organization's reporting structure</p>
-        </div>
-        <div className="flex gap-2">
+      {/* Actions */}
+      <div className="flex justify-end gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -320,7 +311,6 @@ export function ManageTeamPage() {
           >
             Collapse All
           </Button>
-        </div>
       </div>
 
       {/* Stats Cards */}

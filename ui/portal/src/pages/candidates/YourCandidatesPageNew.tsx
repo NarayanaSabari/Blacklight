@@ -143,18 +143,6 @@ export function YourCandidatesPageNew() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Your Candidates</h1>
-          <p className="text-slate-600 mt-1">
-            {hasNoTeamMembers 
-              ? 'View and manage your assigned candidates' 
-              : 'View team members and their assigned candidates'}
-          </p>
-        </div>
-      </div>
-
       {/* If user has no team members, show only their candidates */}
       {hasNoTeamMembers ? (
         <Card>

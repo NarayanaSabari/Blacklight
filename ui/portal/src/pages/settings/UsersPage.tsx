@@ -43,12 +43,8 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with Search and Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Team Members</h1>
-          <p className="text-slate-600 mt-1">Manage your organization's users and permissions</p>
-        </div>
+      {/* Search and Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
