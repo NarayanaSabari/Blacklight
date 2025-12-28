@@ -15,14 +15,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -35,7 +27,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
-import { Progress } from '@/components/ui/progress';
 import { 
   Briefcase, 
   Search, 
@@ -306,20 +297,18 @@ export function JobsPage() {
                 </CardHeader>
 
                 {/* Table Content */}
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 overflow-auto p-4">
                   {loadingMatches ? (
-                    <div className="p-4 space-y-3">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <Skeleton key={i} className="h-12 w-full" />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <Skeleton key={i} className="h-64 w-full rounded-lg" />
                       ))}
                     </div>
                   ) : matchesError ? (
-                    <div className="p-4">
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>Failed to load job matches. Please try again.</AlertDescription>
-                      </Alert>
-                    </div>
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>Failed to load job matches. Please try again.</AlertDescription>
+                    </Alert>
                   ) : matches.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center p-8">
                       <Target className="h-12 w-12 text-muted-foreground mb-3" />
@@ -329,117 +318,189 @@ export function JobsPage() {
                       </p>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableHead className="w-16 text-center">Score</TableHead>
-                          <TableHead className="min-w-[200px]">Job Title</TableHead>
-                          <TableHead className="min-w-[150px]">Company</TableHead>
-                          <TableHead className="min-w-[140px]">Location</TableHead>
-                          <TableHead className="min-w-[120px]">Salary</TableHead>
-                          <TableHead className="w-24 text-center">Skills</TableHead>
-                          <TableHead className="w-16"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {matches.map((match) => {
-                          const job = match.job || match.job_posting;
-                          if (!job) return null;
-                          
-                          const grade = (match.match_grade as MatchGrade) || calculateGrade(match.match_score);
-                          const gradeConfig = GRADE_CONFIG[grade] || GRADE_CONFIG['C'];
-                          const matchedCount = match.matched_skills?.length || 0;
-                          const missingCount = match.missing_skills?.length || 0;
-                          const totalSkills = matchedCount + missingCount;
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {matches.map((match) => {
+                        const job = match.job || match.job_posting;
+                        if (!job) return null;
+                        
+                        const grade = (match.match_grade as MatchGrade) || calculateGrade(match.match_score);
+                        const gradeConfig = GRADE_CONFIG[grade] || GRADE_CONFIG['C'];
+                        const matchedCount = match.matched_skills?.length || 0;
+                        const missingCount = match.missing_skills?.length || 0;
 
-                          return (
-                            <TableRow
-                              key={match.id}
-                              className="cursor-pointer hover:bg-muted/50"
-                              onClick={() => handleRowClick(match)}
-                            >
-                              <TableCell className="text-center">
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <Badge className={`${gradeConfig.bgClass} ${gradeConfig.colorClass} font-bold text-xs px-1.5`}>
+                        return (
+                          <Card
+                            key={match.id}
+                            className="cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 group"
+                            onClick={() => handleRowClick(match)}
+                          >
+                            {/* Card Header with Score */}
+                            <CardHeader className="pb-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-base line-clamp-2 group-hover:text-primary transition-colors">
+                                    {job.title}
+                                  </h3>
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="text-sm text-muted-foreground font-medium truncate">
+                                      {job.company}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                                  <Badge className={`${gradeConfig.bgClass} ${gradeConfig.colorClass} font-bold text-sm px-2.5 py-0.5`}>
                                     {gradeConfig.label}
                                   </Badge>
-                                  <span className={`text-xs font-semibold ${getScoreColor(match.match_score)}`}>
+                                  <span className={`text-lg font-bold ${getScoreColor(match.match_score)}`}>
                                     {Math.round(match.match_score)}%
                                   </span>
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="font-medium text-sm line-clamp-1">{job.title}</span>
-                                  {job.job_type && (
-                                    <span className="text-xs text-muted-foreground">{job.job_type}</span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1.5">
-                                  <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                  <span className="text-sm line-clamp-1">{job.company}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-1.5">
-                                  <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                  <span className="text-sm line-clamp-1">{job.location || '-'}</span>
+                              </div>
+                            </CardHeader>
+
+                            <CardContent className="pt-0 space-y-3">
+                              {/* Job Details Grid */}
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <span className="truncate">{job.location || 'Not specified'}</span>
                                   {job.is_remote && (
-                                    <Tooltip>
-                                      <TooltipTrigger>
-                                        <Globe className="h-3 w-3 text-blue-500" />
-                                      </TooltipTrigger>
-                                      <TooltipContent>Remote</TooltipContent>
-                                    </Tooltip>
+                                    <Badge variant="secondary" className="text-xs px-1.5 py-0">Remote</Badge>
                                   )}
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                <span className="text-sm">{formatSalary(job.salary_min, job.salary_max, job.salary_range)}</span>
-                              </TableCell>
-                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <span className="truncate">{formatSalary(job.salary_min, job.salary_max, job.salary_range)}</span>
+                                </div>
+                                {job.job_type && (
+                                  <div className="flex items-center gap-2">
+                                    <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="truncate">{job.job_type}</span>
+                                  </div>
+                                )}
+                                {job.platform && (
+                                  <div className="flex items-center gap-2">
+                                    <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="truncate">{job.platform}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Description Preview */}
+                              {job.description && (
+                                <p className="text-sm text-muted-foreground line-clamp-2">
+                                  {job.description}
+                                </p>
+                              )}
+
+                              {/* Skills Section */}
+                              <div className="space-y-2">
+                                {/* Matched Skills */}
+                                {matchedCount > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex flex-wrap gap-1">
+                                      {match.matched_skills?.slice(0, 4).map((skill, idx) => (
+                                        <Badge key={idx} variant="secondary" className="bg-green-50 text-green-700 text-xs px-1.5 py-0">
+                                          {skill}
+                                        </Badge>
+                                      ))}
+                                      {matchedCount > 4 && (
+                                        <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                          +{matchedCount - 4} more
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Missing Skills */}
+                                {missingCount > 0 && (
+                                  <div className="flex items-start gap-2">
+                                    <XCircle className="h-4 w-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                                    <div className="flex flex-wrap gap-1">
+                                      {match.missing_skills?.slice(0, 3).map((skill, idx) => (
+                                        <Badge key={idx} variant="outline" className="text-orange-600 border-orange-300 text-xs px-1.5 py-0">
+                                          {skill}
+                                        </Badge>
+                                      ))}
+                                      {missingCount > 3 && (
+                                        <Badge variant="outline" className="text-xs px-1.5 py-0">
+                                          +{missingCount - 3} more
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Score Bars */}
+                              <div className="grid grid-cols-4 gap-2 pt-2 border-t">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="flex flex-col gap-1 cursor-help">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-green-600 font-medium">{matchedCount}</span>
-                                        <span className="text-muted-foreground">/ {totalSkills}</span>
+                                    <div className="text-center">
+                                      <div className="text-xs text-muted-foreground mb-1">Skills</div>
+                                      <div className={`text-sm font-semibold ${getScoreColor(match.skill_match_score)}`}>
+                                        {Math.round(match.skill_match_score)}%
                                       </div>
-                                      <Progress 
-                                        value={totalSkills > 0 ? (matchedCount / totalSkills) * 100 : 0} 
-                                        className="h-1.5"
-                                      />
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="left" className="max-w-[250px]">
-                                    <div className="space-y-2 text-xs">
-                                      {matchedCount > 0 && (
-                                        <div>
-                                          <p className="font-medium text-green-600 mb-0.5">Matched ({matchedCount}):</p>
-                                          <p>{match.matched_skills?.slice(0, 5).join(', ')}{matchedCount > 5 && ` +${matchedCount - 5}`}</p>
-                                        </div>
-                                      )}
-                                      {missingCount > 0 && (
-                                        <div>
-                                          <p className="font-medium text-orange-600 mb-0.5">Missing ({missingCount}):</p>
-                                          <p>{match.missing_skills?.slice(0, 5).join(', ')}{missingCount > 5 && ` +${missingCount - 5}`}</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </TooltipContent>
+                                  <TooltipContent>Skill Match Score</TooltipContent>
                                 </Tooltip>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center justify-end gap-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="text-center">
+                                      <div className="text-xs text-muted-foreground mb-1">Exp</div>
+                                      <div className={`text-sm font-semibold ${getScoreColor(match.experience_match_score)}`}>
+                                        {Math.round(match.experience_match_score)}%
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Experience Match Score</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="text-center">
+                                      <div className="text-xs text-muted-foreground mb-1">Location</div>
+                                      <div className={`text-sm font-semibold ${getScoreColor(match.location_match_score)}`}>
+                                        {Math.round(match.location_match_score)}%
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Location Match Score</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="text-center">
+                                      <div className="text-xs text-muted-foreground mb-1">Salary</div>
+                                      <div className={`text-sm font-semibold ${getScoreColor(match.salary_match_score)}`}>
+                                        {Math.round(match.salary_match_score)}%
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Salary Match Score</TooltipContent>
+                                </Tooltip>
+                              </div>
+
+                              {/* Footer with date and actions */}
+                              <div className="flex items-center justify-between pt-2 border-t">
+                                {job.posted_date ? (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Clock className="h-3.5 w-3.5" />
+                                    <span>Posted {format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
+                                  </div>
+                                ) : (
+                                  <div />
+                                )}
+                                <div className="flex items-center gap-2">
                                   {job.job_url && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Button
                                           variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
+                                          size="sm"
+                                          className="h-7 px-2"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             if (job.job_url) window.open(job.job_url, '_blank');
@@ -451,14 +512,26 @@ export function JobsPage() {
                                       <TooltipContent>Open job posting</TooltipContent>
                                     </Tooltip>
                                   )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`);
+                                    }}
+                                  >
+                                    <Sparkles className="h-3.5 w-3.5 mr-1" />
+                                    Tailor
+                                  </Button>
                                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </div>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </Card>
