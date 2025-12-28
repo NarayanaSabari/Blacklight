@@ -6,7 +6,7 @@ Provides statistics and overview data for the portal dashboard
 import logging
 from datetime import datetime, timedelta
 
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, request
 
 from app import db
 from app.middleware.portal_auth import require_portal_auth
@@ -14,6 +14,7 @@ from app.middleware.tenant_context import with_tenant_context
 from app.models.candidate import Candidate
 from app.models.candidate_assignment import CandidateAssignment
 from app.models.candidate_invitation import CandidateInvitation
+from app.models.portal_user import PortalUser
 from sqlalchemy import select, func, case, and_
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,12 @@ def get_dashboard_stats():
     """
     try:
         tenant_id = g.tenant_id
-        user_id = g.user.id
-        user_roles = [r.name for r in g.user.roles] if g.user.roles else []
+        user_id = g.user_id
+        user_role = g.user_role or 'RECRUITER'
         
         # Determine user's role for stats scope
-        is_admin = 'TENANT_ADMIN' in user_roles
-        is_manager = 'MANAGER' in user_roles or 'TEAM_LEAD' in user_roles
+        is_admin = user_role == 'TENANT_ADMIN'
+        is_manager = user_role in ['MANAGER', 'TEAM_LEAD']
         
         # Time ranges
         now = datetime.utcnow()
@@ -143,8 +144,6 @@ def get_dashboard_stats():
         # ========== TEAM STATS (for managers) ==========
         team_stats = None
         if is_manager or is_admin:
-            from app.models.portal_user import PortalUser
-            
             # Get team members (users reporting to current user)
             team_members_query = select(func.count()).select_from(PortalUser).where(
                 and_(
@@ -186,7 +185,7 @@ def get_dashboard_stats():
                 'new_candidates_7d': new_candidates_7d,
                 'approved_7d': approved_7d
             },
-            'user_role': user_roles[0] if user_roles else 'RECRUITER',
+            'user_role': user_role,
             'is_admin': is_admin,
             'is_manager': is_manager
         }
@@ -214,7 +213,7 @@ def get_recent_activity():
     """
     try:
         tenant_id = g.tenant_id
-        user_id = g.user.id
+        user_id = g.user_id
         
         # Get recent candidates (last 10)
         recent_candidates_query = select(
@@ -239,8 +238,6 @@ def get_recent_activity():
             })
         
         # Get my recent assignments (last 5)
-        from app.models.portal_user import PortalUser
-        
         my_assignments_query = select(
             CandidateAssignment.id,
             CandidateAssignment.assigned_at,
