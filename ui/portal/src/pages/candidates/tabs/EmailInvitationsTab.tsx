@@ -44,11 +44,9 @@ import {
   XCircle,
   Clock,
   AlertCircle,
-  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { invitationApi } from '@/lib/api/invitationApi';
-import { InvitationForm } from '@/components/invitations/InvitationForm';
 import type { InvitationStatus, InvitationListParams } from '@/types';
 
 const STATUS_CONFIG: Record<InvitationStatus, { label: string; className: string; icon: typeof Mail }> = {
@@ -65,7 +63,6 @@ const STATUS_CONFIG: Record<InvitationStatus, { label: string; className: string
 export function EmailInvitationsTab() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [params, setParams] = useState<InvitationListParams>({
     page: 1,
     per_page: 20,
@@ -125,7 +122,7 @@ export function EmailInvitationsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Search, Filters, and Create Button */}
+      {/* Search and Filters */}
       <div className="flex flex-col md:flex-row gap-4">
         <div className="flex-1">
           <div className="relative">
@@ -152,10 +149,6 @@ export function EmailInvitationsTab() {
             <SelectItem value="expired">Expired</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Send Invitation
-        </Button>
       </div>
 
       {/* Table */}
@@ -281,17 +274,6 @@ export function EmailInvitationsTab() {
           )}
         </>
       )}
-
-      {/* Create Dialog */}
-      <InvitationForm
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-        onSuccess={() => {
-          setShowCreateDialog(false);
-          queryClient.invalidateQueries({ queryKey: ['invitations'] });
-          queryClient.invalidateQueries({ queryKey: ['onboarding-stats'] });
-        }}
-      />
     </div>
   );
 }
