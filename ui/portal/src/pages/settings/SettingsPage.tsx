@@ -11,27 +11,46 @@ import { usePortalAuth } from '@/contexts/PortalAuthContext';
 import { Building2, User, Bell, Shield, FileCheck, Link2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DocumentRequirementsSettings, EmailIntegrationsSettings } from '@/components/settings';
-import { useSearchParams } from 'react-router-dom';
-import { useMemo } from 'react';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
+import { useMemo, useEffect } from 'react';
 
 export function SettingsPage() {
   const { user, tenantName } = usePortalAuth();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { tab } = useParams<{ tab?: string }>();
 
   // Auto-switch to integrations tab when OAuth callback params are present
   const defaultTab = useMemo(() => {
+    // URL path takes precedence
+    if (tab && ['profile', 'organization', 'onboarding', 'integrations', 'notifications', 'security'].includes(tab)) {
+      return tab;
+    }
+    // Then check OAuth callback params
     const hasOAuthParams = searchParams.has('success') || searchParams.has('error');
     const provider = searchParams.get('provider');
     if (hasOAuthParams && (provider === 'gmail' || provider === 'outlook')) {
       return 'integrations';
     }
     return 'profile';
-  }, [searchParams]);
+  }, [searchParams, tab]);
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    navigate(`/settings/${value}`);
+  };
+
+  // Redirect to default tab if at /settings root
+  useEffect(() => {
+    if (!tab) {
+      navigate(`/settings/${defaultTab}`, { replace: true });
+    }
+  }, [tab, defaultTab, navigate]);
 
   return (
     <div className="space-y-6">
       {/* Settings Tabs */}
-      <Tabs defaultValue={defaultTab} className="space-y-4">
+      <Tabs value={defaultTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile" className="gap-2">
             <User className="h-4 w-4" />

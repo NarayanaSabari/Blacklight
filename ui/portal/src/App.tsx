@@ -18,8 +18,6 @@ import {
   CandidateManagementPage,
   YourCandidatesPageNew,
   KanbanBoardPage,
-  ApplicationsPage,
-  InterviewsPage,
   JobsPage,
   JobDetailPage,
   EmailJobsPage,
@@ -101,8 +99,6 @@ function App() {
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
                       <Route path="/jobs/candidate/:candidateId" element={<JobsPage />} />
                       <Route path="/jobs" element={<JobsPage />} />
-                      <Route path="/applications" element={<ApplicationsPage />} />
-                      <Route path="/interviews" element={<InterviewsPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
                       <Route path="/users" element={<UsersPage />} />
                       <Route path="/users/roles" element={<RolesPage />} />
@@ -112,6 +108,7 @@ function App() {
                       <Route path="/email-jobs" element={<EmailJobsPage />} />
                       <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/settings/:tab" element={<SettingsPage />} />
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
