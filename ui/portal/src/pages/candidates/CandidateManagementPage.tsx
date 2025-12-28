@@ -1,26 +1,28 @@
 /**
- * Unified Candidate Management Page - Sidebar Navigation Layout
- * HR-focused workflow with persistent sidebar and action dashboard
+ * Unified Candidate Management Page - Tab Navigation Layout
+ * HR-focused workflow with horizontal tabs and quick stats
  */
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   UserPlus,
   ClipboardList,
   Mail,
   Users,
+  CheckCircle,
+  Clock,
 } from 'lucide-react';
 import { invitationApi } from '@/lib/api/invitationApi';
 import { onboardingApi } from '@/lib/onboardingApi';
 import { CandidatesPage } from './CandidatesPage';
 import { OnboardCandidatesPage } from './OnboardCandidatesPage';
 import InvitationsPage from '../invitations/InvitationsPage';
-import { cn } from '@/lib/utils';
 
 type SectionType = 'all-candidates' | 'review-submissions' | 'ready-to-assign' | 'email-invitations';
 
@@ -50,120 +52,126 @@ export function CandidateManagementPage() {
     }
   }, [tab, activeSection]);
 
-  const handleSectionChange = (value: SectionType) => {
-    setActiveSection(value);
+  const handleSectionChange = (value: string) => {
+    setActiveSection(value as SectionType);
     setSearchParams({ tab: value });
   };
 
   // Calculate stats
   const needsReviewCount = submittedInvitations?.total || 0;
   const readyToAssignCount = statsData?.approved || 0;
-
-  // Sidebar navigation items
-  const navItems = [
-    {
-      id: 'all-candidates' as SectionType,
-      label: 'All Candidates',
-      icon: Users,
-      description: 'View all candidates',
-    },
-    {
-      id: 'review-submissions' as SectionType,
-      label: 'Review Submissions',
-      icon: ClipboardList,
-      badge: needsReviewCount,
-      badgeVariant: 'destructive' as const,
-      description: 'Review and approve candidates',
-    },
-    {
-      id: 'ready-to-assign' as SectionType,
-      label: 'Ready to Assign',
-      icon: UserPlus,
-      badge: readyToAssignCount,
-      description: 'Assign candidates to recruiters',
-    },
-    {
-      id: 'email-invitations' as SectionType,
-      label: 'Email Invitations',
-      icon: Mail,
-      description: 'Track and manage invites',
-    },
-  ];
+  const pendingInvites = statsData?.pending_onboarding || 0;
 
   return (
     <div className="space-y-6">
-      {/* Action Bar */}
-      <div className="flex justify-end">
-        <Button
-          onClick={() => navigate('/candidates/new')}
-          className="gap-2 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-        >
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('all-candidates')}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-100">
+                <Users className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{statsData?.total || 0}</p>
+                <p className="text-xs text-muted-foreground">All Candidates</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('review-submissions')}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-100">
+                <ClipboardList className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{needsReviewCount}</p>
+                <p className="text-xs text-muted-foreground">Needs Review</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('ready-to-assign')}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{readyToAssignCount}</p>
+                <p className="text-xs text-muted-foreground">Ready to Assign</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleSectionChange('email-invitations')}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-100">
+                <Clock className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{pendingInvites}</p>
+                <p className="text-xs text-muted-foreground">Pending Invites</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Tabs value={activeSection} onValueChange={handleSectionChange} className="w-full md:w-auto">
+          <TabsList className="grid w-full md:w-auto grid-cols-4 h-auto p-1">
+            <TabsTrigger value="all-candidates" className="flex items-center gap-2 px-4 py-2">
+              <Users className="h-4 w-4" />
+              <span className="hidden sm:inline">All Candidates</span>
+              <span className="sm:hidden">All</span>
+            </TabsTrigger>
+            <TabsTrigger value="review-submissions" className="flex items-center gap-2 px-4 py-2">
+              <ClipboardList className="h-4 w-4" />
+              <span className="hidden sm:inline">Review</span>
+              <span className="sm:hidden">Review</span>
+              {needsReviewCount > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">
+                  {needsReviewCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="ready-to-assign" className="flex items-center gap-2 px-4 py-2">
+              <UserPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Assign</span>
+              <span className="sm:hidden">Assign</span>
+              {readyToAssignCount > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs bg-green-100 text-green-700">
+                  {readyToAssignCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="email-invitations" className="flex items-center gap-2 px-4 py-2">
+              <Mail className="h-4 w-4" />
+              <span className="hidden sm:inline">Invitations</span>
+              <span className="sm:hidden">Invite</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <Button onClick={() => navigate('/candidates/new')} className="gap-2">
           <UserPlus className="h-4 w-4" />
           Add Candidate
         </Button>
       </div>
 
-      {/* Sidebar Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        {/* Left Sidebar - Navigation */}
-        <aside className="space-y-2">
-          <Card className="border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] sticky top-6">
-            <CardHeader className="bg-slate-50 pb-4">
-              <CardTitle className="text-lg font-bold">Navigation</CardTitle>
-              <CardDescription className="text-sm">Select workflow section</CardDescription>
-            </CardHeader>
-            <CardContent className="p-2">
-              <nav className="space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeSection === item.id;
-
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleSectionChange(item.id)}
-                      className={cn(
-                        'w-full flex items-center gap-3 p-3 rounded border-2 transition-all text-left',
-                        isActive
-                          ? 'bg-primary text-primary-foreground border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                          : 'bg-white border-slate-200 hover:border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'
-                      )}
-                    >
-                      <Icon className={cn('h-5 w-5 flex-shrink-0', isActive ? 'text-primary-foreground' : 'text-slate-600')} />
-                      <div className="flex-1 min-w-0">
-                        <div className={cn('font-semibold text-sm', isActive ? 'text-primary-foreground' : 'text-slate-900')}>
-                          {item.label}
-                        </div>
-                        <div className={cn('text-xs truncate', isActive ? 'text-primary-foreground/80' : 'text-slate-500')}>
-                          {item.description}
-                        </div>
-                      </div>
-                      {item.badge !== undefined && item.badge > 0 && (
-                        <Badge
-                          variant={item.badgeVariant || 'secondary'}
-                          className="border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] font-bold"
-                        >
-                          {item.badge}
-                        </Badge>
-                      )}
-                    </button>
-                  );
-                })}
-              </nav>
-            </CardContent>
-          </Card>
-        </aside>
-
-        {/* Main Dashboard Area */}
-        <main className="space-y-6">
-          {/* Dynamic Content Area */}
-          <div>
-            {activeSection === 'all-candidates' && <CandidatesPage />}
-            {activeSection === 'review-submissions' && <OnboardCandidatesPage defaultTab="review-submissions" hideTabNavigation={true} />}
-            {activeSection === 'ready-to-assign' && <OnboardCandidatesPage defaultTab="ready-to-assign" hideTabNavigation={true} />}
-            {activeSection === 'email-invitations' && <InvitationsPage />}
-          </div>
-        </main>
+      {/* Content Area */}
+      <div>
+        {activeSection === 'all-candidates' && <CandidatesPage />}
+        {activeSection === 'review-submissions' && <OnboardCandidatesPage defaultTab="review-submissions" hideTabNavigation={true} />}
+        {activeSection === 'ready-to-assign' && <OnboardCandidatesPage defaultTab="ready-to-assign" hideTabNavigation={true} />}
+        {activeSection === 'email-invitations' && <InvitationsPage />}
       </div>
     </div>
   );
