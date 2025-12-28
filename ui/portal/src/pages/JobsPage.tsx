@@ -20,13 +20,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 import { 
   Briefcase, 
   Search, 
@@ -44,7 +37,6 @@ import {
   ExternalLink,
   CheckCircle2,
   XCircle,
-  TrendingUp,
   Clock,
   Sparkles,
 } from 'lucide-react';
@@ -95,8 +87,6 @@ export function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [selectedMatch, setSelectedMatch] = useState<JobMatch | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
 
   // Reset page when candidate changes
   useEffect(() => {
@@ -146,8 +136,12 @@ export function JobsPage() {
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId);
 
   const handleRowClick = (match: JobMatch) => {
-    setSelectedMatch(match);
-    setSheetOpen(true);
+    const job = match.job || match.job_posting;
+    if (job) {
+      navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`, {
+        state: { match }
+      });
+    }
   };
 
   return (
@@ -538,156 +532,6 @@ export function JobsPage() {
             )}
           </div>
         </div>
-
-        {/* Job Details Sheet */}
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent className="w-[500px] sm:w-[550px] overflow-y-auto">
-            {selectedMatch && (() => {
-              const job = selectedMatch.job || selectedMatch.job_posting;
-              if (!job) return null;
-              
-              const grade = (selectedMatch.match_grade as MatchGrade) || calculateGrade(selectedMatch.match_score);
-              const gradeConfig = GRADE_CONFIG[grade] || GRADE_CONFIG['C'];
-
-              return (
-                <>
-                  <SheetHeader className="pb-4 border-b">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <SheetTitle className="text-lg leading-tight">{job.title}</SheetTitle>
-                        <SheetDescription className="text-sm mt-1">{job.company}</SheetDescription>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <Badge className={`${gradeConfig.bgClass} ${gradeConfig.colorClass} font-bold text-base px-2.5`}>
-                          {gradeConfig.label}
-                        </Badge>
-                        <span className="text-xl font-bold">{Math.round(selectedMatch.match_score)}%</span>
-                      </div>
-                    </div>
-                  </SheetHeader>
-
-                  <div className="py-5 space-y-5">
-                    {/* Job Info Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="truncate">{job.location || 'Not specified'}</span>
-                        {job.is_remote && <Badge variant="secondary" className="text-xs ml-1">Remote</Badge>}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span>{formatSalary(job.salary_min, job.salary_max, job.salary_range)}</span>
-                      </div>
-                      {job.job_type && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Briefcase className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span>{job.job_type}</span>
-                        </div>
-                      )}
-                      {job.platform && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span>{job.platform}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Score Breakdown */}
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold flex items-center gap-2">
-                        <TrendingUp className="h-4 w-4" /> Score Breakdown
-                      </h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { label: 'Skills', value: selectedMatch.skill_match_score },
-                          { label: 'Experience', value: selectedMatch.experience_match_score },
-                          { label: 'Location', value: selectedMatch.location_match_score },
-                          { label: 'Salary', value: selectedMatch.salary_match_score },
-                          { label: 'Semantic', value: selectedMatch.semantic_similarity },
-                        ].map((score) => (
-                          <div key={score.label} className="flex items-center justify-between bg-muted/50 rounded px-2.5 py-1.5">
-                            <span className="text-xs text-muted-foreground">{score.label}</span>
-                            <span className={`text-sm font-semibold ${getScoreColor(score.value ?? 0)}`}>
-                              {Math.round(score.value ?? 0)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Matched Skills */}
-                    {selectedMatch.matched_skills && selectedMatch.matched_skills.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold flex items-center gap-2 text-green-700">
-                          <CheckCircle2 className="h-4 w-4" /> Matched Skills ({selectedMatch.matched_skills.length})
-                        </h4>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedMatch.matched_skills.map((skill, idx) => (
-                            <Badge key={idx} variant="secondary" className="bg-green-50 text-green-700 text-xs">
-                              {skill}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Missing Skills */}
-                    {selectedMatch.missing_skills && selectedMatch.missing_skills.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold flex items-center gap-2 text-orange-700">
-                          <XCircle className="h-4 w-4" /> Skills to Develop ({selectedMatch.missing_skills.length})
-                        </h4>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedMatch.missing_skills.map((skill, idx) => (
-                            <Badge key={idx} variant="outline" className="text-orange-600 border-orange-300 text-xs">
-                              {skill}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Description */}
-                    {job.description && (
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold">Description</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
-                          {job.description}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Posted Date */}
-                    {job.posted_date && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
-                        <Clock className="h-3.5 w-3.5" />
-                        <span>Posted {format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 pt-4 border-t">
-                    {job.job_url && (
-                      <Button variant="outline" className="flex-1" onClick={() => job.job_url && window.open(job.job_url, '_blank')}>
-                        <ExternalLink className="h-4 w-4 mr-2" /> View Posting
-                      </Button>
-                    )}
-                    <Button
-                      className="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
-                      onClick={() => {
-                        setSheetOpen(false);
-                        navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`);
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" /> Tailor Resume
-                    </Button>
-                  </div>
-                </>
-              );
-            })()}
-          </SheetContent>
-        </Sheet>
       </div>
     </TooltipProvider>
   );
