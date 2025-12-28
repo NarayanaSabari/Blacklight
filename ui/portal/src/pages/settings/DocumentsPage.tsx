@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, FileText, CheckCircle2, Clock, Database, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -115,91 +115,6 @@ export default function DocumentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Actions */}
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={handleRefresh}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      {stats && stats.total_documents !== undefined && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardDescription className="font-medium text-slate-600">Total Documents</CardDescription>
-              <div className="p-2 rounded-lg bg-blue-100">
-                <FileText className="h-4 w-4 text-blue-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="text-3xl text-slate-900">{formatNumber(stats.total_documents || 0)}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                {formatBytes(stats.total_size_bytes || 0)} total size
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardDescription className="font-medium text-slate-600">Verified</CardDescription>
-              <div className="p-2 rounded-lg bg-green-100">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="text-3xl text-green-600">
-                {formatNumber(stats.verified_count || 0)}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(stats.total_documents || 0) > 0
-                  ? Math.round(((stats.verified_count || 0) / (stats.total_documents || 1)) * 100)
-                  : 0}
-                % verification rate
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-orange-50 to-white border-orange-100">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardDescription className="font-medium text-slate-600">Pending</CardDescription>
-              <div className="p-2 rounded-lg bg-orange-100">
-                <Clock className="h-4 w-4 text-orange-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="text-3xl text-orange-600">
-                {formatNumber(stats.unverified_count || 0)}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Require verification</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
-            <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardDescription className="font-medium text-slate-600">Storage</CardDescription>
-              <div className="p-2 rounded-lg bg-purple-100">
-                <Database className="h-4 w-4 text-purple-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardTitle className="text-2xl text-slate-900">
-                {(stats.by_storage?.gcs || 0) > 0 ? 'Cloud' : 'Local'}
-              </CardTitle>
-              <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
-                {stats.by_storage?.gcs && (
-                  <Badge variant="outline" className="text-xs">GCS: {stats.by_storage.gcs}</Badge>
-                )}
-                {stats.by_storage?.local && (
-                  <Badge variant="outline" className="text-xs">Local: {stats.by_storage.local}</Badge>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Error State */}
       {error && (
         <Alert variant="destructive">
@@ -207,20 +122,46 @@ export default function DocumentsPage() {
         </Alert>
       )}
 
-      {/* Documents List */}
+      {/* Main Card with Integrated Header */}
       <Card>
-        <CardHeader className="border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>All Documents</CardTitle>
-              <CardDescription>
-                {documentsResponse
-                  ? `Showing ${documentsResponse.documents.length} of ${documentsResponse.total} documents`
-                  : 'Loading...'}
-              </CardDescription>
+        <CardHeader className="border-b bg-slate-50/50">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            {/* Inline Stats */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-blue-100">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <span className="text-2xl font-bold">{formatNumber(stats?.total_documents || 0)}</span>
+                  <span className="text-sm text-muted-foreground ml-1.5">Documents</span>
+                </div>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  {formatNumber(stats?.verified_count || 0)} Verified
+                </Badge>
+                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {formatNumber(stats?.unverified_count || 0)} Pending
+                </Badge>
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                  <Database className="h-3 w-3 mr-1" />
+                  {formatBytes(stats?.total_size_bytes || 0)}
+                </Badge>
+              </div>
             </div>
+
+            {/* Actions */}
+            <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5">
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
           </div>
         </CardHeader>
+
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-4">

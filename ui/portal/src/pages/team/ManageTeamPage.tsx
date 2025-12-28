@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -43,6 +43,8 @@ import {
   UserMinus,
   ChevronDown,
   ChevronRight,
+  Expand,
+  Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamApi } from '@/lib/teamApi';
@@ -293,166 +295,125 @@ export function ManageTeamPage() {
 
   return (
     <div className="space-y-6">
-      {/* Actions */}
-      <div className="flex justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={expandAll}
-            disabled={isLoadingHierarchy}
-          >
-            Expand All
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={collapseAll}
-            disabled={isLoadingHierarchy}
-          >
-            Collapse All
-          </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Total Team Members</CardDescription>
-            <div className="p-2 rounded-lg bg-blue-100">
-              <Users className="h-4 w-4 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoadingHierarchy ? (
-                <Skeleton className="h-9 w-12" />
-              ) : (
-                // Exclude current user (Tenant Admin) from count
-                Math.max(0, (hierarchyData?.total_users || 0) - 1)
-              )}
-            </CardTitle>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Managers</CardDescription>
-            <div className="p-2 rounded-lg bg-purple-100">
-              <UserCog className="h-4 w-4 text-purple-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoadingManagers ? (
-                <Skeleton className="h-9 w-12" />
-              ) : (
-                managersData?.total || 0
-              )}
-            </CardTitle>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Reporting Levels</CardDescription>
-            <div className="p-2 rounded-lg bg-green-100">
-              <GitBranch className="h-4 w-4 text-green-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoadingHierarchy ? (
-                <Skeleton className="h-9 w-12" />
-              ) : (
-                (() => {
-                  // Calculate max hierarchy depth
-                  let maxLevel = 0;
-                  const calculateDepth = (members: TeamMember[], level: number = 0) => {
-                    members.forEach((member) => {
-                      if (level > maxLevel) maxLevel = level;
-                      if (member.team_members && member.team_members.length > 0) {
-                        calculateDepth(member.team_members, level + 1);
-                      }
-                    });
-                  };
-                  if (hierarchyData) {
-                    calculateDepth(hierarchyData.top_level_users);
-                  }
-                  return maxLevel + 1;
-                })()
-              )}
-            </CardTitle>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
-      <Tabs defaultValue="hierarchy" className="space-y-4">
-        <TabsList className="bg-muted/50">
-          <TabsTrigger value="hierarchy" className="gap-2">
-            <GitBranch className="h-4 w-4" />
-            Team Hierarchy
-          </TabsTrigger>
-          <TabsTrigger value="managers" className="gap-2">
-            <UserCog className="h-4 w-4" />
-            Managers List
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Hierarchy Tab */}
-        <TabsContent value="hierarchy" className="space-y-4">
-          <Card>
-            <CardHeader className="border-b">
-              <div>
-                <CardTitle>Organization Structure</CardTitle>
-                <CardDescription>
-                  Visual representation of your team's reporting structure
-                </CardDescription>
+      {/* Main Card with Tabs */}
+      <Card>
+        <CardHeader className="border-b bg-slate-50/50">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            {/* Inline Stats */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-blue-100">
+                  <Users className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <span className="text-2xl font-bold">
+                    {isLoadingHierarchy ? '-' : Math.max(0, (hierarchyData?.total_users || 0) - 1)}
+                  </span>
+                  <span className="text-sm text-muted-foreground ml-1.5">Members</span>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {isLoadingHierarchy ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </div>
-              ) : hierarchyError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Failed to load team hierarchy. Please try again.
-                  </AlertDescription>
-                </Alert>
-              ) : hierarchyData && hierarchyData.top_level_users.length > 0 ? (
-                <div className="space-y-1">
-                  {hierarchyData.top_level_users.map((member) => renderTeamMember(member))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="p-4 rounded-full bg-slate-100 mb-4">
-                    <Users className="h-12 w-12 text-slate-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No team members found</h3>
-                  <p className="text-slate-600 max-w-sm">Start building your team by inviting users from the Users page</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              <div className="h-8 w-px bg-border" />
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                  <UserCog className="h-3 w-3 mr-1" />
+                  {managersData?.total || 0} Managers
+                </Badge>
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  <GitBranch className="h-3 w-3 mr-1" />
+                  {(() => {
+                    let maxLevel = 0;
+                    const calculateDepth = (members: TeamMember[], level: number = 0) => {
+                      members.forEach((member) => {
+                        if (level > maxLevel) maxLevel = level;
+                        if (member.team_members && member.team_members.length > 0) {
+                          calculateDepth(member.team_members, level + 1);
+                        }
+                      });
+                    };
+                    if (hierarchyData) calculateDepth(hierarchyData.top_level_users);
+                    return maxLevel + 1;
+                  })()} Levels
+                </Badge>
+              </div>
+            </div>
 
-        {/* Managers Tab */}
-        <TabsContent value="managers" className="space-y-4">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Managers Overview</CardTitle>
-              <CardDescription>
-                Team members with direct reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={expandAll}
+                disabled={isLoadingHierarchy}
+                className="gap-1.5"
+              >
+                <Expand className="h-3.5 w-3.5" />
+                Expand All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={collapseAll}
+                disabled={isLoadingHierarchy}
+                className="gap-1.5"
+              >
+                <Minimize2 className="h-3.5 w-3.5" />
+                Collapse All
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <Tabs defaultValue="hierarchy" className="w-full">
+            <div className="px-6 pt-4 border-b">
+              <TabsList className="bg-muted/50 h-10">
+                <TabsTrigger value="hierarchy" className="gap-2 px-4">
+                  <GitBranch className="h-4 w-4" />
+                  Team Hierarchy
+                </TabsTrigger>
+                <TabsTrigger value="managers" className="gap-2 px-4">
+                  <UserCog className="h-4 w-4" />
+                  Managers List
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* Hierarchy Tab */}
+            <TabsContent value="hierarchy" className="mt-0">
+              <div className="p-6">
+                {isLoadingHierarchy ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                ) : hierarchyError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Failed to load team hierarchy. Please try again.
+                    </AlertDescription>
+                  </Alert>
+                ) : hierarchyData && hierarchyData.top_level_users.length > 0 ? (
+                  <div className="space-y-1">
+                    {hierarchyData.top_level_users.map((member) => renderTeamMember(member))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="p-4 rounded-full bg-slate-100 mb-4">
+                      <Users className="h-12 w-12 text-slate-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No team members found</h3>
+                    <p className="text-slate-600 max-w-sm">Start building your team by inviting users from the Users page</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Managers Tab */}
+            <TabsContent value="managers" className="mt-0">
               {isLoadingManagers ? (
-                <div className="space-y-2">
+                <div className="p-6 space-y-2">
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
                   <Skeleton className="h-12 w-full" />
@@ -501,10 +462,10 @@ export function ManageTeamPage() {
                   <p className="text-slate-600 max-w-sm">Assign managers to team members to see them here</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Assign Manager Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

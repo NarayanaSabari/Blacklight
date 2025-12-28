@@ -8,10 +8,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { UserCog, Plus, Search, Shield, Users, UserCheck, AlertCircle } from 'lucide-react';
+import { UserCog, Plus, Search, Shield, Users, UserCheck, AlertCircle, ArrowRight } from 'lucide-react';
 import { InviteUserDialog } from '@/components/InviteUserDialog';
 import { UsersTable } from '@/components/UsersTable';
 import { ResetPasswordDialog } from '@/components/ResetPasswordDialog';
@@ -43,27 +44,6 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Search and Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search users..."
-              className="pl-9 w-64"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          {canManageUsers && (
-            <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Invite User
-            </Button>
-          )}
-        </div>
-      </div>
-
       {/* Permission Warning */}
       {!canManageUsers && (
         <Alert>
@@ -74,72 +54,65 @@ export function UsersPage() {
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Total Users</CardDescription>
-            <div className="p-2 rounded-lg bg-blue-100">
-              <Users className="h-4 w-4 text-blue-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.total}
-            </CardTitle>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-white border-green-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Active</CardDescription>
-            <div className="p-2 rounded-lg bg-green-100">
-              <UserCheck className="h-4 w-4 text-green-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.active}
-            </CardTitle>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Recruiters</CardDescription>
-            <div className="p-2 rounded-lg bg-purple-100">
-              <UserCog className="h-4 w-4 text-purple-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.recruiters}
-            </CardTitle>
-          </CardContent>
-        </Card>
-        <Card className="bg-gradient-to-br from-orange-50 to-white border-orange-100">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription className="font-medium text-slate-600">Managers</CardDescription>
-            <div className="p-2 rounded-lg bg-orange-100">
-              <Shield className="h-4 w-4 text-orange-600" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <CardTitle className="text-3xl text-slate-900">
-              {isLoading ? <Skeleton className="h-9 w-12" /> : stats.managers}
-            </CardTitle>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
+      {/* Main Card with Integrated Header */}
       <Card>
-        <CardHeader className="border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>All Users</CardTitle>
-              <CardDescription>Manage users and their permissions</CardDescription>
+        <CardHeader className="border-b bg-slate-50/50">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            {/* Inline Stats */}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-blue-100">
+                  <Users className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <span className="text-2xl font-bold">{isLoading ? '-' : stats.total}</span>
+                  <span className="text-sm text-muted-foreground ml-1.5">Total</span>
+                </div>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div className="flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    <UserCheck className="h-3 w-3 mr-1" />
+                    {stats.active} Active
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                    <UserCog className="h-3 w-3 mr-1" />
+                    {stats.recruiters} Recruiters
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                    <Shield className="h-3 w-3 mr-1" />
+                    {stats.managers} Managers
+                  </Badge>
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Actions */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search users..."
+                  className="pl-9 w-64 bg-white"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              {canManageUsers && (
+                <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Invite User
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
+
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-6 space-y-3">
@@ -177,36 +150,34 @@ export function UsersPage() {
               )}
             </div>
           ) : (
-            <div className="p-0">
-              <UsersTable
-                users={users}
-                onResetPassword={(user) => setResetPasswordUser(user)}
-              />
-            </div>
+            <UsersTable
+              users={users}
+              onResetPassword={(user) => setResetPasswordUser(user)}
+            />
           )}
         </CardContent>
       </Card>
 
       {/* Roles Management Link */}
       {canManageUsers && (
-        <Card className="bg-gradient-to-r from-slate-50 to-white">
-          <CardHeader className="flex flex-row items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-100">
-                <Shield className="h-5 w-5 text-slate-600" />
+        <Link to="/users/roles" className="block group">
+          <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
+                  <Shield className="h-5 w-5 text-slate-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">
+                    Roles & Permissions
+                  </CardTitle>
+                  <CardDescription>Manage custom roles and assign permissions</CardDescription>
+                </div>
               </div>
-              <div>
-                <CardTitle className="text-base">Roles & Permissions</CardTitle>
-                <CardDescription>Manage custom roles and assign permissions</CardDescription>
-              </div>
-            </div>
-            <Button asChild variant="outline">
-              <Link to="/users/roles">
-                Manage Roles
-              </Link>
-            </Button>
-          </CardHeader>
-        </Card>
+              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+            </CardHeader>
+          </Card>
+        </Link>
       )}
 
       {/* Dialogs */}
