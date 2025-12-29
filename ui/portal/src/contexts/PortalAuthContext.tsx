@@ -29,7 +29,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
 
   // Derived state from user
   const isAuthenticated = user !== null;
-  const tenantName = user?.tenant?.company_name || null;
+  const tenantName = user?.tenant?.name || null;
   const tenantSlug = user?.tenant?.slug || null;
 
   /**

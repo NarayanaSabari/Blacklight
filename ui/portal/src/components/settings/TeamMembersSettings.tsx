@@ -1,13 +1,15 @@
 /**
  * Team Members Settings Component
- * View team hierarchy and manage manager assignments
+ * Unified view for user management, team hierarchy, and manager assignments
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -45,24 +47,56 @@ import {
   ChevronRight,
   Expand,
   Minimize2,
+  Plus,
+  Search,
+  Shield,
+  UserCheck,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamApi } from '@/lib/teamApi';
+import { fetchUsers } from '@/lib/api/users';
 import { usePermissions } from '@/hooks/usePermissions';
-import type { TeamMember, UserBasicInfo } from '@/types';
+import { InviteUserDialog } from '@/components/InviteUserDialog';
+import { UsersTable } from '@/components/UsersTable';
+import { ResetPasswordDialog } from '@/components/ResetPasswordDialog';
+import type { TeamMember, UserBasicInfo, PortalUserFull } from '@/types';
 
 export function TeamMembersSettings() {
   const queryClient = useQueryClient();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, canManageUsers } = usePermissions();
+  
+  // State for manager assignment dialogs
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<TeamMember | null>(null);
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
+  
+  // State for users tab
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState<PortalUserFull | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Permission checks
   const canViewTeam = hasPermission('users.view_team');
   const canAssignManager = hasPermission('users.assign_manager');
+
+  // Fetch users for Users tab
+  const { data: usersData, isLoading: isLoadingUsers, error: usersError } = useQuery({
+    queryKey: ['users', searchQuery],
+    queryFn: () => fetchUsers({ search: searchQuery }),
+  });
+
+  const users = usersData?.items || [];
+
+  // Calculate user stats
+  const userStats = {
+    total: users.length,
+    active: users.filter((u) => u.is_active).length,
+    recruiters: users.filter((u) => u.roles?.some(r => r.name === 'RECRUITER')).length,
+    managers: users.filter((u) => u.roles?.some(r => r.name === 'MANAGER')).length,
+  };
 
   // Fetch team hierarchy
   const {
@@ -293,12 +327,22 @@ export function TeamMembersSettings() {
 
   return (
     <>
+      {/* Permission Warning for non-admins */}
+      {!canManageUsers && (
+        <Alert className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Only Tenant Admins can invite and manage users. Contact your administrator for access.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <CardTitle>Team Members</CardTitle>
-              <CardDescription>View and manage your team hierarchy</CardDescription>
+              <CardTitle>Team Management</CardTitle>
+              <CardDescription>Manage users, view hierarchy, and assign managers</CardDescription>
             </div>
             {/* Inline Stats */}
             <div className="flex items-center gap-4">
@@ -308,51 +352,109 @@ export function TeamMembersSettings() {
                 </div>
                 <div>
                   <span className="text-xl font-bold">
-                    {isLoadingHierarchy ? '-' : Math.max(0, (hierarchyData?.total_users || 0) - 1)}
+                    {isLoadingUsers ? '-' : userStats.total}
                   </span>
-                  <span className="text-sm text-muted-foreground ml-1">Members</span>
+                  <span className="text-sm text-muted-foreground ml-1">Users</span>
                 </div>
               </div>
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <UserCheck className="h-3 w-3 mr-1" />
+                {userStats.active} Active
+              </Badge>
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
                 <UserCog className="h-3 w-3 mr-1" />
                 {managersData?.total || 0} Managers
-              </Badge>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                <GitBranch className="h-3 w-3 mr-1" />
-                {(() => {
-                  let maxLevel = 0;
-                  const calculateDepth = (members: TeamMember[], level: number = 0) => {
-                    members.forEach((member) => {
-                      if (level > maxLevel) maxLevel = level;
-                      if (member.team_members && member.team_members.length > 0) {
-                        calculateDepth(member.team_members, level + 1);
-                      }
-                    });
-                  };
-                  if (hierarchyData) calculateDepth(hierarchyData.top_level_users);
-                  return maxLevel + 1;
-                })()} Levels
               </Badge>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="p-0">
-          <Tabs defaultValue="hierarchy" className="w-full">
-            <div className="px-6 pt-4 border-t flex items-center justify-between">
+          <Tabs defaultValue="users" className="w-full">
+            <div className="px-6 pt-4 border-t flex items-center justify-between flex-wrap gap-4">
               <TabsList className="bg-muted/50 h-10">
+                <TabsTrigger value="users" className="gap-2 px-4">
+                  <Users className="h-4 w-4" />
+                  Users
+                </TabsTrigger>
                 <TabsTrigger value="hierarchy" className="gap-2 px-4">
                   <GitBranch className="h-4 w-4" />
                   Team Hierarchy
                 </TabsTrigger>
                 <TabsTrigger value="managers" className="gap-2 px-4">
                   <UserCog className="h-4 w-4" />
-                  Managers List
+                  Managers
                 </TabsTrigger>
               </TabsList>
               
-              {/* Actions */}
+              {/* Actions - context dependent */}
               <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="Search users..."
+                    className="pl-9 w-64 bg-white"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                {canManageUsers && (
+                  <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Invite User
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Users Tab */}
+            <TabsContent value="users" className="mt-0 border-t">
+              {isLoadingUsers ? (
+                <div className="p-6 space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : usersError ? (
+                <div className="p-6">
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Failed to load users. Please try again later.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              ) : users.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 rounded-full bg-slate-100 mb-4">
+                    <UserCog className="h-12 w-12 text-slate-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    {searchQuery ? 'No users found' : 'No team members yet'}
+                  </h3>
+                  <p className="text-slate-600 mb-4 max-w-sm">
+                    {searchQuery
+                      ? 'Try adjusting your search query'
+                      : 'Invite team members to collaborate on recruiting activities'}
+                  </p>
+                  {canManageUsers && !searchQuery && (
+                    <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
+                      <Plus className="h-4 w-4" />
+                      Invite Your First Team Member
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <UsersTable
+                  users={users}
+                  onResetPassword={(user) => setResetPasswordUser(user)}
+                />
+              )}
+            </TabsContent>
+
+            {/* Hierarchy Tab */}
+            <TabsContent value="hierarchy" className="mt-0">
+              <div className="px-6 py-3 border-t flex justify-end gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -374,10 +476,6 @@ export function TeamMembersSettings() {
                   Collapse All
                 </Button>
               </div>
-            </div>
-
-            {/* Hierarchy Tab */}
-            <TabsContent value="hierarchy" className="mt-0">
               <div className="p-6 border-t">
                 {isLoadingHierarchy ? (
                   <div className="space-y-2">
@@ -401,8 +499,8 @@ export function TeamMembersSettings() {
                     <div className="p-4 rounded-full bg-slate-100 mb-4">
                       <Users className="h-12 w-12 text-slate-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No team members found</h3>
-                    <p className="text-slate-600 max-w-sm">Start building your team by inviting users from the Users page</p>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No team hierarchy found</h3>
+                    <p className="text-slate-600 max-w-sm">Start by adding users and assigning managers</p>
                   </div>
                 )}
               </div>
@@ -464,6 +562,28 @@ export function TeamMembersSettings() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Roles & Permissions Link Card */}
+      {canManageUsers && (
+        <Link to="/users/roles" className="block group mt-6">
+          <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
+                  <Shield className="h-5 w-5 text-slate-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">
+                    Roles & Permissions
+                  </CardTitle>
+                  <CardDescription>Manage custom roles and assign permissions</CardDescription>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+            </CardHeader>
+          </Card>
+        </Link>
+      )}
 
       {/* Assign Manager Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
@@ -545,6 +665,16 @@ export function TeamMembersSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Invite User Dialog */}
+      <InviteUserDialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen} />
+      
+      {/* Reset Password Dialog */}
+      <ResetPasswordDialog
+        user={resetPasswordUser}
+        open={resetPasswordUser !== null}
+        onOpenChange={(open) => !open && setResetPasswordUser(null)}
+      />
     </>
   );
 }

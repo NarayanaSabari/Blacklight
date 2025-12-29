@@ -145,12 +145,8 @@ class PortalUser(BaseModel):
             data["permissions"] = self.get_permissions()
         
         if include_tenant and self.tenant:
-            data["tenant"] = {
-                "id": self.tenant.id,
-                "name": self.tenant.name,
-                "slug": self.tenant.slug,
-                "status": self.tenant.status.value if self.tenant.status else None,
-            }
+            # Use tenant's to_dict with plan and stats for comprehensive data
+            data["tenant"] = self.tenant.to_dict(include_plan=True, include_stats=True)
         
         if include_manager and self.manager:
             data["manager"] = {

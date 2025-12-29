@@ -22,14 +22,43 @@ export interface PortalUser {
   permissions: string[]; // Added permissions field
   tenant?: {
     id: number;
+    name: string;
     slug: string;
-    company_name: string;
+    company_email: string;
+    company_phone: string | null;
     status: string;
-    created_at?: string;
-    updated_at?: string;
-    subscription_plan?: string;
-    max_users?: number;
-    max_candidates?: number;
+    subscription_plan_id: number;
+    subscription_start_date: string | null;
+    subscription_end_date: string | null;
+    billing_cycle: string | null;
+    next_billing_date: string | null;
+    settings: Record<string, any>;
+    created_at: string;
+    updated_at: string;
+    subscription_plan?: {
+      id: number;
+      name: string;
+      display_name: string;
+      description: string | null;
+      price_monthly: number;
+      price_yearly: number | null;
+      max_users: number;
+      max_candidates: number;
+      max_jobs: number;
+      max_storage_gb: number;
+      features: Record<string, any>;
+      is_active: boolean;
+      sort_order: number;
+      created_at: string;
+      updated_at: string;
+    };
+    stats?: {
+      user_count: number;
+      max_users: number;
+      max_candidates: number;
+      max_jobs: number;
+      max_storage_gb: number;
+    };
   };
 }
 

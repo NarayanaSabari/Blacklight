@@ -22,7 +22,6 @@ import {
   JobDetailPage,
   EmailJobsPage,
   ResumeTailorPage,
-  UsersPage,
   RolesPage,
   SettingsPage,
   DocumentsPage,
@@ -99,7 +98,7 @@ function App() {
                       <Route path="/jobs/candidate/:candidateId" element={<JobsPage />} />
                       <Route path="/jobs" element={<JobsPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
-                      <Route path="/users" element={<UsersPage />} />
+                      <Route path="/users" element={<Navigate to="/settings/team" replace />} />
                       <Route path="/users/roles" element={<RolesPage />} />
                       <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                       <Route path="/your-candidates" element={<YourCandidatesPageNew />} />

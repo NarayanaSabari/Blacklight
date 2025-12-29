@@ -19,9 +19,11 @@ import {
 import { usePortalAuth } from '@/contexts/PortalAuthContext';
 
 export function OrganizationSettings() {
-  const { user, tenantName, tenantSlug } = usePortalAuth();
+  const { user } = usePortalAuth();
   
   const tenant = user?.tenant;
+  const tenantName = tenant?.name || 'Your Organization';
+  const tenantSlug = tenant?.slug || 'N/A';
 
   // Format date
   const formatDate = (dateString?: string) => {
@@ -162,7 +164,7 @@ export function OrganizationSettings() {
               <div className="p-4 bg-slate-50 rounded-lg">
                 <label className="text-sm font-medium text-slate-500">Current Plan</label>
                 <p className="text-xl font-semibold text-slate-900 mt-1">
-                  {tenant?.subscription_plan || 'Free'}
+                  {tenant?.subscription_plan?.display_name || tenant?.subscription_plan?.name || 'N/A'}
                 </p>
               </div>
 
@@ -173,7 +175,7 @@ export function OrganizationSettings() {
                   User Limit
                 </label>
                 <p className="text-xl font-semibold text-slate-900 mt-1">
-                  {tenant?.max_users || 'Unlimited'}
+                  {tenant?.stats?.user_count || 0} / {tenant?.stats?.max_users || tenant?.subscription_plan?.max_users || 'Unlimited'}
                 </p>
               </div>
 
@@ -181,7 +183,7 @@ export function OrganizationSettings() {
               <div className="p-4 bg-slate-50 rounded-lg">
                 <label className="text-sm font-medium text-slate-500">Candidate Limit</label>
                 <p className="text-xl font-semibold text-slate-900 mt-1">
-                  {tenant?.max_candidates || 'Unlimited'}
+                  {tenant?.stats?.max_candidates || tenant?.subscription_plan?.max_candidates || 'Unlimited'}
                 </p>
               </div>
             </div>

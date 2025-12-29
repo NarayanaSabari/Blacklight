@@ -175,7 +175,9 @@ class PortalUserService:
         if requester_tenant_id is not None and user.tenant_id != requester_tenant_id:
             raise ValueError("Access denied: User belongs to different tenant")
 
-        return PortalUserResponseSchema.model_validate(user.to_dict(include_roles=True, include_permissions=True))
+        return PortalUserResponseSchema.model_validate(
+            user.to_dict(include_roles=True, include_permissions=True, include_tenant=True)
+        )
 
     @staticmethod
     def list_users(

@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { UserCog, Plus, Search, Shield, Users, UserCheck, AlertCircle, ArrowRight } from 'lucide-react';
+import { UserCog, Plus, Search, Shield, Users, UserCheck, AlertCircle, ArrowRight, GitBranch } from 'lucide-react';
 import { InviteUserDialog } from '@/components/InviteUserDialog';
 import { UsersTable } from '@/components/UsersTable';
 import { ResetPasswordDialog } from '@/components/ResetPasswordDialog';
@@ -160,24 +160,45 @@ export function UsersPage() {
 
       {/* Roles Management Link */}
       {canManageUsers && (
-        <Link to="/users/roles" className="block group">
-          <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
-                  <Shield className="h-5 w-5 text-slate-600" />
+        <>
+          <Link to="/settings/team" className="block group">
+            <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between py-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-gradient-to-br from-purple-100 to-purple-50">
+                    <GitBranch className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base group-hover:text-primary transition-colors">
+                      Team Hierarchy
+                    </CardTitle>
+                    <CardDescription>View organizational structure and manager assignments</CardDescription>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-base group-hover:text-primary transition-colors">
-                    Roles & Permissions
-                  </CardTitle>
-                  <CardDescription>Manage custom roles and assign permissions</CardDescription>
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link to="/users/roles" className="block group">
+            <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between py-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
+                    <Shield className="h-5 w-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base group-hover:text-primary transition-colors">
+                      Roles & Permissions
+                    </CardTitle>
+                    <CardDescription>Manage custom roles and assign permissions</CardDescription>
+                  </div>
                 </div>
-              </div>
-              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-            </CardHeader>
-          </Card>
-        </Link>
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+              </CardHeader>
+            </Card>
+          </Link>
+        </>
       )}
 
       {/* Dialogs */}

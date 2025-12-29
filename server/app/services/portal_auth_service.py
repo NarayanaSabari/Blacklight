@@ -161,7 +161,8 @@ class PortalAuthService:
 
         # Generate tokens
         # Explicitly convert user object to dict using its to_dict method
-        user_data_dict = user.to_dict(include_roles=True, include_permissions=True)
+        # Include tenant with full details (plan and stats)
+        user_data_dict = user.to_dict(include_roles=True, include_permissions=True, include_tenant=True)
         logger.debug(f"User data dict from to_dict(): {user_data_dict}")
         user_data = PortalUserResponseSchema.model_validate(user_data_dict).model_dump()
         logger.debug(f"User data after model_validate: {user_data}")
