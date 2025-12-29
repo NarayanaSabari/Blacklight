@@ -1,14 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -96,9 +88,7 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
   };
 
   const canManageUser = (user: PortalUserFull) => {
-    // Can't manage yourself
     if (user.id === currentUser?.id) return false;
-    // Only tenant admin can manage users
     return isTenantAdmin;
   };
 
@@ -121,198 +111,161 @@ export function UsersTable({ users, onResetPassword }: UsersTableProps) {
     }
   };
 
+  if (users.length === 0) {
+    return null;
+  }
+
   return (
     <>
-      <div className="overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
-              <TableHead className="font-semibold text-slate-700">User</TableHead>
-              <TableHead className="font-semibold text-slate-700">Contact</TableHead>
-              <TableHead className="font-semibold text-slate-700">Roles</TableHead>
-              <TableHead className="font-semibold text-slate-700">Status</TableHead>
-              <TableHead className="font-semibold text-slate-700">Last Active</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                  No users found
-                </TableCell>
-              </TableRow>
-            ) : (
-              users.map((user) => (
-                <TableRow 
-                  key={user.id} 
-                  className={cn(
-                    "group transition-colors",
-                    user.id === currentUser?.id && "bg-blue-50/50"
-                  )}
-                >
-                  {/* User Info */}
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 border-2 border-white shadow-sm">
-                        <AvatarFallback className={cn(
-                          "text-sm font-medium",
-                          user.is_active 
-                            ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
-                            : "bg-slate-200 text-slate-500"
-                        )}>
-                          {getInitials(user.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900">{user.full_name}</span>
-                          {user.id === currentUser?.id && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
-                              You
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-sm text-muted-foreground">{user.email}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-
-                  {/* Contact */}
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Mail className="h-3.5 w-3.5" />
-                        <span className="truncate max-w-[160px]">{user.email}</span>
-                      </div>
-                      {user.phone ? (
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5" />
-                          <span>{user.phone}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-sm text-slate-400">
-                          <Phone className="h-3.5 w-3.5" />
-                          <span>—</span>
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  {/* Roles */}
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1.5">
-                      {user.roles && user.roles.length > 0 ? (
-                        user.roles.map((role) => (
-                          <Badge 
-                            key={role.id} 
-                            variant="outline" 
-                            className={cn("text-xs font-medium", getRoleBadgeColor(role.name))}
-                          >
-                            {role.display_name}
-                          </Badge>
-                        ))
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-slate-400 border-dashed">
-                          No Roles
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  {/* Status */}
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {user.is_active ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
-                          </span>
-                          <span className="text-sm font-medium text-green-700">Active</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2.5 w-2.5 rounded-full bg-slate-300"></span>
-                          <span className="text-sm font-medium text-slate-500">Inactive</span>
-                        </div>
-                      )}
-                      {user.is_locked && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-red-50 text-red-600 border-red-200">
-                          Locked
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  {/* Last Login */}
-                  <TableCell>
-                    {user.last_login ? (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>{format(new Date(user.last_login), 'MMM d, yyyy')}</span>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-slate-400 italic">Never logged in</span>
-                    )}
-                  </TableCell>
-
-                  {/* Actions */}
-                  <TableCell>
-                    {canManageUser(user) && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-                            Manage User
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => onResetPassword(user)}>
-                            <KeyRound className="mr-2 h-4 w-4" />
-                            Reset Password
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setAssignRolesUser(user)}>
-                            <UserCog className="mr-2 h-4 w-4" />
-                            Manage Roles
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleActive(user)}>
-                            {user.is_active ? (
-                              <>
-                                <UserX className="mr-2 h-4 w-4" />
-                                Deactivate User
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck className="mr-2 h-4 w-4" />
-                                Activate User
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDelete(user)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete User
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+      <div className="divide-y divide-slate-100">
+        {users.map((user) => (
+          <div 
+            key={user.id}
+            className={cn(
+              "px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors group",
+              user.id === currentUser?.id && "bg-blue-50/30"
             )}
-          </TableBody>
-        </Table>
+          >
+            {/* Avatar */}
+            <Avatar className="h-11 w-11 flex-shrink-0 border-2 border-white shadow-sm">
+              <AvatarFallback className={cn(
+                "text-sm font-medium",
+                user.is_active 
+                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
+                  : "bg-slate-200 text-slate-500"
+              )}>
+                {getInitials(user.full_name)}
+              </AvatarFallback>
+            </Avatar>
+
+            {/* User Info - Name & Email */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-900">{user.full_name}</span>
+                {user.id === currentUser?.id && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-600 border-blue-200">
+                    You
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5" />
+                  {user.email}
+                </span>
+                {user.phone && (
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" />
+                    {user.phone}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Roles */}
+            <div className="flex flex-wrap gap-1.5 flex-shrink-0 max-w-[200px] justify-end">
+              {user.roles && user.roles.length > 0 ? (
+                user.roles.map((role) => (
+                  <Badge 
+                    key={role.id} 
+                    variant="outline" 
+                    className={cn("text-xs font-medium", getRoleBadgeColor(role.name))}
+                  >
+                    {role.display_name}
+                  </Badge>
+                ))
+              ) : (
+                <Badge variant="outline" className="text-xs text-slate-400 border-dashed">
+                  No Roles
+                </Badge>
+              )}
+            </div>
+
+            {/* Status */}
+            <div className="flex-shrink-0 w-24">
+              {user.is_active ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  <span className="text-sm font-medium text-green-700">Active</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-slate-300"></span>
+                  <span className="text-sm font-medium text-slate-500">Inactive</span>
+                </div>
+              )}
+            </div>
+
+            {/* Last Login */}
+            <div className="flex-shrink-0 w-32 text-right">
+              {user.last_login ? (
+                <div className="flex items-center gap-1.5 justify-end text-sm text-slate-500">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{format(new Date(user.last_login), 'MMM d, yyyy')}</span>
+                </div>
+              ) : (
+                <span className="text-sm text-slate-400">Never</span>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex-shrink-0 w-10">
+              {canManageUser(user) ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+                      Manage User
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onResetPassword(user)}>
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      Reset Password
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAssignRolesUser(user)}>
+                      <UserCog className="mr-2 h-4 w-4" />
+                      Manage Roles
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleToggleActive(user)}>
+                      {user.is_active ? (
+                        <>
+                          <UserX className="mr-2 h-4 w-4" />
+                          Deactivate User
+                        </>
+                      ) : (
+                        <>
+                          <UserCheck className="mr-2 h-4 w-4" />
+                          Activate User
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => handleDelete(user)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete User
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="w-8" />
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Delete Confirmation Dialog */}
