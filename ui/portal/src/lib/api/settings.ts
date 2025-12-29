@@ -3,8 +3,10 @@
  */
 
 import { apiClient } from '@/lib/api-client';
+import type { PortalUserFull } from '@/types';
 
 const BASE_URL = '/api/portal/settings';
+const AUTH_URL = '/api/portal/auth';
 
 /**
  * Document requirement configuration type
@@ -36,6 +38,23 @@ export interface UpdateDocumentRequirementsRequest {
 }
 
 /**
+ * Profile update request
+ */
+export interface ProfileUpdateRequest {
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+}
+
+/**
+ * Change password request
+ */
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+/**
  * Get tenant document requirements for self-onboarding
  */
 export async function fetchDocumentRequirements(): Promise<DocumentRequirementsResponse> {
@@ -53,5 +72,29 @@ export async function updateDocumentRequirements(
     `${BASE_URL}/document-requirements`,
     data
   );
+  return response.data;
+}
+
+/**
+ * Get current user profile
+ */
+export async function fetchCurrentUserProfile(): Promise<PortalUserFull> {
+  const response = await apiClient.get<PortalUserFull>(`${AUTH_URL}/me`);
+  return response.data;
+}
+
+/**
+ * Update current user profile
+ */
+export async function updateProfile(data: ProfileUpdateRequest): Promise<PortalUserFull> {
+  const response = await apiClient.put<PortalUserFull>(`${AUTH_URL}/me`, data);
+  return response.data;
+}
+
+/**
+ * Change current user password
+ */
+export async function changePassword(data: ChangePasswordRequest): Promise<{ message: string }> {
+  const response = await apiClient.post<{ message: string }>(`${AUTH_URL}/change-password`, data);
   return response.data;
 }

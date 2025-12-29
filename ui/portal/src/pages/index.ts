@@ -24,9 +24,6 @@ export { JobDetailPage } from './jobs/JobDetailPage';
 export { EmailJobsPage } from './jobs/EmailJobsPage';
 export { ResumeTailorPage } from './jobs/ResumeTailorPage';
 
-// Team Management
-export { ManageTeamPage } from './team/ManageTeamPage';
-
 // Settings & Admin
 export { UsersPage } from './settings/UsersPage';
 export { RolesPage } from './settings/RolesPage';

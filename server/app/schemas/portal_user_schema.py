@@ -102,3 +102,36 @@ class UserRoleAssignmentSchema(BaseModel):
     role_ids: List[int] = Field(..., description="List of role IDs to assign to the user")
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileUpdateSchema(BaseModel):
+    """Schema for updating own profile."""
+    
+    first_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChangePasswordSchema(BaseModel):
+    """Schema for changing own password."""
+    
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(..., min_length=8, description="New password (min 8 chars)")
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Validate password has minimum requirements."""
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one digit")
+        return v

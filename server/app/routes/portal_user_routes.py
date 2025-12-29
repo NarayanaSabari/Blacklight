@@ -377,6 +377,114 @@ def reset_password(user_id: int):
         return error_response(str(e), 500)
 
 
+# =============================================================================
+# Profile Endpoints (Current User)
+# =============================================================================
+
+@bp.route("/auth/me", methods=["GET"])
+@require_portal_auth
+def get_current_user_profile():
+    """
+    Get current authenticated user's profile.
+    
+    Requires: Portal authentication
+    
+    Returns:
+        200: User profile details
+    """
+    try:
+        current_user = get_current_user()
+        user_id = current_user.get("user_id")
+        
+        user = PortalUserService.get_user(user_id)
+        
+        return jsonify(user.model_dump()), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 404)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/auth/me", methods=["PUT"])
+@require_portal_auth
+def update_current_user_profile():
+    """
+    Update current authenticated user's profile.
+    
+    Requires: Portal authentication
+    
+    Request body:
+        - first_name: string (optional)
+        - last_name: string (optional)
+        - phone: string (optional)
+    
+    Returns:
+        200: Updated user profile
+        400: Validation error
+    """
+    try:
+        from app.schemas.portal_user_schema import ProfileUpdateSchema
+        
+        current_user = get_current_user()
+        user_id = current_user.get("user_id")
+        changed_by = get_changed_by()
+        
+        data = ProfileUpdateSchema.model_validate(request.get_json())
+        
+        user = PortalUserService.update_own_profile(user_id, data, changed_by)
+        
+        # Update stored user in localStorage will happen on frontend
+        return jsonify(user.model_dump()), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/auth/change-password", methods=["POST"])
+@require_portal_auth
+def change_own_password():
+    """
+    Change current authenticated user's password.
+    
+    Requires: Portal authentication
+    
+    Request body:
+        - current_password: string (required)
+        - new_password: string (required, min 8 chars)
+    
+    Returns:
+        200: Password changed successfully
+        400: Current password incorrect or validation error
+    """
+    try:
+        from app.schemas.portal_user_schema import ChangePasswordSchema
+        
+        current_user = get_current_user()
+        user_id = current_user.get("user_id")
+        changed_by = get_changed_by()
+        
+        data = ChangePasswordSchema.model_validate(request.get_json())
+        
+        PortalUserService.change_own_password(
+            user_id, 
+            data.current_password, 
+            data.new_password, 
+            changed_by
+        )
+        
+        return jsonify({
+            "message": "Password changed successfully"
+        }), 200
+        
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
 @bp.route("/users/<int:user_id>/roles", methods=["PUT"])
 @require_tenant_admin
 @require_permission('users.manage_roles')

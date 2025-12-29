@@ -432,3 +432,114 @@ class PortalUserService:
         logger.info(f"Portal user password reset: {user_id} by {changed_by}")
 
         return PortalUserResponseSchema.model_validate(user.to_dict(include_roles=True, include_permissions=True))
+
+    @staticmethod
+    def update_own_profile(
+        user_id: int,
+        data,
+        changed_by: str,
+    ) -> PortalUserResponseSchema:
+        """
+        Update current user's own profile.
+        Users can only update their own first_name, last_name, and phone.
+
+        Args:
+            user_id: User ID to update
+            data: Profile update data (first_name, last_name, phone)
+            changed_by: Identifier for audit log
+
+        Returns:
+            PortalUserResponseSchema with updated user
+
+        Raises:
+            ValueError: If user not found
+        """
+        user = db.session.get(PortalUser, user_id)
+        if not user:
+            raise ValueError(f"User with ID {user_id} not found")
+
+        changes = {}
+
+        # Update first_name
+        if data.first_name is not None and data.first_name != user.first_name:
+            changes["first_name"] = (user.first_name, data.first_name)
+            user.first_name = data.first_name
+
+        # Update last_name
+        if data.last_name is not None and data.last_name != user.last_name:
+            changes["last_name"] = (user.last_name, data.last_name)
+            user.last_name = data.last_name
+
+        # Update phone
+        if data.phone is not None and data.phone != user.phone:
+            changes["phone"] = (user.phone, data.phone)
+            user.phone = data.phone
+
+        # Commit if there are changes
+        if changes:
+            db.session.commit()
+
+            # Log audit
+            AuditLogService.log_action(
+                action="UPDATE_PROFILE",
+                entity_type="PortalUser",
+                entity_id=user_id,
+                changed_by=changed_by,
+                changes=changes,
+            )
+
+            logger.info(f"Portal user profile updated: {user_id} by {changed_by}")
+
+        return PortalUserResponseSchema.model_validate(user.to_dict(include_roles=True, include_permissions=True))
+
+    @staticmethod
+    def change_own_password(
+        user_id: int,
+        current_password: str,
+        new_password: str,
+        changed_by: str,
+    ) -> bool:
+        """
+        Change current user's own password.
+
+        Args:
+            user_id: User ID
+            current_password: Current password for verification
+            new_password: New password to set
+            changed_by: Identifier for audit log
+
+        Returns:
+            True if password changed successfully
+
+        Raises:
+            ValueError: If current password is incorrect or user not found
+        """
+        user = db.session.get(PortalUser, user_id)
+        if not user:
+            raise ValueError(f"User with ID {user_id} not found")
+
+        # Verify current password
+        if not bcrypt.checkpw(current_password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise ValueError("Current password is incorrect")
+
+        # Hash new password
+        password_hash = bcrypt.hashpw(
+            new_password.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+
+        user.password_hash = password_hash
+
+        db.session.commit()
+
+        # Log audit (don't include password in changes)
+        AuditLogService.log_action(
+            action="CHANGE_PASSWORD",
+            entity_type="PortalUser",
+            entity_id=user_id,
+            changed_by=changed_by,
+            changes={"email": user.email},
+        )
+
+        logger.info(f"Portal user password changed: {user_id} by {changed_by}")
+
+        return True

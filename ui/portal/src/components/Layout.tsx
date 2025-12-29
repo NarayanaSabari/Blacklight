@@ -17,7 +17,6 @@ import {
   Building2,
   UserCog,
   FolderOpen,
-  Network,
   UserCheck,
   Mail,
   LayoutGrid,
@@ -105,18 +104,11 @@ const navigation: NavItem[] = [
     roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
   },
   {
-    id: 'manage-team',
-    label: 'Manage Team',
-    icon: Network,
-    href: '/manage-team',
-    roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
-  },
-  {
     id: 'settings',
     label: 'Settings',
     icon: Settings,
     href: '/settings',
-    roles: ['TENANT_ADMIN'],
+    roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
   },
 ];
 

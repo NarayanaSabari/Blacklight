@@ -1,29 +1,110 @@
 /**
  * Settings Page
- * Organization and user settings
+ * Modern settings page with sidebar navigation
  */
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { usePortalAuth } from '@/contexts/PortalAuthContext';
-import { Building2, User, Bell, Shield, FileCheck, Link2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DocumentRequirementsSettings, EmailIntegrationsSettings } from '@/components/settings';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { useMemo, useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { 
+  User, 
+  Building2, 
+  Users, 
+  FileCheck, 
+  Link2, 
+  Bell, 
+  Shield,
+  ChevronRight,
+  Settings
+} from 'lucide-react';
+import { 
+  DocumentRequirementsSettings, 
+  EmailIntegrationsSettings, 
+  TeamMembersSettings,
+  ProfileSettings,
+  OrganizationSettings
+} from '@/components/settings';
+
+// Navigation items configuration
+const navigationItems = [
+  {
+    id: 'profile',
+    label: 'Profile',
+    description: 'Your personal information',
+    icon: User,
+    component: ProfileSettings,
+  },
+  {
+    id: 'organization',
+    label: 'Organization',
+    description: 'Company details and subscription',
+    icon: Building2,
+    component: OrganizationSettings,
+  },
+  {
+    id: 'team',
+    label: 'Team',
+    description: 'Team hierarchy and managers',
+    icon: Users,
+    component: TeamMembersSettings,
+  },
+  {
+    id: 'onboarding',
+    label: 'Onboarding',
+    description: 'Document requirements',
+    icon: FileCheck,
+    component: DocumentRequirementsSettings,
+  },
+  {
+    id: 'integrations',
+    label: 'Integrations',
+    description: 'Email and third-party services',
+    icon: Link2,
+    component: EmailIntegrationsSettings,
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Notification preferences',
+    icon: Bell,
+    component: null, // Coming soon
+  },
+  {
+    id: 'security',
+    label: 'Security',
+    description: 'Security and privacy settings',
+    icon: Shield,
+    component: null, // Coming soon
+  },
+];
+
+// Coming Soon placeholder component
+function ComingSoon({ title, icon: Icon }: { title: string; icon: React.ElementType }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+        <Icon className="h-8 w-8 text-slate-400" />
+      </div>
+      <h3 className="text-xl font-semibold text-slate-900 mb-2">{title}</h3>
+      <p className="text-slate-600 max-w-sm">
+        This feature is coming soon. We're working hard to bring you more options.
+      </p>
+    </div>
+  );
+}
 
 export function SettingsPage() {
-  const { user, tenantName } = usePortalAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { tab } = useParams<{ tab?: string }>();
 
-  // Auto-switch to integrations tab when OAuth callback params are present
-  const defaultTab = useMemo(() => {
+  // Valid tab names
+  const validTabs = navigationItems.map(item => item.id);
+
+  // Determine active tab
+  const activeTab = useMemo(() => {
     // URL path takes precedence
-    if (tab && ['profile', 'organization', 'onboarding', 'integrations', 'notifications', 'security'].includes(tab)) {
+    if (tab && validTabs.includes(tab)) {
       return tab;
     }
     // Then check OAuth callback params
@@ -33,178 +114,131 @@ export function SettingsPage() {
       return 'integrations';
     }
     return 'profile';
-  }, [searchParams, tab]);
-
-  // Update URL when tab changes
-  const handleTabChange = (value: string) => {
-    navigate(`/settings/${value}`);
-  };
+  }, [searchParams, tab, validTabs]);
 
   // Redirect to default tab if at /settings root
   useEffect(() => {
     if (!tab) {
-      navigate(`/settings/${defaultTab}`, { replace: true });
+      navigate(`/settings/${activeTab}`, { replace: true });
     }
-  }, [tab, defaultTab, navigate]);
+  }, [tab, activeTab, navigate]);
+
+  // Handle navigation item click
+  const handleNavClick = (itemId: string) => {
+    navigate(`/settings/${itemId}`);
+  };
+
+  // Get active navigation item
+  const activeItem = navigationItems.find(item => item.id === activeTab);
+  const ActiveComponent = activeItem?.component;
 
   return (
-    <div className="space-y-6">
-      {/* Settings Tabs */}
-      <Tabs value={defaultTab} onValueChange={handleTabChange} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="profile" className="gap-2">
-            <User className="h-4 w-4" />
-            Profile
-          </TabsTrigger>
-          <TabsTrigger value="organization" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Organization
-          </TabsTrigger>
-          <TabsTrigger value="onboarding" className="gap-2">
-            <FileCheck className="h-4 w-4" />
-            Onboarding
-          </TabsTrigger>
-          <TabsTrigger value="integrations" className="gap-2">
-            <Link2 className="h-4 w-4" />
-            Integrations
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="h-4 w-4" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
-            <Shield className="h-4 w-4" />
-            Security
-          </TabsTrigger>
-        </TabsList>
+    <div className="min-h-[calc(100vh-8rem)]">
+      {/* Page Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 rounded-lg bg-slate-100">
+            <Settings className="h-6 w-6 text-slate-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+            <p className="text-slate-600">Manage your account and organization preferences</p>
+          </div>
+        </div>
+      </div>
 
-        {/* Profile Tab */}
-        <TabsContent value="profile" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>Update your personal details</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name</Label>
-                  <Input id="first_name" defaultValue={user?.first_name} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="last_name">Last Name</Label>
-                  <Input id="last_name" defaultValue={user?.last_name} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue={user?.email} disabled />
-                <p className="text-sm text-slate-500">Contact admin to change your email</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" type="tel" defaultValue={user?.phone || ''} placeholder="+1 (555) 000-0000" />
-              </div>
-              <Button>Save Changes</Button>
-            </CardContent>
-          </Card>
+      {/* Main Layout */}
+      <div className="flex gap-6">
+        {/* Sidebar Navigation */}
+        <nav className="w-72 flex-shrink-0">
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="p-4 border-b bg-slate-50">
+              <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
+                Settings Menu
+              </h2>
+            </div>
+            <div className="p-2">
+              {navigationItems.map((item) => {
+                const isActive = activeTab === item.id;
+                const Icon = item.icon;
+                
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all duration-150 group",
+                      isActive
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <div className={cn(
+                      "p-2 rounded-lg transition-colors",
+                      isActive 
+                        ? "bg-blue-100" 
+                        : "bg-slate-100 group-hover:bg-slate-200"
+                    )}>
+                      <Icon className={cn(
+                        "h-4 w-4",
+                        isActive ? "text-blue-600" : "text-slate-500"
+                      )} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={cn(
+                        "font-medium text-sm",
+                        isActive ? "text-blue-700" : "text-slate-900"
+                      )}>
+                        {item.label}
+                      </div>
+                      <div className={cn(
+                        "text-xs truncate",
+                        isActive ? "text-blue-600" : "text-slate-500"
+                      )}>
+                        {item.description}
+                      </div>
+                    </div>
+                    <ChevronRight className={cn(
+                      "h-4 w-4 transition-transform",
+                      isActive 
+                        ? "text-blue-500 translate-x-0" 
+                        : "text-slate-400 -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
+                    )} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your password</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current_password">Current Password</Label>
-                <Input id="current_password" type="password" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="new_password">New Password</Label>
-                <Input id="new_password" type="password" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm_password">Confirm New Password</Label>
-                <Input id="confirm_password" type="password" />
-              </div>
-              <Button>Update Password</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
+          {/* Help Card */}
+          <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+            <h3 className="font-semibold text-slate-900 mb-1">Need Help?</h3>
+            <p className="text-sm text-slate-600 mb-3">
+              Check our documentation or contact support for assistance.
+            </p>
+            <a 
+              href="mailto:support@blacklight.com"
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+            >
+              Contact Support
+            </a>
+          </div>
+        </nav>
 
-        {/* Organization Tab */}
-        <TabsContent value="organization" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organization Details</CardTitle>
-              <CardDescription>Information about your organization</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Company Name</Label>
-                <Input defaultValue={tenantName || ''} disabled />
-                <p className="text-sm text-slate-500">Contact support to change your company name</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Organization ID</Label>
-                <Input defaultValue={user?.tenant?.slug || ''} disabled className="font-mono text-sm" />
-              </div>
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <Input defaultValue={user?.tenant?.status || ''} disabled />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Onboarding Tab */}
-        <TabsContent value="onboarding" className="space-y-4">
-          <DocumentRequirementsSettings />
-        </TabsContent>
-
-        {/* Integrations Tab */}
-        <TabsContent value="integrations" className="space-y-4">
-          <EmailIntegrationsSettings />
-        </TabsContent>
-
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Manage how you receive notifications</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Bell className="h-12 w-12 text-slate-400 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Coming Soon</h3>
-                <p className="text-slate-600 max-w-sm">
-                  Notification preferences will be available in a future update
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Security Tab */}
-        <TabsContent value="security" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security Settings</CardTitle>
-              <CardDescription>Manage your account security</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Shield className="h-12 w-12 text-slate-400 mb-4" />
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Coming Soon</h3>
-                <p className="text-slate-600 max-w-sm">
-                  Two-factor authentication and other security features will be available soon
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {/* Content Area */}
+        <div className="flex-1 min-w-0">
+          {ActiveComponent ? (
+            <ActiveComponent />
+          ) : (
+            <div className="bg-white rounded-xl border shadow-sm p-8">
+              <ComingSoon 
+                title={activeItem?.label || 'Coming Soon'} 
+                icon={activeItem?.icon || Settings} 
+              />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 /**
- * Manage Team Page
+ * Team Members Settings Component
  * View team hierarchy and manage manager assignments
  */
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -51,7 +51,7 @@ import { teamApi } from '@/lib/teamApi';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { TeamMember, UserBasicInfo } from '@/types';
 
-export function ManageTeamPage() {
+export function TeamMembersSettings() {
   const queryClient = useQueryClient();
   const { hasPermission } = usePermissions();
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -282,90 +282,64 @@ export function ManageTeamPage() {
 
   if (!canViewTeam) {
     return (
-      <div className="space-y-6">
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to view team information. Contact your administrator for access.
-          </AlertDescription>
-        </Alert>
-      </div>
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          You don't have permission to view team information. Contact your administrator for access.
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Main Card with Tabs */}
+    <>
       <Card>
-        <CardHeader className="border-b bg-slate-50/50">
+        <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Team Members</CardTitle>
+              <CardDescription>View and manage your team hierarchy</CardDescription>
+            </div>
             {/* Inline Stats */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-md bg-blue-100">
                   <Users className="h-4 w-4 text-blue-600" />
                 </div>
                 <div>
-                  <span className="text-2xl font-bold">
+                  <span className="text-xl font-bold">
                     {isLoadingHierarchy ? '-' : Math.max(0, (hierarchyData?.total_users || 0) - 1)}
                   </span>
-                  <span className="text-sm text-muted-foreground ml-1.5">Members</span>
+                  <span className="text-sm text-muted-foreground ml-1">Members</span>
                 </div>
               </div>
-              <div className="h-8 w-px bg-border" />
-              <div className="flex items-center gap-4 text-sm">
-                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                  <UserCog className="h-3 w-3 mr-1" />
-                  {managersData?.total || 0} Managers
-                </Badge>
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                  <GitBranch className="h-3 w-3 mr-1" />
-                  {(() => {
-                    let maxLevel = 0;
-                    const calculateDepth = (members: TeamMember[], level: number = 0) => {
-                      members.forEach((member) => {
-                        if (level > maxLevel) maxLevel = level;
-                        if (member.team_members && member.team_members.length > 0) {
-                          calculateDepth(member.team_members, level + 1);
-                        }
-                      });
-                    };
-                    if (hierarchyData) calculateDepth(hierarchyData.top_level_users);
-                    return maxLevel + 1;
-                  })()} Levels
-                </Badge>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={expandAll}
-                disabled={isLoadingHierarchy}
-                className="gap-1.5"
-              >
-                <Expand className="h-3.5 w-3.5" />
-                Expand All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={collapseAll}
-                disabled={isLoadingHierarchy}
-                className="gap-1.5"
-              >
-                <Minimize2 className="h-3.5 w-3.5" />
-                Collapse All
-              </Button>
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                <UserCog className="h-3 w-3 mr-1" />
+                {managersData?.total || 0} Managers
+              </Badge>
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <GitBranch className="h-3 w-3 mr-1" />
+                {(() => {
+                  let maxLevel = 0;
+                  const calculateDepth = (members: TeamMember[], level: number = 0) => {
+                    members.forEach((member) => {
+                      if (level > maxLevel) maxLevel = level;
+                      if (member.team_members && member.team_members.length > 0) {
+                        calculateDepth(member.team_members, level + 1);
+                      }
+                    });
+                  };
+                  if (hierarchyData) calculateDepth(hierarchyData.top_level_users);
+                  return maxLevel + 1;
+                })()} Levels
+              </Badge>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="p-0">
           <Tabs defaultValue="hierarchy" className="w-full">
-            <div className="px-6 pt-4 border-b">
+            <div className="px-6 pt-4 border-t flex items-center justify-between">
               <TabsList className="bg-muted/50 h-10">
                 <TabsTrigger value="hierarchy" className="gap-2 px-4">
                   <GitBranch className="h-4 w-4" />
@@ -376,11 +350,35 @@ export function ManageTeamPage() {
                   Managers List
                 </TabsTrigger>
               </TabsList>
+              
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={expandAll}
+                  disabled={isLoadingHierarchy}
+                  className="gap-1.5"
+                >
+                  <Expand className="h-3.5 w-3.5" />
+                  Expand All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={collapseAll}
+                  disabled={isLoadingHierarchy}
+                  className="gap-1.5"
+                >
+                  <Minimize2 className="h-3.5 w-3.5" />
+                  Collapse All
+                </Button>
+              </div>
             </div>
 
             {/* Hierarchy Tab */}
             <TabsContent value="hierarchy" className="mt-0">
-              <div className="p-6">
+              <div className="p-6 border-t">
                 {isLoadingHierarchy ? (
                   <div className="space-y-2">
                     <Skeleton className="h-12 w-full" />
@@ -411,7 +409,7 @@ export function ManageTeamPage() {
             </TabsContent>
 
             {/* Managers Tab */}
-            <TabsContent value="managers" className="mt-0">
+            <TabsContent value="managers" className="mt-0 border-t">
               {isLoadingManagers ? (
                 <div className="p-6 space-y-2">
                   <Skeleton className="h-12 w-full" />
@@ -547,6 +545,6 @@ export function ManageTeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
