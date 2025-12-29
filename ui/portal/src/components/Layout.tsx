@@ -15,7 +15,6 @@ import {
   BarChart3,
   Settings,
   Building2,
-  UserCog,
   FolderOpen,
   UserCheck,
   Mail,
@@ -95,13 +94,6 @@ const navigation: NavItem[] = [
     icon: Mail,
     href: '/email-jobs',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
-  },
-  {
-    id: 'users',
-    label: 'Team Members',
-    icon: UserCog,
-    href: '/users',
-    roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
   },
   {
     id: 'settings',

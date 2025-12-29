@@ -1,6 +1,6 @@
 /**
  * Kanban Board Page
- * Visual pipeline view of candidates across different stages
+ * Modern visual pipeline view of candidates across different stages
  * Features: Drag-and-drop, filters (recruiter, date range, source), contact info
  */
 
@@ -68,12 +68,20 @@ import {
   Eye,
   XCircle,
   RefreshCw,
-  Filter,
   Mail,
   Phone,
   CalendarIcon,
   GripVertical,
   X,
+  Users,
+  Filter,
+  ChevronDown,
+  Inbox,
+  FileSearch,
+  CheckCircle2,
+  MessageSquare,
+  FileText,
+  PartyPopper,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { teamApi } from '@/lib/teamApi';
@@ -83,71 +91,85 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { DateRange } from 'react-day-picker';
 
-// Pipeline stage configuration
+// Pipeline stage configuration with modern design
 interface PipelineStage {
   id: CandidateStatus;
   label: string;
-  color: string;
-  bgColor: string;
+  icon: React.ElementType;
+  gradient: string;
+  lightBg: string;
+  iconColor: string;
   borderColor: string;
-  dropBgColor: string;
-  icon: string;
+  badgeBg: string;
+  badgeText: string;
 }
 
 const PIPELINE_STAGES: PipelineStage[] = [
   {
     id: 'new',
     label: 'New',
-    color: 'text-blue-700',
-    bgColor: 'bg-blue-50',
+    icon: Inbox,
+    gradient: 'from-blue-500 to-blue-600',
+    lightBg: 'bg-blue-50',
+    iconColor: 'text-blue-600',
     borderColor: 'border-blue-200',
-    dropBgColor: 'bg-blue-100/50',
-    icon: '📥',
+    badgeBg: 'bg-blue-100',
+    badgeText: 'text-blue-700',
   },
   {
     id: 'screening',
     label: 'Screening',
-    color: 'text-purple-700',
-    bgColor: 'bg-purple-50',
+    icon: FileSearch,
+    gradient: 'from-purple-500 to-purple-600',
+    lightBg: 'bg-purple-50',
+    iconColor: 'text-purple-600',
     borderColor: 'border-purple-200',
-    dropBgColor: 'bg-purple-100/50',
-    icon: '🔍',
+    badgeBg: 'bg-purple-100',
+    badgeText: 'text-purple-700',
   },
   {
     id: 'ready_for_assignment',
     label: 'Ready',
-    color: 'text-green-700',
-    bgColor: 'bg-green-50',
+    icon: CheckCircle2,
+    gradient: 'from-green-500 to-green-600',
+    lightBg: 'bg-green-50',
+    iconColor: 'text-green-600',
     borderColor: 'border-green-200',
-    dropBgColor: 'bg-green-100/50',
-    icon: '✅',
+    badgeBg: 'bg-green-100',
+    badgeText: 'text-green-700',
   },
   {
     id: 'interviewed',
-    label: 'Interviewing',
-    color: 'text-orange-700',
-    bgColor: 'bg-orange-50',
+    label: 'Interview',
+    icon: MessageSquare,
+    gradient: 'from-orange-500 to-orange-600',
+    lightBg: 'bg-orange-50',
+    iconColor: 'text-orange-600',
     borderColor: 'border-orange-200',
-    dropBgColor: 'bg-orange-100/50',
-    icon: '💬',
+    badgeBg: 'bg-orange-100',
+    badgeText: 'text-orange-700',
   },
   {
     id: 'offered',
     label: 'Offered',
-    color: 'text-amber-700',
-    bgColor: 'bg-amber-50',
+    icon: FileText,
+    gradient: 'from-amber-500 to-amber-600',
+    lightBg: 'bg-amber-50',
+    iconColor: 'text-amber-600',
     borderColor: 'border-amber-200',
-    dropBgColor: 'bg-amber-100/50',
-    icon: '📋',
+    badgeBg: 'bg-amber-100',
+    badgeText: 'text-amber-700',
   },
   {
     id: 'hired',
     label: 'Hired',
-    color: 'text-emerald-700',
-    bgColor: 'bg-emerald-50',
+    icon: PartyPopper,
+    gradient: 'from-emerald-500 to-emerald-600',
+    lightBg: 'bg-emerald-50',
+    iconColor: 'text-emerald-600',
     borderColor: 'border-emerald-200',
-    dropBgColor: 'bg-emerald-100/50',
-    icon: '🎉',
+    badgeBg: 'bg-emerald-100',
+    badgeText: 'text-emerald-700',
   },
 ];
 
@@ -222,35 +244,35 @@ function CandidateCard({ candidate, onView, onMoveToStage, dragHandleProps, isOv
   return (
     <Card 
       className={cn(
-        "cursor-pointer hover:shadow-md transition-all hover:border-primary/50 group",
-        isOverlay && "shadow-xl rotate-2 scale-105"
+        "cursor-pointer bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-lg transition-all duration-200 group",
+        isOverlay && "shadow-2xl rotate-2 scale-105 border-primary"
       )}
       onClick={() => onView(candidate.id)}
     >
-      <CardContent className="p-3">
+      <CardContent className="p-4">
         {/* Header with avatar, drag handle, and actions */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
             {/* Drag handle */}
             {dragHandleProps && (
               <div
                 {...dragHandleProps}
-                className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-muted"
+                className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded-md hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => e.stopPropagation()}
               >
-                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                <GripVertical className="h-4 w-4 text-slate-400" />
               </div>
             )}
             
-            <Avatar className="h-8 w-8 flex-shrink-0">
-              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+            <Avatar className="h-10 w-10 flex-shrink-0 border-2 border-white shadow-sm">
+              <AvatarFallback className="bg-gradient-to-br from-slate-700 to-slate-900 text-white text-sm font-medium">
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <h4 className="font-medium text-sm truncate">{fullName}</h4>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-semibold text-slate-900 truncate text-sm">{fullName}</h4>
               {candidate.current_title && (
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-slate-500 truncate">
                   {candidate.current_title}
                 </p>
               )}
@@ -263,74 +285,78 @@ function CandidateCard({ candidate, onView, onMoveToStage, dragHandleProps, isOv
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
               <DropdownMenuItem onClick={() => onView(candidate.id)}>
                 <Eye className="h-4 w-4 mr-2" />
                 View Profile
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                Move to Stage
+              <div className="px-2 py-1.5 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Move to
               </div>
-              {PIPELINE_STAGES.filter(s => s.id !== candidate.status).map((stage) => (
-                <DropdownMenuItem
-                  key={stage.id}
-                  onClick={() => onMoveToStage(candidate.id, stage.id)}
-                >
-                  <span className="mr-2">{stage.icon}</span>
-                  {stage.label}
-                </DropdownMenuItem>
-              ))}
+              {PIPELINE_STAGES.filter(s => s.id !== candidate.status).map((stage) => {
+                const Icon = stage.icon;
+                return (
+                  <DropdownMenuItem
+                    key={stage.id}
+                    onClick={() => onMoveToStage(candidate.id, stage.id)}
+                    className="gap-2"
+                  >
+                    <Icon className={cn("h-4 w-4", stage.iconColor)} />
+                    {stage.label}
+                  </DropdownMenuItem>
+                );
+              })}
               <DropdownMenuSeparator />
               <DropdownMenuItem 
-                className="text-destructive"
+                className="text-red-600 focus:text-red-600 gap-2"
                 onClick={() => onMoveToStage(candidate.id, 'rejected')}
               >
-                <XCircle className="h-4 w-4 mr-2" />
+                <XCircle className="h-4 w-4" />
                 Reject
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        {/* Contact Info - Email & Phone */}
-        <div className="space-y-1 mb-2">
+        {/* Contact Info - Compact */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-xs text-slate-500">
           {candidate.email && (
-            <TooltipProvider>
+            <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
                     href={`mailto:${candidate.email}`}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Mail className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{candidate.email}</span>
+                    <Mail className="h-3 w-3" />
+                    <span className="truncate max-w-[100px]">{candidate.email}</span>
                   </a>
                 </TooltipTrigger>
-                <TooltipContent>{candidate.email}</TooltipContent>
+                <TooltipContent side="bottom">{candidate.email}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
           {candidate.phone && (
-            <TooltipProvider>
+            <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <a
                     href={`tel:${candidate.phone}`}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                    className="flex items-center gap-1 hover:text-blue-600 transition-colors"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Phone className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{candidate.phone}</span>
+                    <Phone className="h-3 w-3" />
+                    <span>{candidate.phone}</span>
                   </a>
                 </TooltipTrigger>
-                <TooltipContent>{candidate.phone}</TooltipContent>
+                <TooltipContent side="bottom">{candidate.phone}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
@@ -338,44 +364,50 @@ function CandidateCard({ candidate, onView, onMoveToStage, dragHandleProps, isOv
 
         {/* Skills badges */}
         {candidate.skills && candidate.skills.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
+          <div className="flex flex-wrap gap-1 mb-3">
             {candidate.skills.slice(0, 3).map((skill, idx) => (
-              <Badge key={idx} variant="secondary" className="text-[10px] px-1.5 py-0">
+              <Badge 
+                key={idx} 
+                variant="secondary" 
+                className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 font-normal"
+              >
                 {skill}
               </Badge>
             ))}
             {candidate.skills.length > 3 && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="text-[10px] px-2 py-0.5 text-slate-400 font-normal">
                 +{candidate.skills.length - 3}
               </Badge>
             )}
           </div>
         )}
 
-        {/* Meta info */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {candidate.location && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1 truncate max-w-[80px]">
-                    <MapPin className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{candidate.location}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>{candidate.location}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {candidate.total_experience_years !== undefined && candidate.total_experience_years > 0 && (
-            <div className="flex items-center gap-1">
-              <Briefcase className="h-3 w-3" />
-              <span>{candidate.total_experience_years}y</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1 ml-auto">
+        {/* Footer meta */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            {candidate.location && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      <span className="truncate max-w-[60px]">{candidate.location}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>{candidate.location}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {candidate.total_experience_years !== undefined && candidate.total_experience_years > 0 && (
+              <div className="flex items-center gap-1">
+                <Briefcase className="h-3 w-3" />
+                <span>{candidate.total_experience_years}y exp</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-slate-400">
             <Clock className="h-3 w-3" />
-            <span className="truncate">{timeAgo}</span>
+            <span>{timeAgo}</span>
           </div>
         </div>
       </CardContent>
@@ -397,56 +429,89 @@ interface KanbanColumnProps {
 }
 
 function KanbanColumn({ stage, candidates, isLoading, isOver, onViewCandidate, onMoveCandidate }: KanbanColumnProps) {
+  const Icon = stage.icon;
+  
   return (
     <div 
       className={cn(
-        "flex flex-col min-w-[300px] max-w-[340px] rounded-lg transition-colors",
-        isOver ? stage.dropBgColor : "bg-muted/30"
+        "flex flex-col w-[320px] min-w-[320px] rounded-xl transition-all duration-200",
+        isOver 
+          ? `${stage.lightBg} ring-2 ring-offset-2 ring-offset-slate-50 ring-${stage.iconColor.replace('text-', '')}`
+          : "bg-slate-100/50"
       )}
       data-column-id={stage.id}
     >
       {/* Column header */}
-      <div className={`px-3 py-2 rounded-t-lg ${stage.bgColor} border-b ${stage.borderColor}`}>
+      <div className={cn("px-4 py-3 rounded-t-xl", stage.lightBg)}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{stage.icon}</span>
-            <h3 className={`font-semibold ${stage.color}`}>{stage.label}</h3>
+          <div className="flex items-center gap-2.5">
+            <div className={cn(
+              "p-1.5 rounded-lg bg-gradient-to-br shadow-sm",
+              stage.gradient
+            )}>
+              <Icon className="h-4 w-4 text-white" />
+            </div>
+            <h3 className="font-semibold text-slate-800 text-sm">{stage.label}</h3>
           </div>
-          <Badge variant="secondary" className="font-bold">
+          <Badge 
+            className={cn(
+              "font-bold text-xs px-2 py-0.5 rounded-full",
+              stage.badgeBg,
+              stage.badgeText
+            )}
+          >
             {candidates.length}
           </Badge>
         </div>
       </div>
 
       {/* Cards container */}
-      <ScrollArea className="flex-1 p-2">
+      <ScrollArea className="flex-1 px-2 py-2">
         <SortableContext items={candidates.map(c => c.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2 min-h-[200px]">
+          <div className="space-y-2 min-h-[200px] pb-2">
             {isLoading ? (
               // Loading skeletons
               Array.from({ length: 3 }).map((_, idx) => (
-                <Card key={idx} className="p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Skeleton className="h-8 w-8 rounded-full" />
-                    <div className="flex-1">
-                      <Skeleton className="h-4 w-24 mb-1" />
-                      <Skeleton className="h-3 w-32" />
+                <Card key={idx} className="p-4 bg-white">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-36" />
                     </div>
                   </div>
-                  <div className="flex gap-1 mb-2">
-                    <Skeleton className="h-4 w-12" />
-                    <Skeleton className="h-4 w-16" />
+                  <div className="flex gap-1 mb-3">
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                    <Skeleton className="h-5 w-18 rounded-full" />
                   </div>
                   <Skeleton className="h-3 w-full" />
                 </Card>
               ))
             ) : candidates.length === 0 ? (
               <div className={cn(
-                "flex flex-col items-center justify-center h-[200px] text-muted-foreground border-2 border-dashed rounded-lg",
-                isOver && "border-primary bg-primary/5"
+                "flex flex-col items-center justify-center h-[200px] text-center rounded-xl border-2 border-dashed transition-all",
+                isOver 
+                  ? `${stage.borderColor} ${stage.lightBg}` 
+                  : "border-slate-200 bg-white/50"
               )}>
-                <User className="h-8 w-8 mb-2 opacity-50" />
-                <p className="text-sm">{isOver ? 'Drop here' : 'No candidates'}</p>
+                <div className={cn(
+                  "p-3 rounded-full mb-3",
+                  isOver ? stage.lightBg : "bg-slate-100"
+                )}>
+                  <User className={cn(
+                    "h-6 w-6",
+                    isOver ? stage.iconColor : "text-slate-400"
+                  )} />
+                </div>
+                <p className={cn(
+                  "text-sm font-medium",
+                  isOver ? stage.iconColor : "text-slate-500"
+                )}>
+                  {isOver ? 'Drop here' : 'No candidates'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isOver ? '' : 'Drag cards here'}
+                </p>
               </div>
             ) : (
               candidates.map((candidate) => (
@@ -478,22 +543,29 @@ function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="w-[240px] justify-start text-left font-normal">
-          <CalendarIcon className="mr-2 h-4 w-4" />
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className={cn(
+            "h-9 w-[200px] justify-start text-left font-normal border-slate-200 bg-white",
+            !value && "text-slate-500"
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
           {value?.from ? (
             value.to ? (
-              <>
-                {format(value.from, 'LLL dd')} - {format(value.to, 'LLL dd')}
-              </>
+              <span className="text-slate-700">
+                {format(value.from, 'MMM d')} - {format(value.to, 'MMM d')}
+              </span>
             ) : (
-              format(value.from, 'LLL dd, yyyy')
+              <span className="text-slate-700">{format(value.from, 'MMM d, yyyy')}</span>
             )
           ) : (
-            <span className="text-muted-foreground">Date range</span>
+            <span>Date range</span>
           )}
           {value && (
             <X
-              className="ml-auto h-4 w-4 hover:text-destructive"
+              className="ml-auto h-4 w-4 text-slate-400 hover:text-slate-600"
               onClick={(e) => {
                 e.stopPropagation();
                 onChange(undefined);
@@ -528,6 +600,7 @@ export function KanbanBoardPage() {
   const [filterSource, setFilterSource] = useState<string>('all');
   const [filterRecruiter, setFilterRecruiter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [showFilters, setShowFilters] = useState(false);
   
   // Drag state
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -737,6 +810,7 @@ export function KanbanBoardPage() {
   };
 
   const hasActiveFilters = searchQuery || filterSource !== 'all' || filterRecruiter !== 'all' || dateRange;
+  const activeFilterCount = [searchQuery, filterSource !== 'all', filterRecruiter !== 'all', dateRange].filter(Boolean).length;
 
   // Calculate totals
   const totalInPipeline = Object.values(candidatesByStage).reduce((sum, arr) => sum + arr.length, 0);
@@ -749,86 +823,136 @@ export function KanbanBoardPage() {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="space-y-4 h-full">
-        {/* Action Bar */}
-        <div className="flex items-center justify-between">
-          <p className="text-muted-foreground">
-            {totalInPipeline} candidates in pipeline
-            {hasActiveFilters && ' (filtered)'}
-          </p>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => refetch()}
-            disabled={isLoading}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+      <div className="flex flex-col h-full -mt-2">
+        {/* Header Bar */}
+        <div className="bg-white border-b border-slate-200 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-4 mb-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            {/* Left side - Stats & Search */}
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              {/* Pipeline Stats */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
+                <Users className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-semibold text-slate-700">{totalInPipeline}</span>
+                <span className="text-sm text-slate-500">in pipeline</span>
+                {hasActiveFilters && (
+                  <Badge variant="secondary" className="ml-1 text-xs">filtered</Badge>
+                )}
+              </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search name, email, phone, skills..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+              {/* Search */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search by name, email, phone, skills..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9 bg-slate-50 border-slate-200 focus:bg-white"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                    onClick={() => setSearchQuery('')}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Right side - Actions */}
+            <div className="flex items-center gap-2">
+              {/* Filter Toggle */}
+              <Button
+                variant={showFilters ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="h-9 gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge className="ml-1 h-5 w-5 p-0 justify-center bg-blue-600">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+                <ChevronDown className={cn("h-4 w-4 transition-transform", showFilters && "rotate-180")} />
+              </Button>
+
+              {/* Refresh Button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetch()}
+                disabled={isLoading}
+                className="h-9 gap-2"
+              >
+                <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            </div>
           </div>
 
-          {/* Source Filter */}
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={filterSource} onValueChange={setFilterSource}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {source}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Collapsible Filters */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-3">
+              {/* Source Filter */}
+              <Select value={filterSource} onValueChange={setFilterSource}>
+                <SelectTrigger className="w-[160px] h-9 bg-white">
+                  <SelectValue placeholder="All Sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sources</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-          {/* Recruiter Filter */}
-          {recruiters.length > 0 && (
-            <Select value={filterRecruiter} onValueChange={setFilterRecruiter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Recruiter" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Recruiters</SelectItem>
-                {recruiters.map((recruiter) => (
-                  <SelectItem key={recruiter.id} value={recruiter.id.toString()}>
-                    {recruiter.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+              {/* Recruiter Filter */}
+              {recruiters.length > 0 && (
+                <Select value={filterRecruiter} onValueChange={setFilterRecruiter}>
+                  <SelectTrigger className="w-[180px] h-9 bg-white">
+                    <SelectValue placeholder="All Recruiters" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Recruiters</SelectItem>
+                    {recruiters.map((recruiter) => (
+                      <SelectItem key={recruiter.id} value={recruiter.id.toString()}>
+                        {recruiter.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
-          {/* Date Range Filter */}
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+              {/* Date Range Filter */}
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
 
-          {/* Clear Filters */}
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              <X className="h-4 w-4 mr-1" />
-              Clear
-            </Button>
+              {/* Clear Filters */}
+              {hasActiveFilters && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="h-9 text-slate-600 hover:text-slate-900"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear all
+                </Button>
+              )}
+            </div>
           )}
         </div>
 
         {/* Kanban Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4" style={{ height: 'calc(100vh - 300px)' }}>
+        <div 
+          className="flex gap-4 overflow-x-auto pb-4 flex-1" 
+          style={{ height: 'calc(100vh - 220px)' }}
+        >
           {PIPELINE_STAGES.map((stage) => (
             <KanbanColumn
               key={stage.id}

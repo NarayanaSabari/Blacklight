@@ -15,7 +15,7 @@ import {
   Bell, 
   Shield,
   ChevronRight,
-  Settings
+  Settings,
 } from 'lucide-react';
 import { 
   DocumentRequirementsSettings, 
@@ -134,19 +134,6 @@ export function SettingsPage() {
 
   return (
     <div className="min-h-[calc(100vh-8rem)]">
-      {/* Page Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 rounded-lg bg-slate-100">
-            <Settings className="h-6 w-6 text-slate-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
-            <p className="text-slate-600">Manage your account and organization preferences</p>
-          </div>
-        </div>
-      </div>
-
       {/* Main Layout */}
       <div className="flex gap-6">
         {/* Sidebar Navigation */}
