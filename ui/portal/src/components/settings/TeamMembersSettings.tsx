@@ -4,14 +4,14 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
   AlertCircle,
   Users,
   UserCog,
@@ -40,9 +49,9 @@ import {
   Minimize2,
   Plus,
   Search,
+  Shield,
   UserCheck,
-  Mail,
-  X,
+  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamApi } from '@/lib/teamApi';
@@ -52,23 +61,10 @@ import { InviteUserDialog } from '@/components/InviteUserDialog';
 import { UsersTable } from '@/components/UsersTable';
 import { ResetPasswordDialog } from '@/components/ResetPasswordDialog';
 import type { TeamMember, UserBasicInfo, PortalUserFull } from '@/types';
-import { cn } from '@/lib/utils';
-
-type TabValue = 'users' | 'hierarchy' | 'managers';
-
-interface TabConfig {
-  id: TabValue;
-  label: string;
-  icon: React.ElementType;
-  count?: number;
-}
 
 export function TeamMembersSettings() {
   const queryClient = useQueryClient();
   const { hasPermission, canManageUsers } = usePermissions();
-  
-  // Active tab state
-  const [activeTab, setActiveTab] = useState<TabValue>('users');
   
   // State for manager assignment dialogs
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -98,6 +94,8 @@ export function TeamMembersSettings() {
   const userStats = {
     total: users.length,
     active: users.filter((u) => u.is_active).length,
+    recruiters: users.filter((u) => u.roles?.some(r => r.name === 'RECRUITER')).length,
+    managers: users.filter((u) => u.roles?.some(r => r.name === 'MANAGER')).length,
   };
 
   // Fetch team hierarchy
@@ -224,114 +222,80 @@ export function TeamMembersSettings() {
     });
   };
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
-  };
-
-  const getRoleBadgeStyle = (roleName: string) => {
-    switch (roleName) {
-      case 'TENANT_ADMIN':
-        return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'MANAGER':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'RECRUITER':
-        return 'bg-green-100 text-green-700 border-green-200';
-      case 'TEAM_LEAD':
-        return 'bg-orange-100 text-orange-700 border-orange-200';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
-
   // Render team member node (recursive)
   const renderTeamMember = (member: TeamMember, level: number = 0) => {
     const hasTeamMembers = member.team_members && member.team_members.length > 0;
     const isExpanded = expandedNodes.has(member.id);
 
     return (
-      <div key={member.id}>
+      <div key={member.id} className="space-y-1">
         <div
-          className={cn(
-            "flex items-center gap-3 py-3 px-4 hover:bg-slate-50 rounded-lg group transition-colors",
-            level > 0 && "ml-8 border-l-2 border-slate-200"
-          )}
-          style={{ marginLeft: level > 0 ? `${level * 32}px` : undefined }}
+          className="flex items-center gap-2 py-2 px-3 hover:bg-slate-50 rounded-lg group"
+          style={{ marginLeft: `${level * 24}px` }}
         >
           {/* Expand/Collapse Button */}
           {hasTeamMembers ? (
             <button
               onClick={() => toggleNode(member.id)}
-              className="p-1 hover:bg-slate-200 rounded-md transition-colors flex-shrink-0"
+              className="p-0.5 hover:bg-slate-200 rounded transition-colors"
             >
               {isExpanded ? (
-                <ChevronDown className="h-4 w-4 text-slate-500" />
+                <ChevronDown className="h-4 w-4 text-slate-600" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-slate-500" />
+                <ChevronRight className="h-4 w-4 text-slate-600" />
               )}
             </button>
           ) : (
-            <div className="w-6" />
+            <div className="w-5" />
           )}
 
-          {/* Avatar */}
-          <Avatar className="h-9 w-9 flex-shrink-0 border-2 border-white shadow-sm">
-            <AvatarFallback className="bg-gradient-to-br from-slate-600 to-slate-800 text-white text-xs font-medium">
-              {getInitials(member.first_name, member.last_name)}
-            </AvatarFallback>
-          </Avatar>
-
           {/* User Info */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900 truncate">
-                {member.first_name} {member.last_name}
-              </span>
-              {hasTeamMembers && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-600">
-                  {member.team_members.length} {member.team_members.length === 1 ? 'report' : 'reports'}
-                </Badge>
-              )}
+          <div className="flex-1 flex items-center gap-3">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-900">
+                  {member.first_name} {member.last_name}
+                </span>
+                {hasTeamMembers && (
+                  <Badge variant="secondary" className="text-xs">
+                    {member.team_members.length} {member.team_members.length === 1 ? 'report' : 'reports'}
+                  </Badge>
+                )}
+              </div>
+              <span className="text-sm text-slate-600">{member.email}</span>
             </div>
-            <span className="text-sm text-slate-500 truncate block">{member.email}</span>
           </div>
 
           {/* Roles */}
-          <div className="flex gap-1.5 flex-shrink-0">
-            {member.roles.map((role: string | { name: string; display_name: string }) => {
-              const roleName = typeof role === 'string' ? role : role.name;
-              const displayName = typeof role === 'string' ? role : (role.display_name || role.name);
-              return (
-                <Badge 
-                  key={roleName} 
-                  variant="outline" 
-                  className={cn("text-xs font-medium", getRoleBadgeStyle(roleName))}
-                >
-                  {displayName}
-                </Badge>
-              );
-            })}
+          <div className="flex gap-1">
+            {member.roles.map((role: string | { name: string; display_name: string }) => (
+              <Badge key={typeof role === 'string' ? role : role.name} variant="outline" className="text-xs">
+                {typeof role === 'string' ? role : (role.display_name || role.name)}
+              </Badge>
+            ))}
           </div>
 
           {/* Actions */}
           {canAssignManager && (
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => handleAssignManager(member)}
-                className="h-8 text-xs"
+                className="h-8"
               >
                 <UserPlus className="h-3.5 w-3.5 mr-1" />
-                {member.manager_id ? 'Change' : 'Assign'}
+                {member.manager_id ? 'Change' : 'Assign'} Manager
               </Button>
               {member.manager_id && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => handleRemoveManager(member)}
-                  className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
-                  <UserMinus className="h-3.5 w-3.5" />
+                  <UserMinus className="h-3.5 w-3.5 mr-1" />
+                  Remove
                 </Button>
               )}
             </div>
@@ -340,7 +304,7 @@ export function TeamMembersSettings() {
 
         {/* Render team members recursively */}
         {hasTeamMembers && isExpanded && (
-          <div>
+          <div className="space-y-1">
             {member.team_members.map((teamMember) =>
               renderTeamMember(teamMember, level + 1)
             )}
@@ -349,13 +313,6 @@ export function TeamMembersSettings() {
       </div>
     );
   };
-
-  // Tab configuration
-  const tabs: TabConfig[] = [
-    { id: 'users', label: 'Users', icon: Users, count: userStats.total },
-    { id: 'hierarchy', label: 'Hierarchy', icon: GitBranch },
-    { id: 'managers', label: 'Managers', icon: UserCog, count: managersData?.total || 0 },
-  ];
 
   if (!canViewTeam) {
     return (
@@ -380,104 +337,82 @@ export function TeamMembersSettings() {
         </Alert>
       )}
 
-      <Card className="border-slate-200 shadow-sm">
-        {/* Header with Stats */}
-        <div className="px-6 py-5 border-b border-slate-100">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Team Management</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Manage users, view hierarchy, and assign managers</p>
+              <CardTitle>Team Management</CardTitle>
+              <CardDescription>Manage users, view hierarchy, and assign managers</CardDescription>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-                <Users className="h-4 w-4 text-slate-500" />
-                <span className="text-sm font-semibold text-slate-700">{isLoadingUsers ? '...' : userStats.total}</span>
-                <span className="text-sm text-slate-500">total</span>
+            {/* Inline Stats */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-blue-100">
+                  <Users className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <span className="text-xl font-bold">
+                    {isLoadingUsers ? '-' : userStats.total}
+                  </span>
+                  <span className="text-sm text-muted-foreground ml-1">Users</span>
+                </div>
               </div>
-              <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                 <UserCheck className="h-3 w-3 mr-1" />
-                {userStats.active} active
+                {userStats.active} Active
+              </Badge>
+              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                <UserCog className="h-3 w-3 mr-1" />
+                {managersData?.total || 0} Managers
               </Badge>
             </div>
           </div>
-        </div>
-
-        {/* Tab Navigation & Actions Bar */}
-        <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            {/* Custom Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-white rounded-lg border border-slate-200 shadow-sm">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                      isActive 
-                        ? "bg-slate-900 text-white shadow-sm" 
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {tab.label}
-                    {tab.count !== undefined && (
-                      <span className={cn(
-                        "text-xs px-1.5 py-0.5 rounded-full",
-                        isActive 
-                          ? "bg-white/20 text-white" 
-                          : "bg-slate-200 text-slate-600"
-                      )}>
-                        {tab.count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search users..."
-                  className="pl-9 w-56 h-9 bg-white border-slate-200"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded"
-                  >
-                    <X className="h-3 w-3 text-slate-400" />
-                  </button>
-                )}
-              </div>
-              
-              {/* Invite Button */}
-              {canManageUsers && (
-                <Button onClick={() => setInviteDialogOpen(true)} className="h-9 gap-2">
-                  <Plus className="h-4 w-4" />
-                  Invite User
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+        </CardHeader>
 
         <CardContent className="p-0">
-          {/* Users Tab */}
-          {activeTab === 'users' && (
-            <div>
+          <Tabs defaultValue="users" className="w-full">
+            <div className="px-6 pt-4 border-t flex items-center justify-between flex-wrap gap-4">
+              <TabsList className="bg-muted/50 h-10">
+                <TabsTrigger value="users" className="gap-2 px-4">
+                  <Users className="h-4 w-4" />
+                  Users
+                </TabsTrigger>
+                <TabsTrigger value="hierarchy" className="gap-2 px-4">
+                  <GitBranch className="h-4 w-4" />
+                  Team Hierarchy
+                </TabsTrigger>
+                <TabsTrigger value="managers" className="gap-2 px-4">
+                  <UserCog className="h-4 w-4" />
+                  Managers
+                </TabsTrigger>
+              </TabsList>
+              
+              {/* Actions - context dependent */}
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    placeholder="Search users..."
+                    className="pl-9 w-64 bg-white"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                {canManageUsers && (
+                  <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Invite User
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Users Tab */}
+            <TabsContent value="users" className="mt-0 border-t">
               {isLoadingUsers ? (
                 <div className="p-6 space-y-3">
                   {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                    <Skeleton key={i} className="h-16 w-full" />
                   ))}
                 </div>
               ) : usersError ? (
@@ -490,20 +425,20 @@ export function TeamMembersSettings() {
                   </Alert>
                 </div>
               ) : users.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="p-4 rounded-full bg-slate-100 mb-4">
-                    <Users className="h-10 w-10 text-slate-400" />
+                    <UserCog className="h-12 w-12 text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
                     {searchQuery ? 'No users found' : 'No team members yet'}
                   </h3>
-                  <p className="text-slate-500 mb-5 max-w-sm">
+                  <p className="text-slate-600 mb-4 max-w-sm">
                     {searchQuery
                       ? 'Try adjusting your search query'
                       : 'Invite team members to collaborate on recruiting activities'}
                   </p>
                   {canManageUsers && !searchQuery && (
-                    <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+                    <Button className="gap-2" onClick={() => setInviteDialogOpen(true)}>
                       <Plus className="h-4 w-4" />
                       Invite Your First Team Member
                     </Button>
@@ -515,47 +450,38 @@ export function TeamMembersSettings() {
                   onResetPassword={(user) => setResetPasswordUser(user)}
                 />
               )}
-            </div>
-          )}
+            </TabsContent>
 
-          {/* Hierarchy Tab */}
-          {activeTab === 'hierarchy' && (
-            <div>
-              {/* Hierarchy Actions */}
-              <div className="px-6 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                <p className="text-sm text-slate-500">
-                  {hierarchyData?.top_level_users?.length || 0} top-level members
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={expandAll}
-                    disabled={isLoadingHierarchy}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    <Expand className="h-3.5 w-3.5" />
-                    Expand All
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={collapseAll}
-                    disabled={isLoadingHierarchy}
-                    className="h-8 text-xs gap-1.5"
-                  >
-                    <Minimize2 className="h-3.5 w-3.5" />
-                    Collapse All
-                  </Button>
-                </div>
+            {/* Hierarchy Tab */}
+            <TabsContent value="hierarchy" className="mt-0">
+              <div className="px-6 py-3 border-t flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={expandAll}
+                  disabled={isLoadingHierarchy}
+                  className="gap-1.5"
+                >
+                  <Expand className="h-3.5 w-3.5" />
+                  Expand All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={collapseAll}
+                  disabled={isLoadingHierarchy}
+                  className="gap-1.5"
+                >
+                  <Minimize2 className="h-3.5 w-3.5" />
+                  Collapse All
+                </Button>
               </div>
-              
-              <div className="p-4">
+              <div className="p-6 border-t">
                 {isLoadingHierarchy ? (
-                  <div className="space-y-3">
-                    {[...Array(4)].map((_, i) => (
-                      <Skeleton key={i} className="h-14 w-full rounded-lg" />
-                    ))}
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                 ) : hierarchyError ? (
                   <Alert variant="destructive">
@@ -571,86 +497,93 @@ export function TeamMembersSettings() {
                 ) : (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="p-4 rounded-full bg-slate-100 mb-4">
-                      <GitBranch className="h-10 w-10 text-slate-400" />
+                      <Users className="h-12 w-12 text-slate-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-1">No team hierarchy found</h3>
-                    <p className="text-slate-500 max-w-sm">Start by adding users and assigning managers</p>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No team hierarchy found</h3>
+                    <p className="text-slate-600 max-w-sm">Start by adding users and assigning managers</p>
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            </TabsContent>
 
-          {/* Managers Tab */}
-          {activeTab === 'managers' && (
-            <div>
+            {/* Managers Tab */}
+            <TabsContent value="managers" className="mt-0 border-t">
               {isLoadingManagers ? (
-                <div className="p-6 space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full rounded-lg" />
-                  ))}
+                <div className="p-6 space-y-2">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
                 </div>
               ) : managersData && managersData.managers.length > 0 ? (
-                <div className="divide-y divide-slate-100">
-                  {managersData.managers.map((manager) => (
-                    <div key={manager.id} className="px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
-                      {/* Avatar */}
-                      <Avatar className="h-11 w-11 border-2 border-white shadow-sm flex-shrink-0">
-                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm font-medium">
-                          {getInitials(manager.first_name, manager.last_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-900">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Roles</TableHead>
+                      <TableHead className="text-right">Team Size</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {managersData.managers.map((manager) => (
+                      <TableRow key={manager.id}>
+                        <TableCell className="font-medium">
                           {manager.first_name} {manager.last_name}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-sm text-slate-500">
-                          <Mail className="h-3.5 w-3.5" />
-                          {manager.email}
-                        </div>
-                      </div>
-
-                      {/* Roles */}
-                      <div className="flex gap-1.5 flex-shrink-0">
-                        {manager.roles.map((role: string | { name: string; display_name: string }) => {
-                          const roleName = typeof role === 'string' ? role : role.name;
-                          const displayName = typeof role === 'string' ? role : (role.display_name || role.name);
-                          return (
-                            <Badge 
-                              key={roleName} 
-                              variant="outline" 
-                              className={cn("text-xs font-medium", getRoleBadgeStyle(roleName))}
-                            >
-                              {displayName}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-
-                      {/* Team Count */}
-                      <div className="flex-shrink-0">
-                        <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 font-semibold">
-                          {manager.team_count} {manager.team_count === 1 ? 'report' : 'reports'}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                        </TableCell>
+                        <TableCell>{manager.email}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {manager.roles.map((role: string | { name: string; display_name: string }) => (
+                              <Badge key={typeof role === 'string' ? role : role.name} variant="outline" className="text-xs">
+                                {typeof role === 'string' ? role : (role.display_name || role.name)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="secondary">
+                            {manager.team_count} {manager.team_count === 1 ? 'report' : 'reports'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="p-4 rounded-full bg-slate-100 mb-4">
-                    <UserCog className="h-10 w-10 text-slate-400" />
+                    <UserCog className="h-12 w-12 text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">No managers found</h3>
-                  <p className="text-slate-500 max-w-sm">Assign managers to team members to see them here</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No managers found</h3>
+                  <p className="text-slate-600 max-w-sm">Assign managers to team members to see them here</p>
                 </div>
               )}
-            </div>
-          )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
+
+      {/* Roles & Permissions Link Card */}
+      {canManageUsers && (
+        <Link to="/users/roles" className="block group mt-6">
+          <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between py-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
+                  <Shield className="h-5 w-5 text-slate-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base group-hover:text-primary transition-colors">
+                    Roles & Permissions
+                  </CardTitle>
+                  <CardDescription>Manage custom roles and assign permissions</CardDescription>
+                </div>
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+            </CardHeader>
+          </Card>
+        </Link>
+      )}
 
       {/* Assign Manager Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
