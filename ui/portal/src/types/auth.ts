@@ -25,6 +25,11 @@ export interface PortalUser {
     slug: string;
     company_name: string;
     status: string;
+    created_at?: string;
+    updated_at?: string;
+    subscription_plan?: string;
+    max_users?: number;
+    max_candidates?: number;
   };
 }
 
