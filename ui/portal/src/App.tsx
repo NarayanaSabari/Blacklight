@@ -16,8 +16,7 @@ import {
   EditCandidatePage,
   CandidateDetailPage,
   CandidateManagementPage,
-  YourCandidatesPageNew,
-  JobsPage,
+  TeamJobsPage,
   JobDetailPage,
   EmailJobsPage,
   ResumeTailorPage,
@@ -94,18 +93,19 @@ function App() {
                       <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
-                      {/* Candidate job routes */}
-                      <Route path="/candidate/jobs/:candidateId" element={<JobsPage />} />
+                      {/* Candidate job routes - now uses TeamJobsPage with role-based UI */}
+                      <Route path="/candidate/jobs/:candidateId" element={<TeamJobsPage />} />
                       <Route path="/candidate/jobs/:candidateId/job/:jobId" element={<JobDetailPage />} />
                       <Route path="/candidate/jobs/:candidateId/job/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
-                      {/* General job routes */}
+                      {/* General job routes - redirects to team jobs page */}
                       <Route path="/jobs/:jobId" element={<JobDetailPage />} />
-                      <Route path="/jobs" element={<JobsPage />} />
+                      <Route path="/jobs" element={<TeamJobsPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
                       <Route path="/users" element={<Navigate to="/settings/team" replace />} />
                       <Route path="/users/roles" element={<RolesPage />} />
                       <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
-                      <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
+                      {/* Legacy route - redirect to new jobs page */}
+                      <Route path="/your-candidates" element={<Navigate to="/jobs" replace />} />
                       <Route path="/email-jobs" element={<EmailJobsPage />} />
                       <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/submissions" element={<SubmissionsPage />} />

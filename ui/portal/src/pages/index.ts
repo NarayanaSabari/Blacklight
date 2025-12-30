@@ -14,11 +14,9 @@ export { CandidateDetailPage } from './candidates/CandidateDetailPage';
 export { AddCandidatePage } from './candidates/AddCandidatePage';
 export { EditCandidatePage } from './candidates/EditCandidatePage';
 export { CandidateManagementPage } from './candidates/CandidateManagementPage';
-export { YourCandidatesPage } from './candidates/YourCandidatesPage';
-export { YourCandidatesPageNew } from './candidates/YourCandidatesPageNew';
 
 // Jobs
-export { JobsPage } from './jobs/JobsPage';
+export { TeamJobsPage } from './jobs/TeamJobsPage';
 export { JobDetailPage } from './jobs/JobDetailPage';
 export { EmailJobsPage } from './jobs/EmailJobsPage';
 export { ResumeTailorPage } from './jobs/ResumeTailorPage';

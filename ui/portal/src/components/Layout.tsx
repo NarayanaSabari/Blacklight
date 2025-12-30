@@ -16,7 +16,6 @@ import {
   Settings,
   Building2,
   FolderOpen,
-  UserCheck,
   Mail,
   Send,
 } from 'lucide-react';
@@ -61,13 +60,6 @@ const navigation: NavItem[] = [
     roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
   },
   {
-    id: 'your-candidates',
-    label: 'Your Candidates',
-    icon: UserCheck,
-    href: '/your-candidates',
-    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
-  },
-  {
     id: 'documents',
     label: 'Documents',
     icon: FolderOpen,
@@ -76,10 +68,10 @@ const navigation: NavItem[] = [
   },
   {
     id: 'jobs',
-    label: 'Job Postings',
+    label: 'Job Matches',
     icon: Briefcase,
     href: '/jobs',
-    roles: ['TENANT_ADMIN', 'RECRUITER', 'TEAM_LEAD'],
+    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {
     id: 'email-jobs',
