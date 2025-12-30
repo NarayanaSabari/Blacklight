@@ -13,6 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -66,11 +69,16 @@ import { toast } from 'sonner';
 import type {
   SubmissionStatus,
   ActivityType,
+  SubmissionUpdateInput,
+  PriorityLevel,
+  RateType,
 } from '@/types/submission';
 import {
   STATUS_LABELS,
   STATUS_COLORS,
   PRIORITY_COLORS,
+  PRIORITY_LEVELS,
+  RATE_TYPES,
   getNextValidStatuses,
   isTerminalStatus,
 } from '@/types/submission';
@@ -122,6 +130,8 @@ export function SubmissionDetailPage() {
   const [statusNote, setStatusNote] = useState('');
   const [isAddNoteDialogOpen, setIsAddNoteDialogOpen] = useState(false);
   const [newNote, setNewNote] = useState('');
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<SubmissionUpdateInput>>({});
 
   // Fetch submission with activities
   const {
@@ -167,6 +177,21 @@ export function SubmissionDetailPage() {
     },
   });
 
+  // Update submission mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: SubmissionUpdateInput) =>
+      submissionApi.updateSubmission(submissionId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+      queryClient.invalidateQueries({ queryKey: ['submissions'] });
+      toast.success('Submission updated successfully');
+      setIsEditDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update submission: ${error.message}`);
+    },
+  });
+
   const handleStatusUpdate = () => {
     if (!selectedStatus) return;
     statusMutation.mutate({ status: selectedStatus, note: statusNote || undefined });
@@ -175,6 +200,55 @@ export function SubmissionDetailPage() {
   const handleAddNote = () => {
     if (!newNote.trim()) return;
     addNoteMutation.mutate(newNote.trim());
+  };
+
+  const handleOpenEditDialog = () => {
+    if (submission) {
+      setEditFormData({
+        vendor_company: submission.vendor_company || '',
+        vendor_contact_name: submission.vendor_contact_name || '',
+        vendor_contact_email: submission.vendor_contact_email || '',
+        vendor_contact_phone: submission.vendor_contact_phone || '',
+        client_company: submission.client_company || '',
+        bill_rate: submission.bill_rate,
+        pay_rate: submission.pay_rate,
+        rate_type: submission.rate_type || 'HOURLY',
+        currency: submission.currency || 'USD',
+        submission_notes: submission.submission_notes || '',
+        priority: submission.priority || 'MEDIUM',
+        is_hot: submission.is_hot || false,
+        follow_up_date: submission.follow_up_date?.split('T')[0] || '',
+      });
+      setIsEditDialogOpen(true);
+    }
+  };
+
+  const handleSaveEdit = () => {
+    // Build the update payload, only including changed fields
+    const updateData: SubmissionUpdateInput = {};
+    
+    if (editFormData.vendor_company !== undefined) updateData.vendor_company = editFormData.vendor_company || undefined;
+    if (editFormData.vendor_contact_name !== undefined) updateData.vendor_contact_name = editFormData.vendor_contact_name || undefined;
+    if (editFormData.vendor_contact_email !== undefined) updateData.vendor_contact_email = editFormData.vendor_contact_email || undefined;
+    if (editFormData.vendor_contact_phone !== undefined) updateData.vendor_contact_phone = editFormData.vendor_contact_phone || undefined;
+    if (editFormData.client_company !== undefined) updateData.client_company = editFormData.client_company || undefined;
+    if (editFormData.bill_rate !== undefined) updateData.bill_rate = editFormData.bill_rate;
+    if (editFormData.pay_rate !== undefined) updateData.pay_rate = editFormData.pay_rate;
+    if (editFormData.rate_type) updateData.rate_type = editFormData.rate_type;
+    if (editFormData.currency) updateData.currency = editFormData.currency;
+    if (editFormData.submission_notes !== undefined) updateData.submission_notes = editFormData.submission_notes || undefined;
+    if (editFormData.priority) updateData.priority = editFormData.priority;
+    if (editFormData.is_hot !== undefined) updateData.is_hot = editFormData.is_hot;
+    if (editFormData.follow_up_date) updateData.follow_up_date = editFormData.follow_up_date;
+    
+    updateMutation.mutate(updateData);
+  };
+
+  const updateEditField = <K extends keyof SubmissionUpdateInput>(
+    field: K,
+    value: SubmissionUpdateInput[K]
+  ) => {
+    setEditFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const formatRate = (rate?: number, type?: string) => {
@@ -354,17 +428,27 @@ export function SubmissionDetailPage() {
                       <span>{submission.job.job_type}</span>
                     </div>
                   )}
-                  {submission.job?.job_url && (
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full"
-                      onClick={() => window.open(submission.job?.job_url, '_blank')}
+                      className="flex-1"
+                      onClick={() => navigate(`/jobs/${submission.job_posting_id}`)}
                     >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      View Job Posting
+                      View Details
                     </Button>
-                  )}
+                    {submission.job?.job_url && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => window.open(submission.job?.job_url, '_blank')}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Original
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -552,7 +636,7 @@ export function SubmissionDetailPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => navigate(`/submissions/${submissionId}/edit`)}
+                  onClick={handleOpenEditDialog}
                 >
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Submission
@@ -767,6 +851,228 @@ export function SubmissionDetailPage() {
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
                 Add Note
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Submission Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit className="h-5 w-5" />
+                Edit Submission
+              </DialogTitle>
+              <DialogDescription>
+                Update submission details, rates, and vendor information.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Rates Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Rate Information
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_bill_rate">Bill Rate</Label>
+                    <Input
+                      id="edit_bill_rate"
+                      type="number"
+                      placeholder="0.00"
+                      value={editFormData.bill_rate || ''}
+                      onChange={(e) =>
+                        updateEditField('bill_rate', parseFloat(e.target.value) || undefined)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_pay_rate">Pay Rate</Label>
+                    <Input
+                      id="edit_pay_rate"
+                      type="number"
+                      placeholder="0.00"
+                      value={editFormData.pay_rate || ''}
+                      onChange={(e) =>
+                        updateEditField('pay_rate', parseFloat(e.target.value) || undefined)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_rate_type">Rate Type</Label>
+                    <Select
+                      value={editFormData.rate_type || 'HOURLY'}
+                      onValueChange={(v) => updateEditField('rate_type', v as RateType)}
+                    >
+                      <SelectTrigger id="edit_rate_type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RATE_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Margin</Label>
+                    <div className="h-9 px-3 py-2 border rounded-md bg-muted/50 text-sm">
+                      {editFormData.bill_rate && editFormData.pay_rate ? (
+                        <span
+                          className={
+                            ((editFormData.bill_rate - editFormData.pay_rate) / editFormData.bill_rate) * 100 >= 20
+                              ? 'text-green-600'
+                              : ((editFormData.bill_rate - editFormData.pay_rate) / editFormData.bill_rate) * 100 >= 10
+                                ? 'text-yellow-600'
+                                : 'text-red-600'
+                          }
+                        >
+                          ${(editFormData.bill_rate - editFormData.pay_rate).toFixed(2)} (
+                          {(((editFormData.bill_rate - editFormData.pay_rate) / editFormData.bill_rate) * 100).toFixed(1)}%)
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vendor Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Vendor Information
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_vendor_company">Vendor Company</Label>
+                    <Input
+                      id="edit_vendor_company"
+                      placeholder="Enter vendor company"
+                      value={editFormData.vendor_company || ''}
+                      onChange={(e) => updateEditField('vendor_company', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_client_company">Client Company</Label>
+                    <Input
+                      id="edit_client_company"
+                      placeholder="Enter client company"
+                      value={editFormData.client_company || ''}
+                      onChange={(e) => updateEditField('client_company', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_vendor_contact_name">Contact Name</Label>
+                    <Input
+                      id="edit_vendor_contact_name"
+                      placeholder="Enter contact name"
+                      value={editFormData.vendor_contact_name || ''}
+                      onChange={(e) => updateEditField('vendor_contact_name', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_vendor_contact_email">Contact Email</Label>
+                    <Input
+                      id="edit_vendor_contact_email"
+                      type="email"
+                      placeholder="contact@vendor.com"
+                      value={editFormData.vendor_contact_email || ''}
+                      onChange={(e) => updateEditField('vendor_contact_email', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_vendor_contact_phone">Contact Phone</Label>
+                    <Input
+                      id="edit_vendor_contact_phone"
+                      type="tel"
+                      placeholder="(555) 555-5555"
+                      value={editFormData.vendor_contact_phone || ''}
+                      onChange={(e) => updateEditField('vendor_contact_phone', e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Priority & Notes Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-semibold">Priority & Follow-up</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_priority">Priority</Label>
+                    <Select
+                      value={editFormData.priority || 'MEDIUM'}
+                      onValueChange={(v) => updateEditField('priority', v as PriorityLevel)}
+                    >
+                      <SelectTrigger id="edit_priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRIORITY_LEVELS.map((priority) => (
+                          <SelectItem key={priority} value={priority}>
+                            {priority}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_is_hot" className="flex items-center gap-2">
+                      <Flame className="h-4 w-4 text-orange-500" />
+                      Mark as Hot
+                    </Label>
+                    <div className="flex items-center space-x-2 h-9">
+                      <Switch
+                        id="edit_is_hot"
+                        checked={editFormData.is_hot || false}
+                        onCheckedChange={(checked) => updateEditField('is_hot', checked)}
+                      />
+                      <Label htmlFor="edit_is_hot" className="text-sm text-muted-foreground">
+                        {editFormData.is_hot ? 'Yes' : 'No'}
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_follow_up_date">Follow-up Date</Label>
+                    <Input
+                      id="edit_follow_up_date"
+                      type="date"
+                      value={editFormData.follow_up_date || ''}
+                      onChange={(e) => updateEditField('follow_up_date', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_submission_notes">Notes</Label>
+                  <Textarea
+                    id="edit_submission_notes"
+                    placeholder="Update submission notes..."
+                    value={editFormData.submission_notes || ''}
+                    onChange={(e) => updateEditField('submission_notes', e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
+                Save Changes
               </Button>
             </DialogFooter>
           </DialogContent>
