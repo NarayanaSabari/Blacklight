@@ -148,20 +148,21 @@ export function JobsPage() {
     return fullName.includes(searchLower) || email.includes(searchLower);
   });
 
-  // Fetch matches for selected candidate with pagination
+  // Fetch matches for selected candidate with pagination and platform filter
   const { 
     data: matchesData, 
     isLoading: loadingMatches,
     error: matchesError 
   } = useQuery({
-    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize],
+    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize, selectedPlatforms],
     queryFn: async () => {
       if (!selectedCandidateId) return null;
       return jobMatchApi.getCandidateMatches(selectedCandidateId, { 
         page: currentPage,
         per_page: pageSize,
         sort_by: 'match_score',
-        sort_order: 'desc'
+        sort_order: 'desc',
+        platforms: selectedPlatforms.length > 0 ? selectedPlatforms : undefined,
       });
     },
     enabled: !!selectedCandidateId,
@@ -173,33 +174,23 @@ export function JobsPage() {
   const totalPages = matchesData?.total_pages || 0;
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId);
 
-  // Extract unique platforms from matches
-  const availablePlatforms = [...new Set(
-    matches
-      .map((match) => (match.job || match.job_posting)?.platform)
-      .filter((p): p is string => !!p)
-  )].sort();
+  // Use available platforms from API response (covers all jobs, not just current page)
+  const availablePlatforms = matchesData?.available_platforms || [];
 
-  // Filter matches by selected platforms (client-side)
-  const filteredMatches = selectedPlatforms.length > 0
-    ? matches.filter((match) => {
-        const platform = (match.job || match.job_posting)?.platform;
-        return platform && selectedPlatforms.includes(platform);
-      })
-    : matches;
-
-  // Toggle platform selection
+  // Toggle platform selection (reset to page 1)
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms((prev) =>
       prev.includes(platform)
         ? prev.filter((p) => p !== platform)
         : [...prev, platform]
     );
+    setCurrentPage(1);
   };
 
   // Clear all platform filters
   const clearPlatformFilters = () => {
     setSelectedPlatforms([]);
+    setCurrentPage(1);
   };
 
   const handleRowClick = (match: JobMatch) => {
@@ -309,7 +300,7 @@ export function JobsPage() {
                     <div className="flex items-center gap-3">
                       <Badge variant="secondary" className="text-sm">
                         {selectedPlatforms.length > 0 
-                          ? `${filteredMatches.length} of ${totalMatches} jobs`
+                          ? `${totalMatches} jobs (filtered)`
                           : `${totalMatches} job${totalMatches !== 1 ? 's' : ''} matched`
                         }
                       </Badge>
@@ -344,19 +335,15 @@ export function JobsPage() {
                                 )}
                               </div>
                               <div className="space-y-2">
-                                {availablePlatforms.map((platform) => {
-                                  const count = matches.filter(
-                                    (m) => (m.job || m.job_posting)?.platform === platform
-                                  ).length;
-                                  return (
+                                {availablePlatforms.map((platform) => (
                                     <div
                                       key={platform}
                                       className="flex items-center space-x-2"
                                     >
                                       <Checkbox
                                         id={`platform-${platform}`}
-                                        checked={selectedPlatforms.includes(platform)}
-                                        onCheckedChange={() => togglePlatform(platform)}
+                                        checked={selectedPlatforms.includes(platform.toLowerCase())}
+                                        onCheckedChange={() => togglePlatform(platform.toLowerCase())}
                                       />
                                       <label
                                         htmlFor={`platform-${platform}`}
@@ -364,12 +351,8 @@ export function JobsPage() {
                                       >
                                         {platform}
                                       </label>
-                                      <span className="text-xs text-muted-foreground">
-                                        {count}
-                                      </span>
                                     </div>
-                                  );
-                                })}
+                                  ))}
                               </div>
                             </div>
                           </PopoverContent>
@@ -450,15 +433,7 @@ export function JobsPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>Failed to load job matches. Please try again.</AlertDescription>
                     </Alert>
-                  ) : matches.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                      <Target className="h-12 w-12 text-muted-foreground mb-3" />
-                      <h3 className="text-lg font-medium mb-1">No Job Matches</h3>
-                      <p className="text-muted-foreground text-sm max-w-sm">
-                        Jobs will appear here once they are matched to this candidate's roles
-                      </p>
-                    </div>
-                  ) : filteredMatches.length === 0 ? (
+                  ) : matches.length === 0 && selectedPlatforms.length > 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center p-8">
                       <Filter className="h-12 w-12 text-muted-foreground mb-3" />
                       <h3 className="text-lg font-medium mb-1">No Matches for Selected Platforms</h3>
@@ -469,9 +444,17 @@ export function JobsPage() {
                         Clear Filters
                       </Button>
                     </div>
+                  ) : matches.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                      <Target className="h-12 w-12 text-muted-foreground mb-3" />
+                      <h3 className="text-lg font-medium mb-1">No Job Matches</h3>
+                      <p className="text-muted-foreground text-sm max-w-sm">
+                        Jobs will appear here once they are matched to this candidate's roles
+                      </p>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      {filteredMatches.map((match) => {
+                      {matches.map((match) => {
                         const job = match.job || match.job_posting;
                         if (!job) return null;
                         

@@ -324,6 +324,7 @@ def get_candidate_matches(candidate_id: int):
     - min_score: Minimum match score filter (default 0)
     - sort_by: Sort field (match_score, posted_date, default: match_score)
     - sort_order: Sort order (asc, desc, default: desc)
+    - platforms: Comma-separated list of platforms to filter by (e.g., "linkedin,glassdoor")
     
     Permissions: candidates.view
     """
@@ -347,6 +348,10 @@ def get_candidate_matches(candidate_id: int):
         min_score = request.args.get('min_score', 0, type=float)
         sort_by = request.args.get('sort_by', 'match_score')
         sort_order = request.args.get('sort_order', 'desc')
+        platforms_param = request.args.get('platforms', '')
+        
+        # Parse platforms filter (comma-separated list)
+        platforms_filter = [p.strip().lower() for p in platforms_param.split(',') if p.strip()] if platforms_param else []
         
         # Validate parameters
         if per_page < 1 or per_page > 500:
@@ -427,9 +432,9 @@ def get_candidate_matches(candidate_id: int):
             JobPosting.id.in_(job_ids),
             JobPosting.status == 'ACTIVE'
         )
-        jobs = db.session.execute(job_query).scalars().all()
+        all_jobs = db.session.execute(job_query).scalars().all()
         
-        if not jobs:
+        if not all_jobs:
             return jsonify({
                 'candidate_id': candidate_id,
                 'total_matches': 0,
@@ -437,8 +442,21 @@ def get_candidate_matches(candidate_id: int):
                 'per_page': per_page,
                 'total_pages': 0,
                 'matches': [],
+                'available_platforms': [],
                 'message': 'No active jobs found for assigned roles.'
             }), 200
+        
+        # Collect all available platforms (before filtering)
+        available_platforms = sorted(list(set(
+            job.platform.lower() for job in all_jobs 
+            if job.platform
+        )))
+        
+        # Apply platform filter if specified
+        if platforms_filter:
+            jobs = [job for job in all_jobs if job.platform and job.platform.lower() in platforms_filter]
+        else:
+            jobs = all_jobs
         
         # Initialize matching service and calculate scores on-the-fly
         service = JobMatchingService(tenant_id=tenant_id)
@@ -522,7 +540,8 @@ def get_candidate_matches(candidate_id: int):
             'page': page,
             'per_page': per_page,
             'total_pages': total_pages,
-            'matches': matches_response
+            'matches': matches_response,
+            'available_platforms': available_platforms
         }), 200
         
     except Exception as e:

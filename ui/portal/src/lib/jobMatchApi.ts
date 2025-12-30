@@ -30,6 +30,9 @@ export const jobMatchApi = {
     if (filters.per_page) params.append('per_page', filters.per_page.toString());
     if (filters.sort_by) params.append('sort_by', filters.sort_by);
     if (filters.sort_order) params.append('sort_order', filters.sort_order);
+    if (filters.platforms && filters.platforms.length > 0) {
+      params.append('platforms', filters.platforms.join(','));
+    }
     
     const queryString = params.toString();
     const url = `/api/job-matches/candidates/${candidateId}${queryString ? '?' + queryString : ''}`;

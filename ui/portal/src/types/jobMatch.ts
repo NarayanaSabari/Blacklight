@@ -78,6 +78,8 @@ export interface JobMatchListResponse {
   per_page?: number;
   total_pages?: number;
   pages?: number;  // Legacy alias for total_pages
+  // Platform filter
+  available_platforms?: string[];
 }
 
 export interface JobMatchStats {
@@ -115,6 +117,7 @@ export interface JobMatchFilters {
   per_page?: number;
   sort_by?: 'match_score' | 'match_date';
   sort_order?: 'asc' | 'desc';
+  platforms?: string[];
 }
 
 export type MatchGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
