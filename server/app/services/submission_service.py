@@ -866,12 +866,14 @@ class SubmissionService:
             month_query = month_query.where(Submission.submitted_by_user_id == user_id)
         submitted_this_month = db.session.scalar(month_query) or 0
         
-        # Interviews scheduled (future interviews)
+        # Interviews scheduled (submissions in INTERVIEW_SCHEDULED status or with upcoming interviews)
         interview_query = select(func.count()).where(
             and_(
                 Submission.tenant_id == self.tenant_id,
-                Submission.interview_scheduled_at >= now,
-                Submission.status == SubmissionStatus.INTERVIEW_SCHEDULED
+                or_(
+                    Submission.status == SubmissionStatus.INTERVIEW_SCHEDULED,
+                    Submission.interview_scheduled_at >= now
+                )
             )
         )
         if user_id:

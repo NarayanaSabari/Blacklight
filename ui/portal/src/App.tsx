@@ -98,6 +98,7 @@ function App() {
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
                       <Route path="/jobs/candidate/:candidateId" element={<JobsPage />} />
+                      <Route path="/jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/jobs" element={<JobsPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />
                       <Route path="/users" element={<Navigate to="/settings/team" replace />} />
