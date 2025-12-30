@@ -16,7 +16,6 @@ export { EditCandidatePage } from './candidates/EditCandidatePage';
 export { CandidateManagementPage } from './candidates/CandidateManagementPage';
 export { YourCandidatesPage } from './candidates/YourCandidatesPage';
 export { YourCandidatesPageNew } from './candidates/YourCandidatesPageNew';
-export { KanbanBoardPage } from './candidates/KanbanBoardPage';
 
 // Jobs
 export { JobsPage } from './jobs/JobsPage';

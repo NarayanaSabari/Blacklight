@@ -17,7 +17,6 @@ import {
   CandidateDetailPage,
   CandidateManagementPage,
   YourCandidatesPageNew,
-  KanbanBoardPage,
   JobsPage,
   JobDetailPage,
   EmailJobsPage,
@@ -105,7 +104,6 @@ function App() {
                       <Route path="/users/roles" element={<RolesPage />} />
                       <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                       <Route path="/your-candidates" element={<YourCandidatesPageNew />} />
-                      <Route path="/pipeline" element={<KanbanBoardPage />} />
                       <Route path="/email-jobs" element={<EmailJobsPage />} />
                       <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/submissions" element={<SubmissionsPage />} />
