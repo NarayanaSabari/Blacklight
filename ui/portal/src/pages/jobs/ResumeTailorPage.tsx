@@ -458,7 +458,7 @@ export function ResumeTailorPage() {
   };
 
   const handleBack = () => {
-    navigate(`/candidates/${candidateIdNum}/matches`);
+    navigate(`/candidate/jobs/${candidateIdNum}`);
   };
 
   const job = matchData?.job || matchData?.job_posting;

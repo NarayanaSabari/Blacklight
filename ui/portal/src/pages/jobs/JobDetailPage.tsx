@@ -93,7 +93,7 @@ export function JobDetailPage() {
 
   const handleBack = () => {
     if (candidateIdNum) {
-      navigate(`/candidates/${candidateIdNum}/matches`);
+      navigate(`/candidate/jobs/${candidateIdNum}`);
     } else if (isFromEmailJobs) {
       navigate('/email-jobs');
     } else {
@@ -145,7 +145,7 @@ export function JobDetailPage() {
       return;
     }
     // Build the tailor page URL and open in new tab
-    const tailorPath = `/candidates/${candidateIdNum}/matches/jobs/${jobIdNum}/tailor/${matchData.id}`;
+    const tailorPath = `/candidate/jobs/${candidateIdNum}/job/${jobIdNum}/tailor/${matchData.id}`;
     const fullUrl = `${window.location.origin}${env.basePath}${tailorPath}`;
     window.open(fullUrl, '_blank');
   };

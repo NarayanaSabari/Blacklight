@@ -126,7 +126,7 @@ export function JobsPage() {
   // Update URL when candidate is selected
   const handleCandidateSelect = (candidateId: number) => {
     setSelectedCandidateId(candidateId);
-    navigate(`/jobs/candidate/${candidateId}`, { replace: true });
+    navigate(`/candidate/jobs/${candidateId}`, { replace: true });
   };
 
   // Reset page when candidate changes
@@ -215,7 +215,7 @@ export function JobsPage() {
   const handleRowClick = (match: JobMatch) => {
     const job = match.job || match.job_posting;
     if (job) {
-      navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`, {
+      navigate(`/candidate/jobs/${selectedCandidateId}/job/${job.id}`, {
         state: { match }
       });
     }
@@ -706,7 +706,7 @@ export function JobsPage() {
                                       className="h-7 px-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`);
+                                        navigate(`/candidate/jobs/${selectedCandidateId}/job/${job.id}`);
                                       }}
                                     >
                                       <Sparkles className="h-3.5 w-3.5 mr-1" />

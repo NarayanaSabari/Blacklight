@@ -91,12 +91,14 @@ function App() {
                       {/* Candidate detail routes */}
                       <Route path="/candidates/new" element={<AddCandidatePage />} />
                       <Route path="/candidates/:id/edit" element={<EditCandidatePage />} />
-                      <Route path="/candidates/:candidateId/matches/jobs/:jobId" element={<JobDetailPage />} />
-                      <Route path="/candidates/:candidateId/matches/jobs/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
                       <Route path="/candidates/:id" element={<CandidateDetailPage />} />
                       <Route path="/invitations/:id" element={<InvitationDetailsPage />} />
                       <Route path="/invitations/:id/review" element={<InvitationReviewPage />} />
-                      <Route path="/jobs/candidate/:candidateId" element={<JobsPage />} />
+                      {/* Candidate job routes */}
+                      <Route path="/candidate/jobs/:candidateId" element={<JobsPage />} />
+                      <Route path="/candidate/jobs/:candidateId/job/:jobId" element={<JobDetailPage />} />
+                      <Route path="/candidate/jobs/:candidateId/job/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
+                      {/* General job routes */}
                       <Route path="/jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/jobs" element={<JobsPage />} />
                       <Route path="/documents" element={<DocumentsPage />} />

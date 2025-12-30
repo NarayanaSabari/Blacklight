@@ -776,7 +776,7 @@ export function CandidateDetailPage() {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => navigate(`/jobs/candidate/${id}`)}
+                  onClick={() => navigate(`/candidate/jobs/${id}`)}
                   className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
                 >
                   <Target className="h-4 w-4 mr-2" />
@@ -1174,7 +1174,7 @@ export function CandidateDetailPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigate(`/jobs/candidate/${id}`)}
+                    onClick={() => navigate(`/candidate/jobs/${id}`)}
                     className="text-primary hover:text-primary"
                   >
                     All ({matchesData.total_matches})
@@ -1186,7 +1186,7 @@ export function CandidateDetailPage() {
                   <div
                     key={match.id}
                     className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] cursor-pointer transition-all"
-                    onClick={() => navigate(`/jobs/candidate/${id}`)}
+                    onClick={() => navigate(`/candidate/jobs/${id}`)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
