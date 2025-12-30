@@ -141,29 +141,57 @@ def get_dashboard_stats():
         )
         approved_7d = db.session.scalar(approved_7d_query) or 0
         
-        # ========== TEAM STATS (for managers) ==========
+        # ========== TEAM STATS (for managers and admins) ==========
         team_stats = None
         if is_manager or is_admin:
-            # Get team members (users reporting to current user)
-            team_members_query = select(func.count()).select_from(PortalUser).where(
-                and_(
-                    PortalUser.tenant_id == tenant_id,
-                    PortalUser.manager_id == user_id
+            if is_admin:
+                # TENANT_ADMIN sees all users in the tenant (except themselves)
+                team_members_query = select(func.count()).select_from(PortalUser).where(
+                    and_(
+                        PortalUser.tenant_id == tenant_id,
+                        PortalUser.is_active == True,
+                        PortalUser.id != user_id
+                    )
                 )
-            )
-            team_member_count = db.session.scalar(team_members_query) or 0
-            
-            # Get candidates assigned to team members
-            team_candidates_query = select(func.count()).select_from(CandidateAssignment).join(
-                PortalUser,
-                PortalUser.id == CandidateAssignment.assigned_to_user_id
-            ).where(
-                and_(
-                    PortalUser.manager_id == user_id,
-                    CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                team_member_count = db.session.scalar(team_members_query) or 0
+                
+                # Count all candidates with active assignments in the tenant
+                team_candidates_query = select(func.count(func.distinct(CandidateAssignment.candidate_id))).select_from(
+                    CandidateAssignment
+                ).join(
+                    Candidate,
+                    Candidate.id == CandidateAssignment.candidate_id
+                ).where(
+                    and_(
+                        Candidate.tenant_id == tenant_id,
+                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                    )
                 )
-            )
-            team_candidates = db.session.scalar(team_candidates_query) or 0
+                team_candidates = db.session.scalar(team_candidates_query) or 0
+            else:
+                # MANAGER/TEAM_LEAD - Get direct reports only
+                team_members_query = select(func.count()).select_from(PortalUser).where(
+                    and_(
+                        PortalUser.tenant_id == tenant_id,
+                        PortalUser.manager_id == user_id,
+                        PortalUser.is_active == True
+                    )
+                )
+                team_member_count = db.session.scalar(team_members_query) or 0
+                
+                # Get candidates assigned to direct team members
+                team_candidates_query = select(func.count(func.distinct(CandidateAssignment.candidate_id))).select_from(
+                    CandidateAssignment
+                ).join(
+                    PortalUser,
+                    PortalUser.id == CandidateAssignment.assigned_to_user_id
+                ).where(
+                    and_(
+                        PortalUser.manager_id == user_id,
+                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                    )
+                )
+                team_candidates = db.session.scalar(team_candidates_query) or 0
             
             team_stats = {
                 'team_members': team_member_count,
