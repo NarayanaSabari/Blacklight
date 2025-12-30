@@ -44,7 +44,7 @@ class CandidateInvitation(BaseModel):
     # Status values: sent, opened, in_progress, pending_review, approved, rejected, expired, cancelled
     
     # Invitation metadata
-    invited_by_id = db.Column(Integer, ForeignKey('portal_users.id'), nullable=False, index=True)
+    invited_by_id = db.Column(Integer, ForeignKey('portal_users.id', ondelete='SET NULL'), nullable=True, index=True)
     invited_at = db.Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Submission data

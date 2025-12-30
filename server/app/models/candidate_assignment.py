@@ -65,20 +65,22 @@ class CandidateAssignment(db.Model):
     notes = db.Column(db.Text, nullable=True)
     
     # Relationships
+    # Note: passive_deletes=True tells SQLAlchemy to let the DB handle CASCADE deletes
+    # This is needed because assigned_to_user_id has ondelete='CASCADE' and is NOT NULL
     assigned_to = db.relationship(
         'PortalUser',
         foreign_keys=[assigned_to_user_id],
-        backref='received_assignments'
+        backref=db.backref('received_assignments', passive_deletes=True)
     )
     assigned_by = db.relationship(
         'PortalUser',
         foreign_keys=[assigned_by_user_id],
-        backref='made_assignments'
+        backref=db.backref('made_assignments', passive_deletes=True)
     )
     previous_assignee = db.relationship(
         'PortalUser',
         foreign_keys=[previous_assignee_id],
-        backref='previous_assignments'
+        backref=db.backref('previous_assignments', passive_deletes=True)
     )
     
     # Indexes for performance

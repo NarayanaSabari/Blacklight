@@ -78,6 +78,7 @@ class PortalUser(BaseModel):
         'UserEmailIntegration',
         back_populates='user',
         cascade='all, delete-orphan',
+        passive_deletes=True,
         lazy='select'
     )
     

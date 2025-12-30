@@ -48,9 +48,10 @@ class AssignmentNotification(db.Model):
         'CandidateAssignment',
         backref=db.backref('notifications', cascade='all, delete-orphan')
     )
+    # Note: passive_deletes=True tells SQLAlchemy to let the DB handle CASCADE deletes
     user = db.relationship(
         'PortalUser',
-        backref='assignment_notifications'
+        backref=db.backref('assignment_notifications', passive_deletes=True)
     )
     
     # Indexes for performance
