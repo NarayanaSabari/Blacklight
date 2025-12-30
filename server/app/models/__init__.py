@@ -95,3 +95,7 @@ from app.models.tailored_resume import TailoredResume, TailoredResumeStatus
 # Import email integration models
 from app.models.user_email_integration import UserEmailIntegration
 from app.models.processed_email import ProcessedEmail
+
+# Import submission tracking models (ATS)
+from app.models.submission import Submission, SubmissionStatus
+from app.models.submission_activity import SubmissionActivity, ActivityType

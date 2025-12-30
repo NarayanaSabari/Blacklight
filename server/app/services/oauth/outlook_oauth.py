@@ -104,7 +104,10 @@ class OutlookOAuthService:
         )
         
         if not response.ok:
-            error_data = response.json()
+            try:
+                error_data = response.json()
+            except Exception:
+                error_data = {"error": "unknown", "error_description": response.text[:500]}
             logger.error(f"Outlook token exchange failed: {error_data}")
             raise ValueError(f"Token exchange failed: {error_data.get('error_description', error_data.get('error', 'Unknown error'))}")
         
@@ -150,7 +153,10 @@ class OutlookOAuthService:
         )
         
         if not response.ok:
-            error_data = response.json()
+            try:
+                error_data = response.json()
+            except Exception:
+                error_data = {"error": "unknown", "error_description": response.text[:500]}
             logger.error(f"Outlook token refresh failed: {error_data}")
             raise ValueError(f"Token refresh failed: {error_data.get('error_description', error_data.get('error', 'Unknown error'))}")
         
@@ -214,7 +220,7 @@ class OutlookOAuthService:
         skip: int = 0,
         filter_query: Optional[str] = None,
         select_fields: Optional[list] = None,
-    ) -> list:
+    ) -> tuple[list, Optional[str]]:
         """
         Fetch messages from user's mailbox.
         
@@ -222,12 +228,12 @@ class OutlookOAuthService:
             access_token: Valid access token
             folder: Mail folder to fetch from ('inbox', 'sentitems', etc.)
             top: Maximum number of messages to return per page
-            skip: Number of messages to skip (for pagination)
+            skip: Number of messages to skip (for pagination) - deprecated, use nextLink instead
             filter_query: OData filter query (e.g., "receivedDateTime ge 2024-01-01")
             select_fields: List of fields to select
             
         Returns:
-            List of message objects
+            Tuple of (list of message objects, nextLink URL for pagination or None)
         """
         headers = {"Authorization": f"Bearer {access_token}"}
         
@@ -258,7 +264,34 @@ class OutlookOAuthService:
             raise ValueError(f"Failed to fetch messages: {response.status_code}")
         
         data = response.json()
-        return data.get("value", [])
+        # Return both messages and the nextLink for proper pagination
+        return data.get("value", []), data.get("@odata.nextLink")
+    
+    def get_messages_from_url(
+        self,
+        access_token: str,
+        url: str,
+    ) -> tuple[list, Optional[str]]:
+        """
+        Fetch messages from a nextLink URL (for pagination).
+        
+        Args:
+            access_token: Valid access token
+            url: The @odata.nextLink URL from a previous response
+            
+        Returns:
+            Tuple of (list of message objects, nextLink URL for pagination or None)
+        """
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        response = requests.get(url, headers=headers, timeout=60)
+        
+        if not response.ok:
+            logger.error(f"Failed to fetch messages from nextLink: {response.text}")
+            raise ValueError(f"Failed to fetch messages: {response.status_code}")
+        
+        data = response.json()
+        return data.get("value", []), data.get("@odata.nextLink")
     
     def get_message_by_id(self, access_token: str, message_id: str) -> dict:
         """

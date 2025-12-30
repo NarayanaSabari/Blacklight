@@ -39,11 +39,13 @@ import {
   XCircle,
   Clock,
   Sparkles,
+  Send,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { format } from 'date-fns';
 import type { JobMatch, MatchGrade } from '@/types';
+import { SubmissionDialog } from '@/components/SubmissionDialog';
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -90,6 +92,14 @@ export function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Submission dialog state
+  const [submissionDialogOpen, setSubmissionDialogOpen] = useState(false);
+  const [selectedJobForSubmission, setSelectedJobForSubmission] = useState<{
+    jobId: number;
+    jobTitle: string;
+    company: string;
+  } | null>(null);
 
   // Update selected candidate from URL param
   useEffect(() => {
@@ -517,18 +527,40 @@ export function JobsPage() {
                                       <TooltipContent>Open job posting</TooltipContent>
                                     </Tooltip>
                                   )}
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`);
-                                    }}
-                                  >
-                                    <Sparkles className="h-3.5 w-3.5 mr-1" />
-                                    Tailor
-                                  </Button>
+                                  <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedJobForSubmission({
+                                              jobId: job.id,
+                                              jobTitle: job.title,
+                                              company: job.company,
+                                            });
+                                            setSubmissionDialogOpen(true);
+                                          }}
+                                        >
+                                          <Send className="h-3.5 w-3.5 mr-1" />
+                                          Submit
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Submit candidate to this job</TooltipContent>
+                                    </Tooltip>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/candidates/${selectedCandidateId}/matches/jobs/${job.id}`);
+                                      }}
+                                    >
+                                      <Sparkles className="h-3.5 w-3.5 mr-1" />
+                                      Tailor
+                                    </Button>
                                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                 </div>
                               </div>
@@ -544,6 +576,26 @@ export function JobsPage() {
           </div>
         </div>
       </div>
+
+      {/* Submission Dialog */}
+      {selectedCandidateId && selectedCandidate && selectedJobForSubmission && (
+        <SubmissionDialog
+          open={submissionDialogOpen}
+          onOpenChange={(open) => {
+            setSubmissionDialogOpen(open);
+            if (!open) setSelectedJobForSubmission(null);
+          }}
+          candidateId={selectedCandidateId}
+          candidateName={`${selectedCandidate.first_name} ${selectedCandidate.last_name}`}
+          jobPostingId={selectedJobForSubmission.jobId}
+          jobTitle={selectedJobForSubmission.jobTitle}
+          company={selectedJobForSubmission.company}
+          onSuccess={() => {
+            setSubmissionDialogOpen(false);
+            setSelectedJobForSubmission(null);
+          }}
+        />
+      )}
     </TooltipProvider>
   );
 }

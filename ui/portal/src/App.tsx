@@ -28,6 +28,8 @@ import {
   InvitationDetailsPage,
   InvitationReviewPage,
   OnboardingPage,
+  SubmissionsPage,
+  SubmissionDetailPage,
 } from '@/pages';
 
 // Create a client
@@ -105,6 +107,8 @@ function App() {
                       <Route path="/pipeline" element={<KanbanBoardPage />} />
                       <Route path="/email-jobs" element={<EmailJobsPage />} />
                       <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
+                      <Route path="/submissions" element={<SubmissionsPage />} />
+                      <Route path="/submissions/:id" element={<SubmissionDetailPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/settings/:tab" element={<SettingsPage />} />
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />

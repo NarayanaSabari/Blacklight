@@ -43,6 +43,7 @@ import {
   XCircle,
   Star,
   Upload,
+  Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -50,6 +51,7 @@ import { candidateApi } from '@/lib/candidateApi';
 import { documentApi } from '@/lib/documentApi';
 import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
+import { submissionApi } from '@/lib/submissionApi';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
@@ -97,6 +99,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { candidateUpdateSchema, type CandidateUpdateInput } from '@/schemas/candidateSchema';
 import type { Document, DocumentListItem, Candidate as CandidateType } from '@/types';
+import { STATUS_LABELS, STATUS_COLORS, type SubmissionStatus } from '@/types/submission';
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   processing: { color: 'bg-blue-500 text-white', label: 'Processing' },
@@ -172,6 +175,13 @@ export function CandidateDetailPage() {
   const { data: matchesData } = useQuery({
     queryKey: ['candidateMatches', id],
     queryFn: () => jobMatchApi.getCandidateMatches(Number(id), { per_page: 3, sort_by: 'match_score', sort_order: 'desc' }),
+    enabled: !!id,
+  });
+
+  // Fetch candidate submissions
+  const { data: submissionsData } = useQuery({
+    queryKey: ['candidate-submissions', id],
+    queryFn: () => submissionApi.getCandidateSubmissions(Number(id)),
     enabled: !!id,
   });
 
@@ -1219,6 +1229,65 @@ export function CandidateDetailPage() {
                         <span className="text-xs text-slate-500 self-center font-medium">
                           +{(match.matched_skills?.length || 0) - 3}
                         </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Submissions Preview */}
+          {!isReviewMode && submissionsData && submissionsData.total > 0 && (
+            <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-blue-50 to-indigo-50">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Send className="h-5 w-5 text-blue-600" />
+                    Submissions
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigate(`/submissions?candidate_id=${id}`)}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    All ({submissionsData.total})
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {submissionsData.submissions.slice(0, 3).map((submission) => (
+                  <div
+                    key={submission.id}
+                    className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] cursor-pointer transition-all"
+                    onClick={() => navigate(`/submissions/${submission.id}`)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h4
+                          title={submission.job?.title}
+                          className="font-bold text-sm truncate text-slate-900"
+                        >
+                          {submission.job?.title ?? 'Untitled Job'}
+                        </h4>
+                        <p
+                          title={submission.job?.company}
+                          className="text-xs text-slate-600 truncate"
+                        >
+                          {submission.job?.company ?? submission.client_company ?? 'Unknown Company'}
+                        </p>
+                      </div>
+                      <Badge className={`${STATUS_COLORS[submission.status as SubmissionStatus]} border border-black text-xs`}>
+                        {STATUS_LABELS[submission.status as SubmissionStatus]}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+                      <span>
+                        {new Date(submission.submitted_at).toLocaleDateString()}
+                      </span>
+                      {submission.is_hot && (
+                        <Badge className="bg-red-500 text-white text-xs">🔥 Hot</Badge>
                       )}
                     </div>
                   </div>

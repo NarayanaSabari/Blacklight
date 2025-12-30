@@ -660,11 +660,15 @@ class EmailSyncService:
         integration: UserEmailIntegration,
     ) -> list[dict]:
         """
-        Fetch emails from Outlook with time-based logic.
+        Fetch emails from Outlook with time-based logic using proper @odata.nextLink pagination.
         
         Time-based fetching strategy:
         - First scan (no last_synced_at): Fetch ALL emails from past 2 days
         - Subsequent syncs: Fetch ALL emails since last_synced_at
+        
+        Pagination:
+        - Uses Microsoft Graph's @odata.nextLink for reliable pagination
+        - Avoids $skip which may not work correctly for large datasets
         
         Args:
             access_token: Valid Outlook access token
@@ -687,18 +691,27 @@ class EmailSyncService:
         
         filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
         
-        # Fetch ALL messages using pagination
+        # Fetch ALL messages using @odata.nextLink pagination (more reliable than $skip)
         all_emails = []
-        skip = 0
         page_size = self.max_emails_per_page
+        next_link: Optional[str] = None
+        is_first_request = True
         
         while True:
-            messages = outlook_oauth_service.get_messages(
-                access_token=access_token,
-                top=page_size,
-                skip=skip,
-                filter_query=filter_query,
-            )
+            # Fetch messages - use initial request or follow nextLink
+            if is_first_request:
+                messages, next_link = outlook_oauth_service.get_messages(
+                    access_token=access_token,
+                    top=page_size,
+                    filter_query=filter_query,
+                )
+                is_first_request = False
+            else:
+                # Use the nextLink URL for pagination (includes all query params)
+                messages, next_link = outlook_oauth_service.get_messages_from_url(
+                    access_token=access_token,
+                    url=next_link,  # type: ignore - we check next_link before this branch
+                )
             
             if not messages:
                 break
@@ -732,12 +745,11 @@ class EmailSyncService:
                     logger.warning(f"Failed to process Outlook message: {e}")
                     continue
             
-            # Check if we got a full page (more might exist)
-            if len(messages) < page_size:
-                break
-            
-            skip += page_size
             logger.debug(f"Fetched {len(all_emails)} Outlook emails so far, continuing...")
+            
+            # Check if there are more pages via nextLink
+            if not next_link:
+                break
         
         logger.info(f"Found {len(all_emails)} total Outlook emails since {after_date.strftime('%Y-%m-%d %H:%M')}")
         return all_emails

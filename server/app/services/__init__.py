@@ -91,6 +91,7 @@ from app.services.team_management_service import TeamManagementService
 from app.services.candidate_assignment_service import CandidateAssignmentService
 from app.services.ai_role_normalization_service import AIRoleNormalizationService
 from app.services.scrape_queue_service import ScrapeQueueService
+from app.services.submission_service import SubmissionService
 
 __all__ = [
     "AuditLogService",
@@ -110,4 +111,5 @@ __all__ = [
     "CandidateAssignmentService",
     "AIRoleNormalizationService",
     "ScrapeQueueService",
+    "SubmissionService",
 ]

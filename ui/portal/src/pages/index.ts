@@ -34,5 +34,9 @@ export { default as DocumentsPage } from './settings/DocumentsPage';
 export { default as InvitationDetailsPage } from './invitations/InvitationDetailsPage';
 export { default as InvitationReviewPage } from './invitations/InvitationReviewPage';
 
+// Submissions
+export { SubmissionsPage } from './submissions/SubmissionsPage';
+export { SubmissionDetailPage } from './submissions/SubmissionDetailPage';
+
 // Public Pages
 export { default as OnboardingPage } from './public/OnboardingPage';

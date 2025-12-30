@@ -145,6 +145,14 @@ def seed_roles_and_permissions():
         {"name": "job_matches.generate", "display_name": "Generate Matches", "category": "job_matches", "description": "Trigger AI job matching for candidates"},
         {"name": "job_matches.export", "display_name": "Export Matches", "category": "job_matches", "description": "Export job match results"},
         
+        # Submissions (Candidate to Job Submissions)
+        {"name": "submissions.view", "display_name": "View Submissions", "category": "submissions", "description": "View candidate submissions to jobs"},
+        {"name": "submissions.create", "display_name": "Create Submissions", "category": "submissions", "description": "Submit candidates to job postings"},
+        {"name": "submissions.edit", "display_name": "Edit Submissions", "category": "submissions", "description": "Update submission details and rates"},
+        {"name": "submissions.delete", "display_name": "Delete Submissions", "category": "submissions", "description": "Remove submissions"},
+        {"name": "submissions.manage_status", "display_name": "Manage Submission Status", "category": "submissions", "description": "Change submission status (e.g., interview scheduled, offered, placed)"},
+        {"name": "submissions.view_all", "display_name": "View All Submissions", "category": "submissions", "description": "View all submissions in the tenant"},
+        
         # Audit Logs
         {"name": "audit.view", "display_name": "View Audit Logs", "category": "audit", "description": "View system audit logs and activity history"},
         {"name": "audit.export", "display_name": "Export Audit Logs", "category": "audit", "description": "Export audit logs for compliance"}
@@ -209,6 +217,8 @@ def seed_roles_and_permissions():
             'invitations.view', 'invitations.send', 'invitations.resend',
             # Job matching
             'job_matches.view',
+            # Submissions
+            'submissions.view', 'submissions.create', 'submissions.edit', 'submissions.manage_status',
             # Reporting
             'reports.view', 'reports.export'
         ]
@@ -241,6 +251,9 @@ def seed_roles_and_permissions():
             'assignments.view', 'assignments.create', 'assignments.remove', 'assignments.manage',
             # Job matching
             'job_matches.view', 'job_matches.generate',
+            # Submissions
+            'submissions.view', 'submissions.create', 'submissions.edit', 'submissions.delete',
+            'submissions.manage_status', 'submissions.view_all',
             # Other permissions
             'jobs.view', 'interviews.view', 'interviews.feedback',
             'clients.view', 'reports.view'
@@ -272,6 +285,8 @@ def seed_roles_and_permissions():
             'assignments.view', 'assignments.create', 'assignments.remove',
             # Job matching
             'job_matches.view',
+            # Submissions
+            'submissions.view', 'submissions.create', 'submissions.edit', 'submissions.manage_status', 'submissions.view_all',
             # Reporting
             'reports.view', 'reports.export'
         ]

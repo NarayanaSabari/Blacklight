@@ -19,6 +19,7 @@ import {
   UserCheck,
   Mail,
   LayoutGrid,
+  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -93,6 +94,13 @@ const navigation: NavItem[] = [
     label: 'Email Jobs',
     icon: Mail,
     href: '/email-jobs',
+    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
+  },
+  {
+    id: 'submissions',
+    label: 'Submissions',
+    icon: Send,
+    href: '/submissions',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {
