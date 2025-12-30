@@ -10,6 +10,7 @@
  * - Apply button and other actions
  */
 
+import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -28,6 +29,7 @@ import {
   Globe,
   Sparkles,
   Mail,
+  Send,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -39,6 +41,9 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { jobPostingApi } from '@/lib/jobPostingApi';
+import { submissionApi } from '@/lib/submissionApi';
+import { candidateApi } from '@/lib/candidateApi';
+import { SubmissionDialog } from '@/components/SubmissionDialog';
 import { env } from '@/lib/env';
 import type { JobMatch } from '@/types';
 
@@ -46,6 +51,9 @@ export function JobDetailPage() {
   const { jobId, candidateId } = useParams<{ jobId: string; candidateId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // State for submission dialog
+  const [isSubmissionDialogOpen, setIsSubmissionDialogOpen] = useState(false);
   
   // Get match data from navigation state if coming from matches page
   const matchData = location.state?.match as JobMatch | undefined;
@@ -67,6 +75,22 @@ export function JobDetailPage() {
     enabled: !!jobIdNum,
   });
 
+  // Fetch candidate details if we have a candidateId
+  const { data: candidate } = useQuery({
+    queryKey: ['candidate', candidateIdNum],
+    queryFn: () => candidateApi.getCandidate(candidateIdNum!),
+    enabled: !!candidateIdNum,
+  });
+
+  // Check if submission already exists for this candidate-job pair
+  const { data: duplicateCheck } = useQuery({
+    queryKey: ['submission-check-duplicate', candidateIdNum, jobIdNum],
+    queryFn: () => submissionApi.checkDuplicate(candidateIdNum!, jobIdNum),
+    enabled: !!candidateIdNum && !!jobIdNum,
+  });
+
+  const existingSubmission = duplicateCheck?.exists ? duplicateCheck.submission : null;
+
   const handleBack = () => {
     if (candidateIdNum) {
       navigate(`/candidates/${candidateIdNum}/matches`);
@@ -78,8 +102,22 @@ export function JobDetailPage() {
   };
 
   const handleApply = () => {
-    toast.success('Application submitted successfully!');
-    // Implement actual apply logic
+    // If we have candidate context, open submission dialog
+    if (candidateIdNum && job) {
+      if (existingSubmission) {
+        // Navigate to existing submission
+        navigate(`/submissions/${existingSubmission.id}`);
+      } else {
+        setIsSubmissionDialogOpen(true);
+      }
+    } else {
+      toast.info('Please access this page from a candidate profile to submit them to this job.');
+    }
+  };
+
+  const handleSubmissionSuccess = () => {
+    toast.success('Candidate submitted successfully!');
+    // Optionally navigate to submissions page
   };
 
   const handleViewSource = () => {
@@ -264,11 +302,29 @@ export function JobDetailPage() {
               </div>
             </div>
 
-            {/* Apply Button */}
+            {/* Submit/Apply Button */}
             <div className="flex flex-col gap-2">
-              <Button size="lg" onClick={handleApply} className="min-w-[120px]">
-                Apply Now
-              </Button>
+              {candidateIdNum ? (
+                existingSubmission ? (
+                  <Button 
+                    size="lg" 
+                    onClick={() => navigate(`/submissions/${existingSubmission.id}`)} 
+                    className="min-w-[140px] bg-green-600 hover:bg-green-700"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    View Submission
+                  </Button>
+                ) : (
+                  <Button size="lg" onClick={handleApply} className="min-w-[140px]">
+                    <Send className="h-4 w-4 mr-2" />
+                    Submit Candidate
+                  </Button>
+                )
+              ) : (
+                <Button size="lg" onClick={handleApply} className="min-w-[120px]">
+                  Apply Now
+                </Button>
+              )}
               <Badge variant="outline" className="justify-center">
                 {job.status}
               </Badge>
@@ -445,15 +501,38 @@ export function JobDetailPage() {
                 View on {job.source || 'Source'}
               </Button>
             )}
-            <Button
-              size="lg"
-              onClick={handleApply}
-              className="flex-1"
-              variant={(job as any)?.job_url ? 'outline' : 'default'}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Apply Now
-            </Button>
+            {candidateIdNum ? (
+              existingSubmission ? (
+                <Button
+                  size="lg"
+                  onClick={() => navigate(`/submissions/${existingSubmission.id}`)}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  View Submission
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={handleApply}
+                  className="flex-1"
+                  variant={(job as any)?.job_url ? 'outline' : 'default'}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Submit Candidate
+                </Button>
+              )
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleApply}
+                className="flex-1"
+                variant={(job as any)?.job_url ? 'outline' : 'default'}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Apply Now
+              </Button>
+            )}
             <Button variant="outline" size="lg" onClick={handleSave}>
               <Bookmark className="h-4 w-4 mr-2" />
               Save for Later
@@ -497,6 +576,20 @@ export function JobDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Submission Dialog */}
+      {candidateIdNum && job && candidate && (
+        <SubmissionDialog
+          open={isSubmissionDialogOpen}
+          onOpenChange={setIsSubmissionDialogOpen}
+          candidateId={candidateIdNum}
+          candidateName={`${candidate.first_name} ${candidate.last_name || ''}`.trim()}
+          jobPostingId={jobIdNum}
+          jobTitle={job.title}
+          company={job.company}
+          onSuccess={handleSubmissionSuccess}
+        />
+      )}
     </div>
   );
 }
