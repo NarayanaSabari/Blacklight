@@ -20,6 +20,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Briefcase, 
   Search, 
@@ -40,6 +46,8 @@ import {
   Clock,
   Sparkles,
   Send,
+  Filter,
+  X,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
@@ -92,6 +100,7 @@ export function JobsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
 
   // Submission dialog state
   const [submissionDialogOpen, setSubmissionDialogOpen] = useState(false);
@@ -163,6 +172,35 @@ export function JobsPage() {
   const totalMatches = matchesData?.total_matches || 0;
   const totalPages = matchesData?.total_pages || 0;
   const selectedCandidate = candidates.find((c) => c.id === selectedCandidateId);
+
+  // Extract unique platforms from matches
+  const availablePlatforms = [...new Set(
+    matches
+      .map((match) => (match.job || match.job_posting)?.platform)
+      .filter((p): p is string => !!p)
+  )].sort();
+
+  // Filter matches by selected platforms (client-side)
+  const filteredMatches = selectedPlatforms.length > 0
+    ? matches.filter((match) => {
+        const platform = (match.job || match.job_posting)?.platform;
+        return platform && selectedPlatforms.includes(platform);
+      })
+    : matches;
+
+  // Toggle platform selection
+  const togglePlatform = (platform: string) => {
+    setSelectedPlatforms((prev) =>
+      prev.includes(platform)
+        ? prev.filter((p) => p !== platform)
+        : [...prev, platform]
+    );
+  };
+
+  // Clear all platform filters
+  const clearPlatformFilters = () => {
+    setSelectedPlatforms([]);
+  };
 
   const handleRowClick = (match: JobMatch) => {
     const job = match.job || match.job_posting;
@@ -268,9 +306,97 @@ export function JobsPage() {
                         <p className="text-sm text-muted-foreground">{selectedCandidate?.email}</p>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="text-sm">
-                      {totalMatches} job{totalMatches !== 1 ? 's' : ''} matched
-                    </Badge>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary" className="text-sm">
+                        {selectedPlatforms.length > 0 
+                          ? `${filteredMatches.length} of ${totalMatches} jobs`
+                          : `${totalMatches} job${totalMatches !== 1 ? 's' : ''} matched`
+                        }
+                      </Badge>
+
+                      {/* Platform Filter */}
+                      {availablePlatforms.length > 0 && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-8 gap-2">
+                              <Filter className="h-3.5 w-3.5" />
+                              Platform
+                              {selectedPlatforms.length > 0 && (
+                                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                                  {selectedPlatforms.length}
+                                </Badge>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-3" align="end">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-sm">Filter by Platform</h4>
+                                {selectedPlatforms.length > 0 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={clearPlatformFilters}
+                                  >
+                                    Clear
+                                  </Button>
+                                )}
+                              </div>
+                              <div className="space-y-2">
+                                {availablePlatforms.map((platform) => {
+                                  const count = matches.filter(
+                                    (m) => (m.job || m.job_posting)?.platform === platform
+                                  ).length;
+                                  return (
+                                    <div
+                                      key={platform}
+                                      className="flex items-center space-x-2"
+                                    >
+                                      <Checkbox
+                                        id={`platform-${platform}`}
+                                        checked={selectedPlatforms.includes(platform)}
+                                        onCheckedChange={() => togglePlatform(platform)}
+                                      />
+                                      <label
+                                        htmlFor={`platform-${platform}`}
+                                        className="flex-1 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer capitalize"
+                                      >
+                                        {platform}
+                                      </label>
+                                      <span className="text-xs text-muted-foreground">
+                                        {count}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+
+                      {/* Active Platform Badges */}
+                      {selectedPlatforms.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          {selectedPlatforms.map((platform) => (
+                            <Badge
+                              key={platform}
+                              variant="secondary"
+                              className="text-xs capitalize gap-1 pr-1"
+                            >
+                              {platform}
+                              <button
+                                onClick={() => togglePlatform(platform)}
+                                className="ml-0.5 hover:bg-muted rounded-full p-0.5"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Pagination Controls */}
@@ -332,9 +458,20 @@ export function JobsPage() {
                         Jobs will appear here once they are matched to this candidate's roles
                       </p>
                     </div>
+                  ) : filteredMatches.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+                      <Filter className="h-12 w-12 text-muted-foreground mb-3" />
+                      <h3 className="text-lg font-medium mb-1">No Matches for Selected Platforms</h3>
+                      <p className="text-muted-foreground text-sm max-w-sm mb-3">
+                        No jobs found for the selected platforms. Try adjusting your filter.
+                      </p>
+                      <Button variant="outline" size="sm" onClick={clearPlatformFilters}>
+                        Clear Filters
+                      </Button>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      {matches.map((match) => {
+                      {filteredMatches.map((match) => {
                         const job = match.job || match.job_posting;
                         if (!job) return null;
                         
