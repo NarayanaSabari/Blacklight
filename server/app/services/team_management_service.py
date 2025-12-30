@@ -7,6 +7,7 @@ from sqlalchemy import select, or_
 from app import db
 from app.models import PortalUser, Role
 from app.services import AuditLogService
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +69,20 @@ class TeamManagementService:
         manager_level = TeamManagementService._get_user_role_level(manager)
         subordinate_level = TeamManagementService._get_user_role_level(subordinate)
         
-        # If either user doesn't have a system role, allow assignment
-        # (custom roles don't have hierarchy restrictions)
+        # Custom role handling:
+        # If either user has a custom role (not a system role), they don't have a defined
+        # position in the hierarchy. Rather than blocking all assignments involving custom
+        # roles, we allow them by default. This enables flexibility for tenants that create
+        # custom roles like "Senior Recruiter" or "Regional Manager" which may need to
+        # manage others or be managed outside the strict system role hierarchy.
+        # 
+        # If stricter control is needed, tenants should use system roles or implement
+        # custom permission-based logic at the route level.
         if manager_level is None or subordinate_level is None:
+            logger.debug(
+                f"Hierarchy check bypassed: manager_level={manager_level}, "
+                f"subordinate_level={subordinate_level} (custom roles don't have hierarchy)"
+            )
             return (True, "")
         
         # Manager must have a lower level number (higher authority) than subordinate
@@ -356,8 +368,9 @@ class TeamManagementService:
         Returns:
             List of user dictionaries with hierarchy level
         """
-        if level > 10:  # Prevent infinite recursion
-            logger.warning(f"Maximum recursion depth reached for manager {manager_id}")
+        max_depth = settings.team_hierarchy_max_depth
+        if level > max_depth:  # Prevent infinite recursion
+            logger.warning(f"Maximum recursion depth ({max_depth}) reached for manager {manager_id}")
             return []
 
         # Get direct reports
@@ -715,8 +728,9 @@ class TeamManagementService:
         if not current_user or current_user.tenant_id != tenant_id:
             return False
         
-        # Check up to 10 levels (prevent infinite loops)
-        for _ in range(10):
+        # Check up to max_depth levels (prevent infinite loops)
+        max_depth = settings.team_hierarchy_max_depth
+        for _ in range(max_depth):
             if not current_user.manager_id:
                 break
             

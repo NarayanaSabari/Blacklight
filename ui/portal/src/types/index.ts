@@ -92,11 +92,13 @@ export {
 export type {
   UserBasicInfo,
   TeamMember,
+  TeamMemberWithCounts,
   ManagerWithCount,
   TeamHierarchyResponse,
   AvailableManagersResponse,
   ManagersListResponse,
   TeamMembersResponse,
+  TeamMembersWithCountsResponse,
   AssignManagerRequest,
   AssignManagerResponse,
   RemoveManagerRequest,

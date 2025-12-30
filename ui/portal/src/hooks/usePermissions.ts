@@ -4,24 +4,26 @@
  */
 
 import { usePortalAuth } from '@/contexts/PortalAuthContext';
+import { PERMISSIONS, ROLES } from '@/lib/permissions';
+import type { PermissionName, RoleName } from '@/lib/permissions';
 
 export function usePermissions() {
   const { user } = usePortalAuth();
 
   // Helper to check if user has a specific role
-  const hasRole = (roleName: string): boolean => {
+  const hasRole = (roleName: RoleName): boolean => {
     return user?.roles?.some(role => role.name === roleName) || false;
   };
 
-  const isTenantAdmin = hasRole('TENANT_ADMIN');
-  const isRecruiter = hasRole('RECRUITER');
-  const isManager = hasRole('MANAGER');
-  const isTeamLead = hasRole('TEAM_LEAD');
+  const isTenantAdmin = hasRole(ROLES.TENANT_ADMIN);
+  const isRecruiter = hasRole(ROLES.RECRUITER);
+  const isManager = hasRole(ROLES.MANAGER);
+  const isTeamLead = hasRole(ROLES.TEAM_LEAD);
 
   /**
    * Check if user has a specific permission
    */
-  const hasPermission = (permissionName: string): boolean => {
+  const hasPermission = (permissionName: PermissionName | string): boolean => {
     if (!user || !user.roles) return false;
 
     // Tenant admins have all permissions
@@ -36,81 +38,141 @@ export function usePermissions() {
   /**
    * Check if user can manage users
    */
-  const canManageUsers = hasPermission('users.create') || hasPermission('users.edit') || hasPermission('users.delete');
+  const canManageUsers = hasPermission(PERMISSIONS.USERS.CREATE) || 
+                         hasPermission(PERMISSIONS.USERS.EDIT) || 
+                         hasPermission(PERMISSIONS.USERS.DELETE);
 
   /**
    * Check if user can manage roles
    */
-  const canManageRoles = hasPermission('roles.create') || hasPermission('roles.edit') || hasPermission('roles.delete');
+  const canManageRoles = hasPermission(PERMISSIONS.ROLES.CREATE) || 
+                         hasPermission(PERMISSIONS.ROLES.EDIT) || 
+                         hasPermission(PERMISSIONS.ROLES.DELETE);
 
   /**
    * Check if user can manage jobs
    */
-  const canManageJobs = hasPermission('jobs.create') || hasPermission('jobs.edit') || hasPermission('jobs.delete');
+  const canManageJobs = hasPermission(PERMISSIONS.JOBS.CREATE) || 
+                        hasPermission(PERMISSIONS.JOBS.EDIT) || 
+                        hasPermission(PERMISSIONS.JOBS.DELETE);
 
   /**
    * Check if user can view jobs
    */
-  const canViewJobs = hasPermission('jobs.view');
+  const canViewJobs = hasPermission(PERMISSIONS.JOBS.VIEW);
 
   /**
    * Check if user can manage candidates
    */
-  const canManageCandidates = hasPermission('candidates.create') || hasPermission('candidates.edit') || hasPermission('candidates.delete');
+  const canManageCandidates = hasPermission(PERMISSIONS.CANDIDATES.CREATE) || 
+                              hasPermission(PERMISSIONS.CANDIDATES.EDIT) || 
+                              hasPermission(PERMISSIONS.CANDIDATES.DELETE);
 
   /**
    * Check if user can view candidates
    */
-  const canViewCandidates = hasPermission('candidates.view');
+  const canViewCandidates = hasPermission(PERMISSIONS.CANDIDATES.VIEW);
 
   /**
    * Check if user can manage applications
    */
-  const canManageApplications = hasPermission('jobs.manage_applications');
+  const canManageApplications = hasPermission(PERMISSIONS.JOBS.MANAGE_APPLICATIONS);
 
   /**
    * Check if user can view applications
    */
-  const canViewApplications = hasPermission('jobs.view'); // Assuming view jobs includes viewing applications
+  const canViewApplications = hasPermission(PERMISSIONS.JOBS.VIEW); // Assuming view jobs includes viewing applications
 
   /**
    * Check if user can schedule interviews
    */
-  const canScheduleInterviews = hasPermission('interviews.create');
+  const canScheduleInterviews = hasPermission(PERMISSIONS.INTERVIEWS.CREATE);
 
   /**
    * Check if user can submit interview feedback
    */
-  const canSubmitFeedback = hasPermission('interviews.feedback');
+  const canSubmitFeedback = hasPermission(PERMISSIONS.INTERVIEWS.FEEDBACK);
 
   /**
    * Check if user can view settings
    */
-  const canViewSettings = hasPermission('settings.view');
+  const canViewSettings = hasPermission(PERMISSIONS.SETTINGS.VIEW);
 
   /**
    * Check if user can manage subscription
    */
-  const canManageSubscription = hasPermission('settings.billing');
+  const canManageSubscription = hasPermission(PERMISSIONS.SETTINGS.BILLING);
+
+  /**
+   * Check if user can view team
+   */
+  const canViewTeam = hasPermission(PERMISSIONS.USERS.VIEW_TEAM);
+
+  /**
+   * Check if user can assign managers
+   */
+  const canAssignManager = hasPermission(PERMISSIONS.USERS.ASSIGN_MANAGER);
+
+  /**
+   * Check if user can assign candidates
+   */
+  const canAssignCandidates = hasPermission(PERMISSIONS.CANDIDATES.ASSIGN);
+
+  /**
+   * Check if user can view submissions
+   */
+  const canViewSubmissions = hasPermission(PERMISSIONS.SUBMISSIONS.VIEW);
+
+  /**
+   * Check if user can create submissions
+   */
+  const canCreateSubmissions = hasPermission(PERMISSIONS.SUBMISSIONS.CREATE);
 
   return {
+    // User and roles
     user,
     isTenantAdmin,
     isRecruiter,
     isManager,
     isTeamLead,
+    hasRole,
     hasPermission,
+    
+    // User management
     canManageUsers,
     canManageRoles,
+    
+    // Job management
     canManageJobs,
     canViewJobs,
+    
+    // Candidate management
     canManageCandidates,
     canViewCandidates,
+    canAssignCandidates,
+    
+    // Applications
     canManageApplications,
     canViewApplications,
+    
+    // Interviews
     canScheduleInterviews,
     canSubmitFeedback,
+    
+    // Settings
     canViewSettings,
     canManageSubscription,
+    
+    // Team
+    canViewTeam,
+    canAssignManager,
+    
+    // Submissions
+    canViewSubmissions,
+    canCreateSubmissions,
+    
+    // Re-export constants for convenience
+    PERMISSIONS,
+    ROLES,
   };
 }

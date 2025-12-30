@@ -85,6 +85,7 @@ class PortalUser(BaseModel):
     __table_args__ = (
         Index('idx_portal_user_tenant_id', 'tenant_id'),
         Index('idx_portal_user_email', 'email'),
+        Index('idx_portal_users_tenant_manager', 'tenant_id', 'manager_id'),
     )
     
     @property

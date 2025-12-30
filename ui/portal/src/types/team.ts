@@ -25,12 +25,26 @@ export interface UserBasicInfo {
 }
 
 /**
- * Team member with hierarchy information
+ * Team member with hierarchy information (used in settings/admin views)
  */
 export interface TeamMember extends UserBasicInfo {
   manager_id: number | null;
   hierarchy_level: number;
   team_members: TeamMember[];
+}
+
+/**
+ * Team member with counts (used in TeamJobsPage drill-down view)
+ * This is returned by /api/team/my-team-members and /api/team/{id}/team-members
+ */
+export interface TeamMemberWithCounts {
+  id: number;
+  full_name: string;
+  email: string;
+  role_name: string;
+  candidate_count: number;
+  team_member_count: number;
+  has_team_members: boolean;
 }
 
 /**
@@ -65,13 +79,21 @@ export interface ManagersListResponse {
 }
 
 /**
- * Team members response
+ * Team members response (for hierarchy/admin views)
  */
 export interface TeamMembersResponse {
   team_members: TeamMember[];
   total: number;
   manager_id: number;
   include_indirect: boolean;
+}
+
+/**
+ * Team members with counts response (for TeamJobsPage drill-down)
+ */
+export interface TeamMembersWithCountsResponse {
+  team_members: TeamMemberWithCounts[];
+  total: number;
 }
 
 /**

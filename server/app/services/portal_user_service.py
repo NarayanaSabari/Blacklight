@@ -1,8 +1,8 @@
 """Portal User Service - Tenant-specific user management."""
 
 import logging
-from typing import Optional
-from sqlalchemy import select, or_
+from typing import List, Optional, Set
+from sqlalchemy import select, or_, delete
 import bcrypt
 
 from app import db
@@ -545,3 +545,122 @@ class PortalUserService:
         logger.info(f"Portal user password changed: {user_id} by {changed_by}")
 
         return True
+
+    # System role names - users should have exactly one of these
+    SYSTEM_ROLE_NAMES: Set[str] = {'TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD', 'RECRUITER'}
+
+    @staticmethod
+    def assign_roles_to_user(
+        user_id: int,
+        role_ids: List[int],
+        changed_by: str,
+        requester_tenant_id: int,
+    ) -> PortalUserResponseSchema:
+        """
+        Assign roles to a portal user.
+        
+        Validates that:
+        1. User exists and belongs to requester's tenant
+        2. All roles exist and are accessible (system roles or same tenant)
+        3. Exactly one system role is assigned (TENANT_ADMIN, MANAGER, TEAM_LEAD, or RECRUITER)
+        4. Custom roles are optional and can be added alongside the system role
+        
+        Args:
+            user_id: User ID to assign roles to
+            role_ids: List of role IDs to assign
+            changed_by: Identifier for audit log
+            requester_tenant_id: Tenant ID of the requester (for access control)
+            
+        Returns:
+            PortalUserResponseSchema with updated user
+            
+        Raises:
+            ValueError: If validation fails
+        """
+        # Get user
+        user = db.session.get(PortalUser, user_id)
+        if not user:
+            raise ValueError(f"User with ID {user_id} not found")
+        
+        # Verify same tenant
+        if user.tenant_id != requester_tenant_id:
+            raise ValueError("Access denied: User belongs to different tenant")
+        
+        # Get all requested roles
+        if not role_ids:
+            raise ValueError("At least one role must be assigned")
+        
+        roles = db.session.scalars(
+            select(Role).where(Role.id.in_(role_ids))
+        ).all()
+        
+        if len(roles) != len(role_ids):
+            found_ids = {r.id for r in roles}
+            missing_ids = set(role_ids) - found_ids
+            raise ValueError(f"Role(s) not found: {missing_ids}")
+        
+        # Validate each role is accessible
+        for role in roles:
+            if not role.is_active:
+                raise ValueError(f"Role '{role.name}' is not active")
+            # Role must be system role OR belong to same tenant
+            if not role.is_system_role and role.tenant_id != requester_tenant_id:
+                raise ValueError(f"Cannot assign role '{role.name}' from different tenant")
+        
+        # Validate exactly one system role is assigned
+        system_roles = [r for r in roles if r.name in PortalUserService.SYSTEM_ROLE_NAMES]
+        
+        if len(system_roles) == 0:
+            raise ValueError(
+                "A user must have exactly one system role "
+                "(TENANT_ADMIN, MANAGER, TEAM_LEAD, or RECRUITER)"
+            )
+        
+        if len(system_roles) > 1:
+            system_role_names = [r.name for r in system_roles]
+            raise ValueError(
+                f"A user can only have one system role. Found: {system_role_names}"
+            )
+        
+        # Get previous roles for audit log
+        old_role_ids = [r.id for r in user.roles]
+        old_role_names = [r.name for r in user.roles]
+        
+        # Clear existing roles
+        db.session.execute(
+            delete(UserRole).where(UserRole.user_id == user_id)
+        )
+        
+        # Assign new roles
+        for role in roles:
+            user_role = UserRole(user_id=user_id, role_id=role.id)
+            db.session.add(user_role)
+        
+        db.session.commit()
+        
+        # Refresh user to get updated roles
+        db.session.refresh(user)
+        
+        # Log audit
+        new_role_names = [r.name for r in roles]
+        AuditLogService.log_action(
+            action="ASSIGN_ROLES",
+            entity_type="PortalUser",
+            entity_id=user_id,
+            changed_by=changed_by,
+            changes={
+                "old_roles": old_role_names,
+                "new_roles": new_role_names,
+                "old_role_ids": old_role_ids,
+                "new_role_ids": role_ids,
+            },
+        )
+        
+        logger.info(
+            f"Portal user roles updated: {user_id} "
+            f"[{old_role_names}] -> [{new_role_names}] by {changed_by}"
+        )
+        
+        return PortalUserResponseSchema.model_validate(
+            user.to_dict(include_roles=True, include_permissions=True)
+        )

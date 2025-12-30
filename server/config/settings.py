@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     email_sync_initial_lookback_days: int = Field(default=2, env="EMAIL_SYNC_INITIAL_LOOKBACK_DAYS")  # First scan: 2 days
     email_sync_max_emails_per_page: int = Field(default=100, env="EMAIL_SYNC_MAX_EMAILS_PER_PAGE")  # Gmail pagination size
     
+    # Team Hierarchy Settings
+    team_hierarchy_max_depth: int = Field(default=10, env="TEAM_HIERARCHY_MAX_DEPTH")  # Max recursion depth for hierarchy traversal
+    
     class Config:
         """Pydantic configuration."""
         env_file = ".env"

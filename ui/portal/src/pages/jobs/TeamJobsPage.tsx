@@ -60,7 +60,7 @@ import {
 import { apiRequest } from '@/lib/api-client';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { format } from 'date-fns';
-import type { JobMatch, MatchGrade, CandidateInfo } from '@/types';
+import type { JobMatch, MatchGrade, CandidateInfo, TeamMemberWithCounts } from '@/types';
 import { SubmissionDialog } from '@/components/SubmissionDialog';
 import { usePortalAuth } from '@/contexts/PortalAuthContext';
 
@@ -83,16 +83,6 @@ const ONBOARDING_STATUS_COLORS: Record<string, string> = {
   APPROVED: 'bg-green-100 text-green-800',
   REJECTED: 'bg-red-100 text-red-800',
 };
-
-interface TeamMember {
-  id: number;
-  full_name: string;
-  email: string;
-  role_name: string;
-  candidate_count: number;
-  team_member_count: number;
-  has_team_members: boolean;
-}
 
 const calculateGrade = (score: number): MatchGrade => {
   if (score >= 95) return 'A+';
@@ -130,7 +120,7 @@ export function TeamJobsPage() {
   const hasTeamView = !isRecruiter; // Managers, Team Leads, Admins see team view
   
   // Team navigation state (only for non-recruiters)
-  const [navigationStack, setNavigationStack] = useState<TeamMember[]>([]);
+  const [navigationStack, setNavigationStack] = useState<TeamMemberWithCounts[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
   
@@ -172,7 +162,7 @@ export function TeamJobsPage() {
       const url = currentContextId 
         ? `/api/team/${currentContextId}/team-members`
         : '/api/team/my-team-members';
-      return apiRequest.get<{ team_members: TeamMember[]; total: number }>(url);
+      return apiRequest.get<{ team_members: TeamMemberWithCounts[]; total: number }>(url);
     },
     enabled: hasTeamView,
   });
@@ -293,7 +283,7 @@ export function TeamJobsPage() {
   // ============ HANDLERS ============
 
   // Handle team member click
-  const handleTeamMemberClick = (member: TeamMember) => {
+  const handleTeamMemberClick = (member: TeamMemberWithCounts) => {
     if (member.has_team_members) {
       // Drill down - this member has team members
       setNavigationStack([...navigationStack, member]);
