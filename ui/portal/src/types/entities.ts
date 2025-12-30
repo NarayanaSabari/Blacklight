@@ -315,6 +315,7 @@ export interface UserCreateRequest {
   last_name: string;
   phone?: string;
   role_id: number;
+  manager_id?: number;
 }
 
 export interface UserUpdateRequest {

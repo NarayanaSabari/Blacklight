@@ -3,7 +3,7 @@
  * Form to create new portal users (TENANT_ADMIN only)
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
@@ -19,10 +19,18 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, Mail, User, Phone, Lock, Shield, CheckCircle2 } from 'lucide-react';
+import { Loader2, Mail, User, Phone, Lock, Shield, CheckCircle2, Users } from 'lucide-react';
 import { createUser } from '@/lib/api/users';
 import { fetchRoles } from '@/lib/api/roles';
+import { useAvailableManagers } from '@/hooks/useTeam';
 
 interface InviteUserDialogProps {
   open: boolean;
@@ -41,6 +49,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
     last_name: '',
     phone: '',
     role_id: 0,
+    manager_id: undefined as number | undefined,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -51,6 +60,49 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
     queryFn: () => fetchRoles(true),
     enabled: open,
   });
+
+  // Get selected role name for conditional rendering
+  const selectedRole = useMemo(() => {
+    if (!formData.role_id || !rolesData?.roles) return null;
+    return rolesData.roles.find((r) => r.id === formData.role_id);
+  }, [formData.role_id, rolesData?.roles]);
+
+  // Determine which roles can manage based on selected role
+  // TEAM_LEAD can be managed by MANAGER or TENANT_ADMIN
+  // RECRUITER can be managed by TEAM_LEAD, MANAGER, or TENANT_ADMIN
+  const needsManagerSelection = selectedRole?.name === 'TEAM_LEAD' || selectedRole?.name === 'RECRUITER';
+  const isManagerRole = selectedRole?.name === 'MANAGER';
+
+  // Fetch available managers when a role that needs manager is selected
+  const { data: managersData, isLoading: managersLoading } = useAvailableManagers(
+    undefined, // no user to exclude (new user)
+    undefined  // no for_user_id (we'll filter manually based on role)
+  );
+
+  // Filter available managers based on selected role
+  const filteredManagers = useMemo(() => {
+    if (!managersData?.managers || !selectedRole) return [];
+    
+    return managersData.managers.filter((manager) => {
+      // Get the role name from the roles array
+      const managerRoles = manager.roles || [];
+      const managerRoleNames = managerRoles.map((r) => 
+        typeof r === 'string' ? r : r.name
+      );
+      
+      if (selectedRole.name === 'TEAM_LEAD') {
+        // TEAM_LEAD can report to MANAGER or TENANT_ADMIN
+        return managerRoleNames.includes('MANAGER') || managerRoleNames.includes('TENANT_ADMIN');
+      }
+      
+      if (selectedRole.name === 'RECRUITER') {
+        // RECRUITER can report to TEAM_LEAD, MANAGER, or TENANT_ADMIN
+        return managerRoleNames.includes('TEAM_LEAD') || managerRoleNames.includes('MANAGER') || managerRoleNames.includes('TENANT_ADMIN');
+      }
+      
+      return false;
+    });
+  }, [managersData?.managers, selectedRole]);
 
   const createUserMutation = useMutation({
     mutationFn: createUser,
@@ -76,6 +128,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
       last_name: '',
       phone: '',
       role_id: 0,
+      manager_id: undefined,
     });
     setErrors({});
   };
@@ -107,6 +160,11 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
       newErrors.role_id = 'Role is required';
     }
 
+    // Manager is required for TEAM_LEAD and RECRUITER roles
+    if (needsManagerSelection && !formData.manager_id) {
+      newErrors.manager_id = 'Please select a manager for this role';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -122,8 +180,17 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
     createUserMutation.mutate(formData);
   };
 
-  const handleChange = (field: string, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: string, value: string | number | undefined) => {
+    setFormData((prev) => {
+      const newData = { ...prev, [field]: value };
+      
+      // Reset manager_id when role changes
+      if (field === 'role_id') {
+        newData.manager_id = undefined;
+      }
+      
+      return newData;
+    });
     // Clear error for this field
     if (errors[field]) {
       setErrors((prev) => {
@@ -292,6 +359,80 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
               </p>
             )}
           </div>
+
+          {/* Manager Selection - shown for TEAM_LEAD and RECRUITER roles */}
+          {(needsManagerSelection || isManagerRole) && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <Label>
+                  Reports To <span className="text-destructive">*</span>
+                </Label>
+              </div>
+
+              {isManagerRole ? (
+                // MANAGER role - auto-assigned to creating user (TENANT_ADMIN)
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-muted-foreground">
+                    This user will report directly to you (the Tenant Admin).
+                  </p>
+                </div>
+              ) : (
+                // TEAM_LEAD or RECRUITER - show dropdown
+                <>
+                  <Select
+                    value={formData.manager_id?.toString() || ''}
+                    onValueChange={(value) => handleChange('manager_id', parseInt(value))}
+                  >
+                    <SelectTrigger className={errors.manager_id ? 'border-destructive' : ''}>
+                      <SelectValue placeholder="Select a manager..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {managersLoading ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin inline mr-2" />
+                          Loading managers...
+                        </div>
+                      ) : filteredManagers.length === 0 ? (
+                        <div className="p-2 text-center text-sm text-muted-foreground">
+                          No available managers
+                        </div>
+                      ) : (
+                        filteredManagers.map((manager) => {
+                          const fullName = `${manager.first_name} ${manager.last_name}`;
+                          const roleDisplay = manager.roles?.[0] 
+                            ? (typeof manager.roles[0] === 'string' 
+                                ? manager.roles[0] 
+                                : manager.roles[0].display_name || manager.roles[0].name)
+                            : '';
+                          return (
+                            <SelectItem key={manager.id} value={manager.id.toString()}>
+                              <div className="flex items-center gap-2">
+                                <span>{fullName}</span>
+                                {roleDisplay && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {roleDisplay}
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          );
+                        })
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {errors.manager_id && (
+                    <p className="text-sm text-destructive">{errors.manager_id}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedRole?.name === 'TEAM_LEAD'
+                      ? 'Team Leads report to Managers or Tenant Admins'
+                      : 'Recruiters report to Team Leads, Managers, or Tenant Admins'}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           <Separator />
 

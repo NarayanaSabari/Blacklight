@@ -105,12 +105,51 @@ class PortalUserService:
         if not role.is_system_role and role.tenant_id != tenant_id:
             raise ValueError("Cannot assign role from different tenant")
 
+        # Determine manager_id based on role
+        manager_id = None
+        if role.name == 'MANAGER':
+            # MANAGER role users are automatically assigned to the creator (TENANT_ADMIN)
+            manager_id = created_by_user_id
+        elif role.name in ('TEAM_LEAD', 'RECRUITER'):
+            # TEAM_LEAD and RECRUITER require a manager to be specified
+            if data.manager_id is None:
+                raise ValueError(
+                    f"{role.name} users must have a manager assigned. Please select a manager."
+                )
+            # Validate the manager exists and is in the same tenant
+            manager = db.session.get(PortalUser, data.manager_id)
+            if not manager:
+                raise ValueError(f"Manager with ID {data.manager_id} not found")
+            if manager.tenant_id != tenant_id:
+                raise ValueError("Manager must be in the same tenant")
+            
+            # Validate manager has appropriate role to manage this user
+            manager_role_names = [r.name for r in manager.roles]
+            if role.name == 'TEAM_LEAD':
+                # TEAM_LEAD can only be managed by MANAGER or TENANT_ADMIN
+                if not any(r in ('MANAGER', 'TENANT_ADMIN') for r in manager_role_names):
+                    raise ValueError("TEAM_LEAD can only report to MANAGER or TENANT_ADMIN")
+            elif role.name == 'RECRUITER':
+                # RECRUITER can be managed by TEAM_LEAD, MANAGER, or TENANT_ADMIN
+                if not any(r in ('TEAM_LEAD', 'MANAGER', 'TENANT_ADMIN') for r in manager_role_names):
+                    raise ValueError("RECRUITER can only report to TEAM_LEAD, MANAGER, or TENANT_ADMIN")
+            
+            manager_id = data.manager_id
+        elif data.manager_id is not None:
+            # For other roles (including custom roles), if manager_id is provided, validate it
+            manager = db.session.get(PortalUser, data.manager_id)
+            if not manager:
+                raise ValueError(f"Manager with ID {data.manager_id} not found")
+            if manager.tenant_id != tenant_id:
+                raise ValueError("Manager must be in the same tenant")
+            manager_id = data.manager_id
+
         # Hash password
         password_hash = bcrypt.hashpw(
             data.password.encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
 
-        # Create user
+        # Create user with manager assignment
         user = PortalUser(
             tenant_id=tenant_id,
             email=data.email,
@@ -119,6 +158,7 @@ class PortalUserService:
             last_name=data.last_name,
             phone=data.phone,
             is_active=True,
+            manager_id=manager_id,
         )
         db.session.add(user)
         db.session.flush()  # Flush to get user.id
@@ -143,11 +183,13 @@ class PortalUserService:
                 "last_name": data.last_name,
                 "tenant_id": tenant_id,
                 "role_id": data.role_id,
+                "manager_id": manager_id,
             },
         )
 
         logger.info(
-            f"Portal user created: {user.id} ({data.email}) in tenant {tenant_id} with role {data.role_id} by {changed_by}"
+            f"Portal user created: {user.id} ({data.email}) in tenant {tenant_id} "
+            f"with role {data.role_id} and manager {manager_id} by {changed_by}"
         )
 
         return PortalUserResponseSchema.model_validate(user.to_dict(include_roles=True, include_permissions=True))
