@@ -47,7 +47,6 @@ import {
   Sparkles,
   Send,
   Filter,
-  X,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
@@ -101,6 +100,10 @@ export function JobsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+
+  // Available grades for filtering
+  const AVAILABLE_GRADES = ['A+', 'A', 'B', 'C', 'D', 'F'] as const;
 
   // Submission dialog state
   const [submissionDialogOpen, setSubmissionDialogOpen] = useState(false);
@@ -148,13 +151,13 @@ export function JobsPage() {
     return fullName.includes(searchLower) || email.includes(searchLower);
   });
 
-  // Fetch matches for selected candidate with pagination and platform filter
+  // Fetch matches for selected candidate with pagination and filters
   const { 
     data: matchesData, 
     isLoading: loadingMatches,
     error: matchesError 
   } = useQuery({
-    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize, selectedPlatforms],
+    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize, selectedPlatforms, selectedGrades],
     queryFn: async () => {
       if (!selectedCandidateId) return null;
       return jobMatchApi.getCandidateMatches(selectedCandidateId, { 
@@ -163,6 +166,7 @@ export function JobsPage() {
         sort_by: 'match_score',
         sort_order: 'desc',
         platforms: selectedPlatforms.length > 0 ? selectedPlatforms : undefined,
+        grades: selectedGrades.length > 0 ? selectedGrades : undefined,
       });
     },
     enabled: !!selectedCandidateId,
@@ -187,11 +191,26 @@ export function JobsPage() {
     setCurrentPage(1);
   };
 
-  // Clear all platform filters
-  const clearPlatformFilters = () => {
-    setSelectedPlatforms([]);
+  // Toggle grade selection (reset to page 1)
+  const toggleGrade = (grade: string) => {
+    setSelectedGrades((prev) =>
+      prev.includes(grade)
+        ? prev.filter((g) => g !== grade)
+        : [...prev, grade]
+    );
     setCurrentPage(1);
   };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedPlatforms([]);
+    setSelectedGrades([]);
+    setCurrentPage(1);
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = selectedPlatforms.length > 0 || selectedGrades.length > 0;
+  const activeFilterCount = selectedPlatforms.length + selectedGrades.length;
 
   const handleRowClick = (match: JobMatch) => {
     const job = match.job || match.job_posting;
@@ -299,86 +318,98 @@ export function JobsPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge variant="secondary" className="text-sm">
-                        {selectedPlatforms.length > 0 
+                        {hasActiveFilters 
                           ? `${totalMatches} jobs (filtered)`
                           : `${totalMatches} job${totalMatches !== 1 ? 's' : ''} matched`
                         }
                       </Badge>
 
-                      {/* Platform Filter */}
-                      {availablePlatforms.length > 0 && (
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 gap-2">
-                              <Filter className="h-3.5 w-3.5" />
-                              Platform
-                              {selectedPlatforms.length > 0 && (
-                                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                                  {selectedPlatforms.length}
-                                </Badge>
+                      {/* Combined Filter Popover */}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 gap-2">
+                            <Filter className="h-3.5 w-3.5" />
+                            Filters
+                            {activeFilterCount > 0 && (
+                              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                                {activeFilterCount}
+                              </Badge>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-0" align="end">
+                          <div className="p-3 border-b">
+                            <div className="flex items-center justify-between">
+                              <h4 className="font-medium text-sm">Filters</h4>
+                              {hasActiveFilters && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={clearAllFilters}
+                                >
+                                  Clear all
+                                </Button>
                               )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-56 p-3" align="end">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-sm">Filter by Platform</h4>
-                                {selectedPlatforms.length > 0 && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                    onClick={clearPlatformFilters}
+                            </div>
+                          </div>
+
+                          {/* Grade Filter Section */}
+                          <div className="p-3 border-b">
+                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                              Grade
+                            </h5>
+                            <div className="flex flex-wrap gap-1.5">
+                              {AVAILABLE_GRADES.map((grade) => {
+                                const isSelected = selectedGrades.includes(grade);
+                                const gradeConfig = GRADE_CONFIG[grade];
+                                return (
+                                  <button
+                                    key={grade}
+                                    onClick={() => toggleGrade(grade)}
+                                    className={`px-2 py-1 text-xs font-medium rounded-md border transition-colors ${
+                                      isSelected
+                                        ? `${gradeConfig.bgClass} ${gradeConfig.colorClass} border-current`
+                                        : 'bg-background hover:bg-muted border-border'
+                                    }`}
                                   >
-                                    Clear
-                                  </Button>
-                                )}
-                              </div>
-                              <div className="space-y-2">
+                                    {grade}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Platform Filter Section */}
+                          {availablePlatforms.length > 0 && (
+                            <div className="p-3">
+                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                                Platform
+                              </h5>
+                              <div className="space-y-2 max-h-40 overflow-y-auto">
                                 {availablePlatforms.map((platform) => (
-                                    <div
-                                      key={platform}
-                                      className="flex items-center space-x-2"
+                                  <div
+                                    key={platform}
+                                    className="flex items-center space-x-2"
+                                  >
+                                    <Checkbox
+                                      id={`platform-${platform}`}
+                                      checked={selectedPlatforms.includes(platform.toLowerCase())}
+                                      onCheckedChange={() => togglePlatform(platform.toLowerCase())}
+                                    />
+                                    <label
+                                      htmlFor={`platform-${platform}`}
+                                      className="flex-1 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer capitalize"
                                     >
-                                      <Checkbox
-                                        id={`platform-${platform}`}
-                                        checked={selectedPlatforms.includes(platform.toLowerCase())}
-                                        onCheckedChange={() => togglePlatform(platform.toLowerCase())}
-                                      />
-                                      <label
-                                        htmlFor={`platform-${platform}`}
-                                        className="flex-1 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer capitalize"
-                                      >
-                                        {platform}
-                                      </label>
-                                    </div>
-                                  ))}
+                                      {platform}
+                                    </label>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-
-                      {/* Active Platform Badges */}
-                      {selectedPlatforms.length > 0 && (
-                        <div className="flex items-center gap-1.5">
-                          {selectedPlatforms.map((platform) => (
-                            <Badge
-                              key={platform}
-                              variant="secondary"
-                              className="text-xs capitalize gap-1 pr-1"
-                            >
-                              {platform}
-                              <button
-                                onClick={() => togglePlatform(platform)}
-                                className="ml-0.5 hover:bg-muted rounded-full p-0.5"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                          )}
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
 
@@ -433,14 +464,14 @@ export function JobsPage() {
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>Failed to load job matches. Please try again.</AlertDescription>
                     </Alert>
-                  ) : matches.length === 0 && selectedPlatforms.length > 0 ? (
+                  ) : matches.length === 0 && hasActiveFilters ? (
                     <div className="flex flex-col items-center justify-center h-full text-center p-8">
                       <Filter className="h-12 w-12 text-muted-foreground mb-3" />
-                      <h3 className="text-lg font-medium mb-1">No Matches for Selected Platforms</h3>
+                      <h3 className="text-lg font-medium mb-1">No Matches Found</h3>
                       <p className="text-muted-foreground text-sm max-w-sm mb-3">
-                        No jobs found for the selected platforms. Try adjusting your filter.
+                        No jobs found for the selected filters. Try adjusting your criteria.
                       </p>
-                      <Button variant="outline" size="sm" onClick={clearPlatformFilters}>
+                      <Button variant="outline" size="sm" onClick={clearAllFilters}>
                         Clear Filters
                       </Button>
                     </div>

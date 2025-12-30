@@ -113,6 +113,7 @@ export interface JobMatchFilters {
   min_score?: number;
   max_score?: number;
   grade?: string;
+  grades?: string[];
   page?: number;
   per_page?: number;
   sort_by?: 'match_score' | 'match_date';

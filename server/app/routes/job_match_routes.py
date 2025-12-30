@@ -325,6 +325,7 @@ def get_candidate_matches(candidate_id: int):
     - sort_by: Sort field (match_score, posted_date, default: match_score)
     - sort_order: Sort order (asc, desc, default: desc)
     - platforms: Comma-separated list of platforms to filter by (e.g., "linkedin,glassdoor")
+    - grades: Comma-separated list of grades to filter by (e.g., "A+,A,B")
     
     Permissions: candidates.view
     """
@@ -349,9 +350,13 @@ def get_candidate_matches(candidate_id: int):
         sort_by = request.args.get('sort_by', 'match_score')
         sort_order = request.args.get('sort_order', 'desc')
         platforms_param = request.args.get('platforms', '')
+        grades_param = request.args.get('grades', '')
         
         # Parse platforms filter (comma-separated list)
         platforms_filter = [p.strip().lower() for p in platforms_param.split(',') if p.strip()] if platforms_param else []
+        
+        # Parse grades filter (comma-separated list)
+        grades_filter = [g.strip() for g in grades_param.split(',') if g.strip()] if grades_param else []
         
         # Validate parameters
         if per_page < 1 or per_page > 500:
@@ -465,9 +470,13 @@ def get_candidate_matches(candidate_id: int):
         for job in jobs:
             match_result = service.calculate_match_score(candidate, job)
             overall_score = match_result.get('overall_score', 0)
+            match_grade = match_result.get('match_grade', 'F')
             
             # Apply min_score filter
             if overall_score >= min_score:
+                # Apply grade filter if specified
+                if grades_filter and match_grade not in grades_filter:
+                    continue
                 scored_matches.append({
                     'job': job,
                     'match_result': match_result
