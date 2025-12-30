@@ -4,7 +4,6 @@
  */
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,9 +48,7 @@ import {
   Minimize2,
   Plus,
   Search,
-  Shield,
   UserCheck,
-  ArrowRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { teamApi } from '@/lib/teamApi';
@@ -562,28 +559,6 @@ export function TeamMembersSettings() {
           </Tabs>
         </CardContent>
       </Card>
-
-      {/* Roles & Permissions Link Card */}
-      {canManageUsers && (
-        <Link to="/users/roles" className="block group mt-6">
-          <Card className="hover:shadow-md hover:border-primary/50 transition-all cursor-pointer">
-            <CardHeader className="flex flex-row items-center justify-between py-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-gradient-to-br from-slate-100 to-slate-50">
-                  <Shield className="h-5 w-5 text-slate-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-base group-hover:text-primary transition-colors">
-                    Roles & Permissions
-                  </CardTitle>
-                  <CardDescription>Manage custom roles and assign permissions</CardDescription>
-                </div>
-              </div>
-              <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-            </CardHeader>
-          </Card>
-        </Link>
-      )}
 
       {/* Assign Manager Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>

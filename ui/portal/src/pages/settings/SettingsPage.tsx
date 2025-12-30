@@ -22,7 +22,8 @@ import {
   EmailIntegrationsSettings, 
   TeamMembersSettings,
   ProfileSettings,
-  OrganizationSettings
+  OrganizationSettings,
+  RolesPermissionsSettings
 } from '@/components/settings';
 
 // Navigation items configuration
@@ -47,6 +48,13 @@ const navigationItems = [
     description: 'Team hierarchy and managers',
     icon: Users,
     component: TeamMembersSettings,
+  },
+  {
+    id: 'roles',
+    label: 'Roles & Permissions',
+    description: 'Manage roles and access control',
+    icon: Shield,
+    component: RolesPermissionsSettings,
   },
   {
     id: 'onboarding',
