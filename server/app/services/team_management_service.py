@@ -581,35 +581,19 @@ class TeamManagementService:
         is_tenant_admin = any(role.name == 'TENANT_ADMIN' for role in current_user.roles)
         
         if is_tenant_admin:
-            # TENANT_ADMIN sees all top-level users (MANAGER without managers)
-            # Get MANAGER role ID
-            manager_role = db.session.scalar(
-                select(Role).where(
-                    Role.name == 'MANAGER',
-                    Role.tenant_id == tenant_id
+            # TENANT_ADMIN sees:
+            # 1. All users who report directly to them (manager_id = user_id)
+            # 2. All users without a manager (orphaned users)
+            # This includes MANAGERs, TEAM_LEADs, and RECRUITERs
+            direct_reports_query = select(PortalUser).where(
+                PortalUser.tenant_id == tenant_id,
+                PortalUser.is_active == True,
+                PortalUser.id != user_id,  # Exclude self
+                or_(
+                    PortalUser.manager_id == user_id,  # Direct reports
+                    PortalUser.manager_id.is_(None)    # Orphaned users (no manager assigned)
                 )
             )
-            
-            if manager_role:
-                # Get all Manager users (MANAGER role) who have no manager
-                direct_reports_query = select(PortalUser).where(
-                    PortalUser.tenant_id == tenant_id,
-                    PortalUser.is_active == True,
-                    or_(
-                        PortalUser.manager_id.is_(None),
-                        PortalUser.manager_id == user_id
-                    )
-                ).join(PortalUser.roles).where(
-                    Role.id == manager_role.id
-                )
-            else:
-                # Fallback: get all users without a manager
-                direct_reports_query = select(PortalUser).where(
-                    PortalUser.tenant_id == tenant_id,
-                    PortalUser.is_active == True,
-                    PortalUser.manager_id.is_(None),
-                    PortalUser.id != user_id  # Exclude self
-                )
         else:
             # Regular users: get direct reports (users where manager_id = current user)
             direct_reports_query = select(PortalUser).where(
