@@ -863,7 +863,7 @@ export function CandidateDetailPage() {
                 Contact Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               {isEditMode ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -983,7 +983,7 @@ export function CandidateDetailPage() {
                   Professional Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 {isEditMode ? (
                   <Textarea
                     value={formData?.professional_summary || ''}
@@ -1086,7 +1086,7 @@ export function CandidateDetailPage() {
                   {candidate.education?.length || 0} degree{(candidate.education?.length || 0) !== 1 ? 's' : ''}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 {isEditMode ? (
                   <EducationEditor
                     value={(formData?.education || []).map((edu) => ({
@@ -1398,7 +1398,7 @@ export function CandidateDetailPage() {
                   {candidate.skills?.length || 0} skills
                 </CardDescription>
               </CardHeader>
-              <CardContent className="pt-6">
+              <CardContent>
                 {isEditMode ? (
                   <div className="space-y-2">
                     <Label htmlFor="skills">Skills</Label>
@@ -1507,7 +1507,7 @@ export function CandidateDetailPage() {
                 {(candidate.preferred_locations?.length || 0)} location{(candidate.preferred_locations?.length || 0) !== 1 ? 's' : ''}
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               {isEditMode ? (
                 <div className="space-y-2">
                   <TagInput
@@ -1551,7 +1551,7 @@ export function CandidateDetailPage() {
                 {preferredRoles.length} role{preferredRoles.length !== 1 ? 's' : ''} (max 10)
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="space-y-3">
                 <TagInput
                   value={preferredRoles}
