@@ -799,6 +799,34 @@ export function CandidateDetailPage() {
               </>
             ) : !isReviewMode ? (
               <>
+                {/* Show Approve/Reject buttons for pending_review candidates */}
+                {candidate?.status === 'pending_review' && (
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => approveMutation.mutate()}
+                      disabled={approveMutation.isPending}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black bg-green-600 hover:bg-green-700"
+                    >
+                      {approveMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                      )}
+                      Approve
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowRejectDialog(true)}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject
+                    </Button>
+                  </>
+                )}
                 <Button
                   variant="default"
                   size="sm"
