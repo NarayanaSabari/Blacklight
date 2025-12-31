@@ -638,27 +638,26 @@ export function CandidateDetailPage() {
   const statusConfig = STATUS_CONFIG[candidate.status] || STATUS_CONFIG.new;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Review Actions Header (only shown in review mode) */}
       {isReviewMode && (
-        <div className="bg-amber-50 border-2 border-amber-500 rounded-lg p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-500 rounded-lg p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center border-2 border-black">
-                <AlertCircle className="h-5 w-5" />
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-14 h-14 rounded-full bg-amber-500 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <AlertCircle className="h-7 w-7" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Review Candidate</h3>
-                <p className="text-sm text-slate-600 mt-0.5">
+                <h3 className="text-xl font-bold text-slate-900 mb-1">Review Candidate</h3>
+                <p className="text-base text-slate-700">
                   Approve this candidate, reject them, or edit their profile before approving
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3">
               <Button
                 variant="outline"
-                size="sm"
-                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="h-11 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
                 onClick={() => navigate('/candidate-management?tab=onboarding')}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -666,30 +665,27 @@ export function CandidateDetailPage() {
               </Button>
               <Button
                 variant="destructive"
-                size="sm"
-                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="h-11 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
                 onClick={() => setShowRejectDialog(true)}
                 disabled={rejectMutation.isPending}
               >
-                <XCircle className="h-4 w-4 mr-2" />
+                <XCircle className="h-5 w-5 mr-2" />
                 Reject
               </Button>
               <Button
                 variant="outline"
-                size="sm"
-                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="h-11 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
                 onClick={() => isEditMode ? exitEditMode() : enterEditMode()}
               >
-                <Pencil className="h-4 w-4 mr-2" />
+                <Pencil className="h-5 w-5 mr-2" />
                 {isEditMode ? 'Cancel Edit' : 'Edit'}
               </Button>
               <Button
-                size="sm"
-                className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                className="h-11 bg-green-600 hover:bg-green-700 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
                 onClick={() => approveMutation.mutate()}
                 disabled={approveMutation.isPending}
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
+                <CheckCircle2 className="h-5 w-5 mr-2" />
                 {approveMutation.isPending ? 'Approving...' : 'Approve'}
               </Button>
             </div>
@@ -698,43 +694,42 @@ export function CandidateDetailPage() {
       )}
 
       {/* Header Section with Gradient Background */}
-      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+      <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-lg border-2 border-black p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
           {/* Left: Name & Title */}
           <div className="flex-1 min-w-0">
             <Button
               variant="ghost"
-              size="sm"
               onClick={() => navigate('/candidate-management?tab=all-candidates')}
-              className="mb-3 -ml-2"
+              className="mb-4 -ml-2 h-10"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Candidates
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              <span className="font-semibold">Back to Candidates</span>
             </Button>
 
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-2xl font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-20 h-20 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-3xl font-bold border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                 {(candidate.full_name || candidate.first_name).charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-1">
+                <h1 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-2">
                   {candidate.full_name || `${candidate.first_name} ${candidate.last_name}`}
                 </h1>
                 {candidate.current_title && (
-                  <p className="text-lg text-slate-600 font-medium mb-2">{candidate.current_title}</p>
+                  <p className="text-xl text-slate-700 font-semibold mb-3">{candidate.current_title}</p>
                 )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className={`${statusConfig.color} border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-3 py-1`}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge className={`${statusConfig.color} border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-4 py-1.5 text-base font-bold`}>
                     {statusConfig.label}
                   </Badge>
                   {candidate.total_experience_years !== undefined && (
-                    <Badge variant="outline" className="border-2 border-black">
-                      <TrendingUp className="h-3 w-3 mr-1" />
+                    <Badge variant="outline" className="border-2 border-black px-3 py-1.5 text-sm font-semibold">
+                      <TrendingUp className="h-4 w-4 mr-1.5" />
                       {candidate.total_experience_years}+ years
                     </Badge>
                   )}
                   {candidate.source && (
-                    <Badge variant="outline" className="border-2 border-black">
+                    <Badge variant="outline" className="border-2 border-black px-3 py-1.5 text-sm font-semibold">
                       {candidate.source}
                     </Badge>
                   )}
@@ -744,29 +739,27 @@ export function CandidateDetailPage() {
           </div>
 
           {/* Right: Action Buttons */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {isEditMode ? (
               <>
                 <Button
                   variant="default"
-                  size="sm"
                   onClick={handleSave}
                   disabled={updateMutation.isPending || !hasUnsavedChanges}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black bg-green-600 hover:bg-green-700 text-white"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black bg-green-600 hover:bg-green-700 text-white"
                 >
                   {updateMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                   ) : (
-                    <Sparkles className="h-4 w-4 mr-2" />
+                    <Sparkles className="h-5 w-5 mr-2" />
                   )}
                   Save Changes
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={exitEditMode}
                   disabled={updateMutation.isPending}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                 >
                   Cancel
                 </Button>
@@ -775,53 +768,48 @@ export function CandidateDetailPage() {
               <>
                 <Button
                   variant="default"
-                  size="sm"
                   onClick={() => navigate(`/candidate/jobs/${id}`)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                 >
-                  <Target className="h-4 w-4 mr-2" />
-                  Matches
+                  <Target className="h-5 w-5 mr-2" />
+                  View Matches
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={enterEditMode}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                 >
-                  <Pencil className="h-4 w-4 mr-2" />
+                  <Pencil className="h-5 w-5 mr-2" />
                   Edit
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
                   onClick={() => setShowAssignmentDialog(true)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                 >
-                  <UserPlus className="h-4 w-4 mr-2" />
+                  <UserPlus className="h-5 w-5 mr-2" />
                   {currentAssignment ? 'Reassign' : 'Assign'}
                 </Button>
                 {(signedResumeUrl || candidate?.resume_file_key) && (
                   <>
                     <Button
                       variant="outline"
-                      size="sm"
                       onClick={handleDownloadResume}
-                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                      className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                     >
-                      <Download className="h-4 w-4 mr-2" />
+                      <Download className="h-5 w-5 mr-2" />
                       Resume
                     </Button>
                     <Button
                       variant="outline"
-                      size="sm"
                       onClick={handleReparse}
                       disabled={reparseMutation.isPending}
-                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                      className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                     >
                       {reparseMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                       ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
+                        <RefreshCw className="h-5 w-5 mr-2" />
                       )}
                       Re-parse
                     </Button>
@@ -829,11 +817,10 @@ export function CandidateDetailPage() {
                 )}
                 <Button
                   variant="destructive"
-                  size="sm"
                   onClick={() => setShowDeleteDialog(true)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                  className="h-11 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all border-2 border-black"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="h-5 w-5 mr-2" />
                   Delete
                 </Button>
               </>
@@ -843,118 +830,120 @@ export function CandidateDetailPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column - Main Information */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-8">
           {/* Contact Information */}
           <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <CardHeader className="bg-slate-50">
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                Contact Information
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-cyan-50 pb-4">
+              <CardTitle className="flex items-center gap-3 text-xl">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <span className="font-bold">Contact Information</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               {isEditMode ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email" className="text-base font-semibold">Email</Label>
                     <Input
                       id="email"
                       type="email"
                       value={formData?.email || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('email', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
+                    <Label htmlFor="phone" className="text-base font-semibold">Phone</Label>
                     <Input
                       id="phone"
                       value={formData?.phone || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('phone', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="location">Location</Label>
+                    <Label htmlFor="location" className="text-base font-semibold">Location</Label>
                     <Input
                       id="location"
                       value={formData?.location || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('location', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="linkedin">LinkedIn URL</Label>
+                    <Label htmlFor="linkedin" className="text-base font-semibold">LinkedIn URL</Label>
                     <Input
                       id="linkedin"
                       value={formData?.linkedin_url || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('linkedin_url', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="portfolio">Portfolio URL</Label>
+                    <Label htmlFor="portfolio" className="text-base font-semibold">Portfolio URL</Label>
                     <Input
                       id="portfolio"
                       value={formData?.portfolio_url || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('portfolio_url', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {candidate.email && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                      <Mail className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+                      <Mail className="h-6 w-6 text-slate-600 flex-shrink-0" />
                       <a
                         href={`mailto:${candidate.email}`}
-                        className="text-sm font-medium hover:underline text-slate-900 truncate"
+                        className="text-base font-medium hover:underline text-slate-900 truncate"
                       >
                         {candidate.email}
                       </a>
                     </div>
                   )}
                   {candidate.phone && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                      <Phone className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+                      <Phone className="h-6 w-6 text-slate-600 flex-shrink-0" />
                       <a
                         href={`tel:${candidate.phone}`}
-                        className="text-sm font-medium hover:underline text-slate-900"
+                        className="text-base font-medium hover:underline text-slate-900"
                       >
                         {candidate.phone}
                       </a>
                     </div>
                   )}
                   {candidate.location && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                      <MapPin className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                      <span className="text-sm font-medium text-slate-900">{candidate.location}</span>
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded border-2 border-black">
+                      <MapPin className="h-6 w-6 text-slate-600 flex-shrink-0" />
+                      <span className="text-base font-medium text-slate-900">{candidate.location}</span>
                     </div>
                   )}
                   {candidate.linkedin_url && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                      <Linkedin className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+                      <Linkedin className="h-6 w-6 text-slate-600 flex-shrink-0" />
                       <a
                         href={candidate.linkedin_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm font-medium hover:underline text-blue-600 truncate"
+                        className="text-base font-medium hover:underline text-blue-600 truncate"
                       >
                         LinkedIn Profile
                       </a>
                     </div>
                   )}
                   {candidate.portfolio_url && (
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 rounded border-2 border-black">
-                      <Globe className="h-5 w-5 text-slate-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded border-2 border-black hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+                      <Globe className="h-6 w-6 text-slate-600 flex-shrink-0" />
                       <a
                         href={candidate.portfolio_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm font-medium hover:underline text-blue-600 truncate"
+                        className="text-base font-medium hover:underline text-blue-600 truncate"
                       >
                         Portfolio
                       </a>
@@ -968,22 +957,24 @@ export function CandidateDetailPage() {
           {/* Professional Summary */}
           {(candidate.professional_summary || isEditMode) && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <CardHeader className="bg-gradient-to-r from-primary/5 to-secondary/5">
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  Professional Summary
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-4">
+                <CardTitle className="flex items-center gap-3 text-xl">
+                  <div className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <span className="font-bold">Professional Summary</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {isEditMode ? (
                   <Textarea
                     value={formData?.professional_summary || ''}
                     onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateField('professional_summary', e.target.value)}
-                    className="min-h-[150px] border-2 border-black"
+                    className="min-h-[180px] border-2 border-black text-base leading-relaxed"
                     placeholder="Enter professional summary..."
                   />
                 ) : (
-                  <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">
                     {candidate.professional_summary}
                   </p>
                 )}
@@ -994,18 +985,22 @@ export function CandidateDetailPage() {
           {/* Work Experience */}
           {(candidate.work_experience && candidate.work_experience.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <CardHeader className="bg-slate-50">
-                <CardTitle className="flex items-center gap-2">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                  Work Experience
-                </CardTitle>
-                {!isEditMode && (
-                  <CardDescription>
-                    {candidate.work_experience?.length || 0} position{(candidate.work_experience?.length || 0) !== 1 ? 's' : ''}
-                  </CardDescription>
-                )}
+              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                      <Briefcase className="h-5 w-5" />
+                    </div>
+                    <span className="font-bold">Work Experience</span>
+                  </CardTitle>
+                  {!isEditMode && (
+                    <Badge variant="outline" className="border-2 border-black font-semibold">
+                      {candidate.work_experience?.length || 0} position{(candidate.work_experience?.length || 0) !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {isEditMode ? (
                   <WorkExperienceEditor
                     value={(formData?.work_experience || []).map((exp) => ({
@@ -1019,40 +1014,42 @@ export function CandidateDetailPage() {
                     onChange={(exp) => updateField('work_experience', exp)}
                   />
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-8">
                     {candidate.work_experience.map((exp, index) => (
                       <div key={index}>
-                        {index > 0 && <Separator className="my-6" />}
-                        <div className="space-y-3">
+                        {index > 0 && <Separator className="my-8" />}
+                        <div className="space-y-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
-                              <h4 className="font-bold text-lg text-slate-900">{exp.title}</h4>
-                              <p className="text-sm font-medium text-slate-600 mt-1">
+                              <h4 className="font-bold text-xl text-slate-900 mb-2">{exp.title}</h4>
+                              <p className="text-base font-semibold text-slate-600">
                                 {exp.company}
                                 {exp.location && ` • ${exp.location}`}
                               </p>
                             </div>
                             {exp.is_current && (
-                              <Badge className="bg-green-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0">
+                              <Badge className="bg-green-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold px-3 py-1.5">
                                 Current
                               </Badge>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <Calendar className="h-4 w-4" />
+                          <div className="flex items-center gap-3 text-base text-slate-600">
+                            <Calendar className="h-5 w-5" />
                             <span className="font-medium">
                               {exp.start_date} - {exp.end_date || 'Present'}
                             </span>
                             {exp.duration_months && (
-                              <span className="text-xs bg-slate-100 px-2 py-1 rounded border border-slate-300">
+                              <span className="text-sm bg-slate-100 px-3 py-1.5 rounded border-2 border-slate-300 font-semibold">
                                 {Math.floor(exp.duration_months / 12)}y {exp.duration_months % 12}m
                               </span>
                             )}
                           </div>
                           {exp.description && (
-                            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap pl-6 border-l-2 border-primary">
-                              {exp.description}
-                            </p>
+                            <div className="mt-4 p-4 bg-slate-50 rounded-lg border-l-4 border-primary">
+                              <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                {exp.description}
+                              </p>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1066,13 +1063,15 @@ export function CandidateDetailPage() {
           {/* Education */}
           {(candidate.education && candidate.education.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <CardHeader className="bg-slate-50">
-                <CardTitle className="flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-primary" />
-                  Education
+              <CardHeader className="bg-gradient-to-r from-indigo-50 to-blue-50 pb-4">
+                <CardTitle className="flex items-center gap-3 text-xl">
+                  <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <GraduationCap className="h-5 w-5" />
+                  </div>
+                  <span className="font-bold">Education</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {isEditMode ? (
                   <EducationEditor
                     value={(formData?.education || []).map((edu) => ({
@@ -1084,25 +1083,25 @@ export function CandidateDetailPage() {
                     onChange={(edu) => updateField('education', edu)}
                   />
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {candidate.education.map((edu, index) => (
                       <div key={index}>
-                        {index > 0 && <Separator className="my-4" />}
-                        <div className="space-y-2">
+                        {index > 0 && <Separator className="my-6" />}
+                        <div className="space-y-3">
                           <h4 className="font-bold text-lg text-slate-900">{edu.degree}</h4>
                           {edu.field_of_study && (
-                            <p className="text-sm font-medium text-slate-700">{edu.field_of_study}</p>
+                            <p className="text-base font-semibold text-slate-700">{edu.field_of_study}</p>
                           )}
-                          <p className="text-sm text-slate-600">{edu.institution}</p>
-                          <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <p className="text-base text-slate-600">{edu.institution}</p>
+                          <div className="flex items-center gap-4 text-sm">
                             {edu.graduation_year && (
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
+                              <span className="flex items-center gap-2 font-medium text-slate-600">
+                                <Calendar className="h-4 w-4" />
                                 {edu.graduation_year}
                               </span>
                             )}
                             {edu.gpa && (
-                              <span className="font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                              <span className="font-semibold bg-indigo-50 px-3 py-1.5 rounded border-2 border-indigo-200">
                                 GPA: {edu.gpa}
                               </span>
                             )}
@@ -1161,7 +1160,7 @@ export function CandidateDetailPage() {
         </div>
 
         {/* Right Column - Sidebar */}
-        <div className="space-y-6">
+        <div className="space-y-8">
           {/* Job Matches Preview */}
           {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-primary/5 to-secondary/5">
@@ -1298,14 +1297,14 @@ export function CandidateDetailPage() {
 
           {/* Professional Details */}
           <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <CardHeader className="bg-slate-50">
-              <CardTitle>Professional Details</CardTitle>
+            <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 pb-4">
+              <CardTitle className="text-lg font-bold">Professional Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {isEditMode ? (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="experience">Total Experience (Years)</Label>
+                    <Label htmlFor="experience" className="text-base font-semibold">Total Experience (Years)</Label>
                     <Input
                       id="experience"
                       type="number"
@@ -1313,56 +1312,56 @@ export function CandidateDetailPage() {
                       max="70"
                       value={formData?.total_experience_years ?? ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('total_experience_years', e.target.value ? parseInt(e.target.value) : null)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="notice">Notice Period</Label>
+                    <Label htmlFor="notice" className="text-base font-semibold">Notice Period</Label>
                     <Input
                       id="notice"
                       value={formData?.notice_period || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('notice_period', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="salary">Expected Salary</Label>
+                    <Label htmlFor="salary" className="text-base font-semibold">Expected Salary</Label>
                     <Input
                       id="salary"
                       value={formData?.expected_salary || ''}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateField('expected_salary', e.target.value)}
-                      className="border-2 border-black"
+                      className="border-2 border-black h-12 text-base"
                     />
                   </div>
                 </>
               ) : (
                 <>
                   {candidate.total_experience_years !== undefined && (
-                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
-                      <span className="text-sm font-medium text-slate-600">Experience</span>
-                      <span className="text-sm font-bold text-slate-900">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border-2 border-slate-200">
+                      <span className="text-base font-semibold text-slate-700">Experience</span>
+                      <span className="text-base font-bold text-slate-900">
                         {candidate.total_experience_years} years
                       </span>
                     </div>
                   )}
                   {candidate.notice_period && (
-                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded border border-slate-200">
-                      <span className="text-sm font-medium text-slate-600 flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border-2 border-slate-200">
+                      <span className="text-base font-semibold text-slate-700 flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
                         Notice Period
                       </span>
-                      <span className="text-sm font-bold text-slate-900">
+                      <span className="text-base font-bold text-slate-900">
                         {candidate.notice_period}
                       </span>
                     </div>
                   )}
                   {candidate.expected_salary && (
-                    <div className="flex items-center justify-between p-3 bg-green-50 rounded border-2 border-green-500">
-                      <span className="text-sm font-medium text-green-700 flex items-center gap-1">
-                        <DollarSign className="h-3 w-3" />
+                    <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border-2 border-green-500">
+                      <span className="text-base font-semibold text-green-700 flex items-center gap-2">
+                        <DollarSign className="h-5 w-5" />
                         Expected Salary
                       </span>
-                      <span className="text-sm font-bold text-green-700">
+                      <span className="text-lg font-bold text-green-700">
                         {candidate.expected_salary}
                       </span>
                     </div>
@@ -1375,28 +1374,34 @@ export function CandidateDetailPage() {
           {/* Skills */}
           {(candidate.skills && candidate.skills.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10">
-                <CardTitle className="text-base">Skills</CardTitle>
+              <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                  <Award className="h-5 w-5 text-primary" />
+                  Skills
+                </CardTitle>
+                {!isEditMode && candidate.skills && (
+                  <p className="text-sm text-slate-600 mt-1 font-medium">{candidate.skills.length} skills</p>
+                )}
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {isEditMode ? (
                   <div className="space-y-2">
-                    <Label htmlFor="skills">Skills</Label>
+                    <Label htmlFor="skills" className="text-base font-semibold">Skills</Label>
                     <TagInput
                       value={formData?.skills || []}
                       onChange={(skills) => updateField('skills', skills)}
                       placeholder="Add a skill (e.g., React, Python)..."
                     />
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm text-slate-500">
                       Press Enter or blur to add a skill. Click X to remove.
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {candidate.skills.map((skill, index) => (
                       <Badge
                         key={index}
-                        className="bg-primary text-primary-foreground border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        className="bg-primary text-primary-foreground border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all text-center justify-center py-2 text-sm font-semibold"
                       >
                         {skill}
                       </Badge>
@@ -1479,13 +1484,16 @@ export function CandidateDetailPage() {
           {/* Preferred Locations */}
           {(candidate.preferred_locations && candidate.preferred_locations.length > 0) || isEditMode ? (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-              <CardHeader className="bg-slate-50">
-                <CardTitle className="flex items-center gap-2 text-base">
+              <CardHeader className="bg-gradient-to-r from-red-50 to-pink-50 pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg font-bold">
                   <MapPin className="h-5 w-5 text-red-600" />
                   Preferred Locations
                 </CardTitle>
+                {!isEditMode && candidate.preferred_locations && (
+                  <p className="text-sm text-slate-600 mt-1 font-medium">{candidate.preferred_locations.length} location{candidate.preferred_locations.length !== 1 ? 's' : ''}</p>
+                )}
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 {isEditMode ? (
                   <div className="space-y-2">
                     <TagInput
@@ -1493,19 +1501,19 @@ export function CandidateDetailPage() {
                       onChange={(locs) => updateField('preferred_locations', locs)}
                       placeholder="Add location..."
                     />
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm text-slate-500">
                       Press Enter to add.
                     </p>
                   </div>
                 ) : (
-                  <ul className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2">
                     {candidate.preferred_locations.map((loc, index) => (
-                      <li key={index} className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-3 w-3 text-slate-400" />
-                        <span className="text-slate-700">{loc}</span>
-                      </li>
+                      <div key={index} className="flex items-center gap-3 p-3 bg-red-50 rounded-lg border-2 border-red-200 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all">
+                        <MapPin className="h-5 w-5 text-red-600 flex-shrink-0" />
+                        <span className="text-base font-semibold text-slate-900">{loc}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1513,30 +1521,32 @@ export function CandidateDetailPage() {
 
           {/* Preferred Roles */}
           <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Star className="h-5 w-5 text-purple-600" />
-                Preferred Roles
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 pb-4">
+              <CardTitle className="flex items-center gap-3 text-lg font-bold">
+                <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  <Star className="h-4 w-4" />
+                </div>
+                <span>Preferred Roles</span>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm font-medium mt-2">
                 Manually specify desired job roles (max 10)
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
+            <CardContent className="pt-6">
+              <div className="space-y-3">
                 <TagInput
                   value={preferredRoles}
                   onChange={handleUpdatePreferredRoles}
                   placeholder="Add preferred role (e.g., Software Engineer)..."
                   disabled={updatePreferredRolesMutation.isPending}
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-sm text-slate-600 font-medium">
                   {preferredRoles.length}/10 roles • Press Enter to add, click X to remove
                 </p>
                 {updatePreferredRolesMutation.isPending && (
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>Saving...</span>
+                  <div className="flex items-center gap-2 text-sm text-slate-600 p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="font-medium">Saving...</span>
                   </div>
                 )}
               </div>
