@@ -169,6 +169,14 @@ export function CandidateDetailPage() {
     enabled: !!id,
   });
 
+  // Calculate document verification stats
+  const documents = documentsResponse?.documents || [];
+  const verifiedDocCount = documents.filter(doc => doc.is_verified).length;
+  const totalDocCount = documents.length;
+  const allDocsVerified = totalDocCount > 0 && verifiedDocCount === totalDocCount;
+  const hasUnverifiedDocs = totalDocCount > 0 && verifiedDocCount < totalDocCount;
+  const unverifiedDocuments = documents.filter(doc => !doc.is_verified);
+
   // Fetch candidate assignments
   const { data: assignmentsData } = useQuery({
     queryKey: ['candidate-assignments', id],
@@ -180,8 +188,8 @@ export function CandidateDetailPage() {
   // Get current assignment
   const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'ACTIVE');
 
-  // Fetch top job matches
-  const { data: matchesData } = useQuery({
+  // Fetch top job matches (currently commented out in UI, kept for future use)
+  const { data: _matchesData } = useQuery({
     queryKey: ['candidateMatches', id],
     queryFn: () => jobMatchApi.getCandidateMatches(Number(id), { per_page: 3, sort_by: 'match_score', sort_order: 'desc' }),
     enabled: !!id,
@@ -227,8 +235,17 @@ export function CandidateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
       toast.success('Candidate approved successfully!');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to approve: ${error.message}`);
+    onError: (error: any) => {
+      // Check if error contains unverified documents info
+      const errorMessage = error?.message || 'Failed to approve candidate';
+      if (errorMessage.includes('documents must be verified')) {
+        toast.error(errorMessage, {
+          duration: 6000,
+          description: 'Please verify all documents before approving this candidate.',
+        });
+      } else {
+        toast.error(`Failed to approve: ${errorMessage}`);
+      }
     },
   });
 
@@ -1131,13 +1148,25 @@ export function CandidateDetailPage() {
           ) : null}
 
           {/* Documents Section */}
-          <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <Card className={`border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${isReviewMode && hasUnverifiedDocs ? 'ring-2 ring-amber-500' : ''}`}>
             <CardHeader className="bg-slate-50">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5 text-primary" />
                     Documents
+                    {totalDocCount > 0 && (
+                      <Badge 
+                        variant={allDocsVerified ? 'default' : 'secondary'}
+                        className={`ml-2 ${allDocsVerified ? 'bg-green-500 text-white' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}
+                      >
+                        {allDocsVerified ? (
+                          <><CheckCircle2 className="h-3 w-3 mr-1" />{verifiedDocCount}/{totalDocCount} Verified</>
+                        ) : (
+                          <><AlertCircle className="h-3 w-3 mr-1" />{verifiedDocCount}/{totalDocCount} Verified</>
+                        )}
+                      </Badge>
+                    )}
                   </CardTitle>
                   <CardDescription>
                     {documentsResponse?.total || 0} document{documentsResponse?.total !== 1 ? 's' : ''} uploaded
@@ -1154,6 +1183,23 @@ export function CandidateDetailPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Verification Warning for Review Mode */}
+              {isReviewMode && hasUnverifiedDocs && (
+                <Alert variant="destructive" className="mb-4 bg-amber-50 border-2 border-amber-500 text-amber-900">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800">
+                    <span className="font-semibold">{totalDocCount - verifiedDocCount} document(s) require verification</span> before you can approve this candidate.
+                    <ul className="mt-2 list-disc list-inside text-sm">
+                      {unverifiedDocuments.slice(0, 5).map(doc => (
+                        <li key={doc.id}>{doc.file_name}</li>
+                      ))}
+                      {unverifiedDocuments.length > 5 && (
+                        <li>...and {unverifiedDocuments.length - 5} more</li>
+                      )}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
               {documentsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1177,7 +1223,7 @@ export function CandidateDetailPage() {
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
           {/* Job Matches Preview */}
-          {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
+          {/* {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-primary/5 to-secondary/5">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1249,7 +1295,7 @@ export function CandidateDetailPage() {
                 ))}
               </CardContent>
             </Card>
-          )}
+          )} */}
 
           {/* Submissions Preview */}
           {!isReviewMode && submissionsData && submissionsData.total > 0 && (

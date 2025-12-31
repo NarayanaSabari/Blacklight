@@ -474,19 +474,53 @@ def approve_candidate(candidate_id: int):
                 400
             )
         
-        # Update status to 'ready_for_assignment'
-        candidate.status = 'ready_for_assignment'
-        candidate.onboarding_status = 'APPROVED'  # For tracking
-        
-        # Also update associated invitation status if exists
+        # VALIDATION: Check all documents are verified before approval
+        from app.models.candidate_document import CandidateDocument
         from app.models.candidate_invitation import CandidateInvitation
-        from sqlalchemy import select as sql_select
+        from sqlalchemy import select as sql_select, or_
+        
+        # First, find associated invitation to check its documents too
         invitation_stmt = sql_select(CandidateInvitation).where(
             CandidateInvitation.candidate_id == candidate_id,
             CandidateInvitation.tenant_id == tenant_id
         )
         invitation = db.session.scalar(invitation_stmt)
         
+        # Build query to find all documents for this candidate (via candidate_id or invitation_id)
+        doc_conditions = [CandidateDocument.candidate_id == candidate_id]
+        if invitation:
+            doc_conditions.append(CandidateDocument.invitation_id == invitation.id)
+        
+        docs_stmt = sql_select(CandidateDocument).where(
+            or_(*doc_conditions),
+            CandidateDocument.tenant_id == tenant_id
+        )
+        all_documents = list(db.session.scalars(docs_stmt).all())
+        
+        if all_documents:
+            unverified_docs = [doc for doc in all_documents if not doc.is_verified]
+            if unverified_docs:
+                unverified_names = [doc.file_name for doc in unverified_docs]
+                return error_response(
+                    f"All documents must be verified before approval. "
+                    f"{len(unverified_docs)} document(s) pending verification: {', '.join(unverified_names[:5])}"
+                    + (f" and {len(unverified_names) - 5} more..." if len(unverified_names) > 5 else ""),
+                    400,
+                    details={
+                        "unverified_count": len(unverified_docs),
+                        "unverified_documents": [
+                            {"id": doc.id, "file_name": doc.file_name, "document_type": doc.document_type}
+                            for doc in unverified_docs
+                        ]
+                    }
+                )
+            logger.info(f"All {len(all_documents)} documents verified for candidate {candidate_id}")
+        
+        # Update status to 'ready_for_assignment'
+        candidate.status = 'ready_for_assignment'
+        candidate.onboarding_status = 'APPROVED'  # For tracking
+        
+        # Also update associated invitation status if exists
         if invitation and invitation.status == 'pending_review':
             invitation.status = 'approved'
             invitation.reviewed_by_id = g.user_id

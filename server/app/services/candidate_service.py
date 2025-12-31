@@ -770,6 +770,40 @@ class CandidateService:
                 "(e.g., 'New York, NY', 'Remote', 'Los Angeles, CA')."
             )
         
+        # VALIDATION: Check all documents are verified before approval
+        from app.models.candidate_document import CandidateDocument
+        from app.models.candidate_invitation import CandidateInvitation
+        from sqlalchemy import select as sql_select, or_
+        
+        # Find associated invitation to check its documents too
+        invitation_stmt = sql_select(CandidateInvitation).where(
+            CandidateInvitation.candidate_id == candidate_id,
+            CandidateInvitation.tenant_id == tenant_id
+        )
+        invitation = db.session.scalar(invitation_stmt)
+        
+        # Build query to find all documents for this candidate (via candidate_id or invitation_id)
+        doc_conditions = [CandidateDocument.candidate_id == candidate_id]
+        if invitation:
+            doc_conditions.append(CandidateDocument.invitation_id == invitation.id)
+        
+        docs_stmt = sql_select(CandidateDocument).where(
+            or_(*doc_conditions),
+            CandidateDocument.tenant_id == tenant_id
+        )
+        all_documents = list(db.session.scalars(docs_stmt).all())
+        
+        if all_documents:
+            unverified_docs = [doc for doc in all_documents if not doc.is_verified]
+            if unverified_docs:
+                unverified_names = [doc.file_name for doc in unverified_docs]
+                raise ValueError(
+                    f"All documents must be verified before approval. "
+                    f"{len(unverified_docs)} document(s) pending verification: {', '.join(unverified_names[:5])}"
+                    + (f" and {len(unverified_names) - 5} more..." if len(unverified_names) > 5 else "")
+                )
+            logger.info(f"All {len(all_documents)} documents verified for candidate {candidate_id}")
+        
         # Update approval fields
         candidate.onboarding_status = 'APPROVED'
         candidate.status = 'ready_for_assignment'  # Critical for job matching
