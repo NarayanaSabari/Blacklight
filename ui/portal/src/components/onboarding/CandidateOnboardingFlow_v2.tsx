@@ -16,9 +16,6 @@ import { z } from 'zod';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   CardFooter,
 } from '@/components/ui/card';
 import {
@@ -35,9 +32,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   ChevronLeft,
   ChevronRight,
@@ -563,56 +558,71 @@ export function CandidateOnboardingFlow({
   // Show success screen after submission
   if (isSubmitted) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <Card className="text-center">
-          <CardContent className="pt-12 pb-12">
-            <div className="flex flex-col items-center gap-6">
-              {/* Success Icon */}
-              <div className="rounded-full bg-green-100 p-4">
-                <CheckCircle2 className="h-16 w-16 text-green-600" />
-              </div>
+      <div className="mx-auto max-w-2xl">
+        <Card className="border-0 shadow-xl overflow-hidden">
+          {/* Success header banner */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 p-6 text-white text-center">
+            <div className="inline-flex items-center justify-center rounded-full bg-white/20 p-4 mb-4">
+              <CheckCircle2 className="h-12 w-12" />
+            </div>
+            <h2 className="text-2xl font-bold mb-1">Application Submitted!</h2>
+            <p className="text-green-100">Your profile is now under review</p>
+          </div>
+
+          <CardContent className="pt-8 pb-10">
+            <div className="flex flex-col items-center text-center">
+              {/* What happens next */}
+              <h3 className="text-lg font-semibold text-slate-900 mb-6">What happens next?</h3>
               
-              {/* Success Message */}
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-green-600">
-                  Thank You for Submitting!
-                </h2>
-                <p className="text-lg text-muted-foreground">
-                  Your application has been successfully submitted.
-                </p>
+              <div className="w-full max-w-sm space-y-4 text-left">
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">1</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Confirmation Email</p>
+                    <p className="text-sm text-slate-600">
+                      Check your inbox at <strong>{invitation.email}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">2</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Profile Review</p>
+                    <p className="text-sm text-slate-600">Our team will review your application (2-3 days)</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">3</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Decision Notification</p>
+                    <p className="text-sm text-slate-600">We'll email you with the outcome</p>
+                  </div>
+                </div>
               </div>
-              
-              {/* Additional Info */}
-              <div className="max-w-md space-y-2 text-sm text-muted-foreground">
-                <p>
-                  Our team will review your application and get back to you soon.
+
+              {/* Countdown - more subtle */}
+              <div className="mt-8 text-center">
+                <p className="text-sm text-slate-500 mb-2">
+                  This page will close in {countdown}s
                 </p>
-                <p>
-                  You will receive a confirmation email at <strong>{invitation.email}</strong>
-                </p>
+                <Button 
+                  onClick={() => {
+                    window.close();
+                    onSuccess();
+                  }}
+                  className="bg-slate-900 hover:bg-slate-800"
+                >
+                  Close & Finish
+                </Button>
               </div>
-              
-              {/* Countdown */}
-              <div className="mt-4 rounded-lg bg-slate-100 px-6 py-4">
-                <p className="text-sm text-slate-600">
-                  This page will close automatically in
-                </p>
-                <p className="text-3xl font-bold text-slate-800">
-                  {countdown} {countdown === 1 ? 'second' : 'seconds'}
-                </p>
-              </div>
-              
-              {/* Manual Close Button */}
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  window.close();
-                  onSuccess();
-                }}
-                className="mt-2"
-              >
-                Close Now
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -622,75 +632,113 @@ export function CandidateOnboardingFlow({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {/* Progress Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      {/* Progress Header - Redesigned for clarity */}
+      <Card className="border-0 shadow-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 md:p-6">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <CardTitle>Complete Your Onboarding</CardTitle>
-              <CardDescription>
-                Step {currentStep} of {steps.length}
-              </CardDescription>
+              <h2 className="text-lg md:text-xl font-semibold">Complete Your Profile</h2>
+              <p className="text-slate-300 text-sm">
+                Step {currentStep} of {steps.length}: {steps[currentStep - 1].title}
+              </p>
             </div>
-            <Badge variant="outline" className="text-base">
-              {Math.round(progress)}%
-            </Badge>
+            <div className="text-right">
+              <div className="text-2xl md:text-3xl font-bold">{Math.round(progress)}%</div>
+              <p className="text-slate-400 text-xs">Complete</p>
+            </div>
           </div>
-          <Progress value={progress} className="mt-4" />
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-between">
-            {steps.map((step) => {
+          <Progress value={progress} className="h-2 bg-slate-700" />
+        </div>
+
+        {/* Step indicators - horizontal scroll on mobile */}
+        <div className="p-4 md:p-6 bg-slate-50 overflow-x-auto">
+          <div className="flex justify-between min-w-[500px] md:min-w-0">
+            {steps.map((step, index) => {
               const Icon = step.icon;
               const isActive = step.number === currentStep;
               const isCompleted = step.number < currentStep;
+              const isLast = index === steps.length - 1;
 
               return (
-                <div
-                  key={step.number}
-                  className={`flex flex-col items-center gap-2 ${isActive ? 'text-primary' : isCompleted ? 'text-green-600' : 'text-muted-foreground'
-                    }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full border-2 ${isActive
-                      ? 'border-primary bg-primary/10'
-                      : isCompleted
-                        ? 'border-green-600 bg-green-50'
-                        : 'border-muted'
-                      }`}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="h-5 w-5" />
-                    ) : (
-                      <Icon className="h-5 w-5" />
-                    )}
+                <div key={step.number} className="flex items-center">
+                  <div className="flex flex-col items-center">
+                    {/* Step circle */}
+                    <div
+                      className={`
+                        flex h-12 w-12 items-center justify-center rounded-full border-2 transition-all duration-200
+                        ${isActive
+                          ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200'
+                          : isCompleted
+                            ? 'border-green-500 bg-green-500 text-white'
+                            : 'border-slate-300 bg-white text-slate-400'
+                        }
+                      `}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-6 w-6" />
+                      ) : (
+                        <Icon className="h-5 w-5" />
+                      )}
+                    </div>
+                    {/* Step label */}
+                    <span
+                      className={`
+                        mt-2 text-xs font-medium text-center max-w-[80px]
+                        ${isActive
+                          ? 'text-blue-600'
+                          : isCompleted
+                            ? 'text-green-600'
+                            : 'text-slate-500'
+                        }
+                      `}
+                    >
+                      {step.title}
+                    </span>
                   </div>
-                  <span className="text-xs font-medium">{step.title}</span>
+                  {/* Connector line */}
+                  {!isLast && (
+                    <div
+                      className={`
+                        h-0.5 w-8 md:w-12 lg:w-16 mx-2
+                        ${step.number < currentStep ? 'bg-green-500' : 'bg-slate-300'}
+                      `}
+                    />
+                  )}
                 </div>
               );
             })}
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Step Content */}
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="border-0 shadow-lg">
+        <CardContent className="p-6 md:p-8">
           {/* Step 1: Personal Info */}
           {currentStep === 1 && (
             <Form {...personalForm}>
-              <form className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Personal Information</h3>
+              <form className="space-y-8">
+                {/* Section: Name */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-2 rounded-lg bg-blue-100">
+                      <User className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Basic Information</h3>
+                      <p className="text-sm text-slate-500">Your name and contact details</p>
+                    </div>
+                  </div>
+                  
                   <div className="grid gap-4 md:grid-cols-2">
                     <FormField
                       control={personalForm.control}
                       name="first_name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First Name *</FormLabel>
+                          <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
                           <FormControl>
-                            <Input placeholder="John" {...field} />
+                            <Input placeholder="John" className="h-11" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -701,76 +749,97 @@ export function CandidateOnboardingFlow({
                       name="last_name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last Name *</FormLabel>
+                          <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
                           <FormControl>
-                            <Input placeholder="Doe" {...field} />
+                            <Input placeholder="Doe" className="h-11" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                </div>
 
-                <Separator />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={personalForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="email" 
+                              placeholder="john@example.com" 
+                              className="h-11 bg-slate-50" 
+                              {...field} 
+                              disabled 
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            This is the email your invitation was sent to
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={personalForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone Number <span className="text-red-500">*</span></FormLabel>
+                          <FormControl>
+                            <Input placeholder="+1 (555) 123-4567" className="h-11" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={personalForm.control}
-                    name="email"
+                    name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email *</FormLabel>
+                        <FormLabel>Location</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="john@example.com" {...field} disabled />
+                          <Input placeholder="City, State or Country" className="h-11" {...field} />
                         </FormControl>
+                        <FormDescription className="text-xs">
+                          Where are you currently based?
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={personalForm.control}
-                    name="phone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Phone *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="+1 (555) 123-4567" {...field} />
-                        </FormControl>
-                        <FormDescription>Required for recruiters to contact you</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
 
-                <FormField
-                  control={personalForm.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Location</FormLabel>
-                      <FormControl>
-                        <Input placeholder="San Francisco, CA" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <Separator />
-
-                <div>
-                  <h4 className="text-sm font-medium mb-4">Online Profiles (Optional)</h4>
-                  <div className="space-y-4">
+                {/* Section: Online Profiles */}
+                <div className="pt-6 border-t">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-2 rounded-lg bg-slate-100">
+                      <Paperclip className="h-5 w-5 text-slate-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Online Profiles</h3>
+                      <p className="text-sm text-slate-500">Optional - help us learn more about you</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4 bg-slate-50 rounded-lg p-4">
                     <FormField
                       control={personalForm.control}
                       name="linkedin_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>LinkedIn</FormLabel>
+                          <FormLabel className="text-slate-700">LinkedIn Profile</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://linkedin.com/in/johndoe" {...field} />
+                            <Input 
+                              placeholder="https://linkedin.com/in/your-profile" 
+                              className="h-11 bg-white" 
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -781,9 +850,13 @@ export function CandidateOnboardingFlow({
                       name="github_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>GitHub</FormLabel>
+                          <FormLabel className="text-slate-700">GitHub Profile</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://github.com/johndoe" {...field} />
+                            <Input 
+                              placeholder="https://github.com/your-username" 
+                              className="h-11 bg-white" 
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -794,9 +867,13 @@ export function CandidateOnboardingFlow({
                       name="portfolio_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Portfolio</FormLabel>
+                          <FormLabel className="text-slate-700">Portfolio / Personal Website</FormLabel>
                           <FormControl>
-                            <Input placeholder="https://johndoe.com" {...field} />
+                            <Input 
+                              placeholder="https://your-portfolio.com" 
+                              className="h-11 bg-white" 
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -811,34 +888,49 @@ export function CandidateOnboardingFlow({
           {/* Step 2: Resume Upload with AI Parsing or Manual Entry */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Resume & Professional Information</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Upload your resume for AI-powered parsing, or enter details manually.
-                </p>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-100">
+                  <FileText className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Your Resume</h3>
+                  <p className="text-sm text-slate-500">
+                    Upload your resume for AI-powered parsing or enter details manually
+                  </p>
+                </div>
               </div>
 
               <Tabs value={entryMethod} onValueChange={(v) => setEntryMethod(v as 'upload' | 'manual')}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="upload" className="flex items-center gap-2">
+                <TabsList className="grid w-full grid-cols-2 h-12">
+                  <TabsTrigger value="upload" className="gap-2 text-sm">
                     <Upload className="h-4 w-4" />
-                    Upload Resume (AI Parsing)
+                    <span className="hidden sm:inline">Upload Resume</span>
+                    <span className="sm:hidden">Upload</span>
                   </TabsTrigger>
-                  <TabsTrigger value="manual" className="flex items-center gap-2">
+                  <TabsTrigger value="manual" className="gap-2 text-sm">
                     <Edit3 className="h-4 w-4" />
-                    Enter Manually
+                    <span className="hidden sm:inline">Enter Manually</span>
+                    <span className="sm:hidden">Manual</span>
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="upload" className="space-y-4 mt-6">
-                  <Alert>
-                    <Sparkles className="h-4 w-4" />
-                    <AlertTitle>AI-Powered Resume Parsing</AlertTitle>
-                    <AlertDescription>
-                      Upload your resume and our AI will automatically extract your information. You'll be able to review and edit everything in the next step.
-                    </AlertDescription>
-                  </Alert>
+                <TabsContent value="upload" className="mt-6 space-y-6">
+                  {/* AI Info Banner */}
+                  <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-100">
+                    <div className="p-2 rounded-lg bg-purple-100">
+                      <Sparkles className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-slate-900 mb-1">AI-Powered Resume Parsing</h4>
+                      <p className="text-sm text-slate-600">
+                        Our AI will extract your skills, experience, and education automatically. 
+                        You can review and edit everything in the next step.
+                      </p>
+                    </div>
+                  </div>
 
+                  {/* Upload area */}
                   <DocumentUpload
                     onFilesChange={handleResumeUpload}
                     maxFiles={1}
@@ -849,43 +941,42 @@ export function CandidateOnboardingFlow({
                       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     ]}
                     documentType="resume"
-                    label="Upload Resume"
-                    description="Drag and drop your resume here, or click to browse (PDF or DOCX)"
+                    label="Upload Your Resume"
+                    description="Drag and drop your resume here, or click to browse"
                   />
 
+                  {/* Parsing status */}
                   {isParsing && (
-                    <Alert>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <AlertTitle>Parsing your resume...</AlertTitle>
-                      <AlertDescription>
-                        Our AI is analyzing your resume. This usually takes a few seconds.
-                      </AlertDescription>
-                    </Alert>
+                    <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                      <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                      <div>
+                        <h4 className="font-medium text-blue-900">Analyzing your resume...</h4>
+                        <p className="text-sm text-blue-700">This usually takes a few seconds</p>
+                      </div>
+                    </div>
                   )}
 
-                  {parsedData && (
-                    <Alert className="border-green-600">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
-                      <AlertTitle className="text-green-600">Resume Parsed Successfully!</AlertTitle>
-                      <AlertDescription>
-                        We've extracted information from your resume. Click "Next" to review and edit the details.
-                      </AlertDescription>
-                    </Alert>
+                  {/* Success status */}
+                  {parsedData && !isParsing && (
+                    <div className="flex items-center gap-4 p-4 bg-green-50 rounded-xl border border-green-200">
+                      <CheckCircle2 className="h-6 w-6 text-green-600" />
+                      <div>
+                        <h4 className="font-medium text-green-900">Resume parsed successfully!</h4>
+                        <p className="text-sm text-green-700">Click "Next" to review and edit the extracted information</p>
+                      </div>
+                    </div>
                   )}
                 </TabsContent>
 
-                <TabsContent value="manual" className="space-y-4 mt-6">
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Manual Entry</AlertTitle>
-                    <AlertDescription>
-                      If you prefer not to upload a resume, you can enter your professional details manually in the next step.
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="p-6 border rounded-lg bg-muted/30">
-                    <p className="text-sm text-center text-muted-foreground">
-                      Click "Next" to enter your professional information manually.
+                <TabsContent value="manual" className="mt-6">
+                  <div className="text-center py-12 px-6 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
+                      <Edit3 className="h-8 w-8 text-slate-500" />
+                    </div>
+                    <h4 className="font-medium text-slate-900 mb-2">Manual Entry Mode</h4>
+                    <p className="text-sm text-slate-600 max-w-sm mx-auto">
+                      Prefer not to upload a resume? No problem. Click "Next" to enter your 
+                      professional details manually.
                     </p>
                   </div>
                 </TabsContent>
@@ -895,23 +986,31 @@ export function CandidateOnboardingFlow({
 
           {/* Step 3: Edit Professional Information (single edit view, no separate preview) */}
           {currentStep === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Professional Information
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  We’ve pre-filled these fields where possible using your resume. Please review and
-                  update anything that’s missing or inaccurate.
-                </p>
+            <div className="space-y-8">
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-100">
+                  <Edit3 className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Professional Information</h3>
+                  <p className="text-sm text-slate-500">
+                    {parsedData 
+                      ? "We've pre-filled fields from your resume. Please review and update as needed."
+                      : "Tell us about your professional background and skills."}
+                  </p>
+                </div>
               </div>
 
               <Form {...professionalForm}>
                 <form className="space-y-8">
-                  {/* Position & Experience – mirrors top of professional section on candidate detail page */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Role & Experience</h4>
-                    <div className="grid gap-4 md:grid-cols-2">
+                  {/* Section 1: Role & Experience */}
+                  <div className="p-6 bg-slate-50 rounded-xl space-y-4">
+                    <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Role & Experience
+                    </h4>
+                    <div className="grid gap-4 md:grid-cols-3">
                       <FormField
                         control={professionalForm.control}
                         name="position"
@@ -919,7 +1018,7 @@ export function CandidateOnboardingFlow({
                           <FormItem>
                             <FormLabel>Desired Position</FormLabel>
                             <FormControl>
-                              <Input placeholder="Software Engineer" {...field} />
+                              <Input placeholder="e.g., Software Engineer" className="h-11 bg-white" {...field} />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -930,12 +1029,14 @@ export function CandidateOnboardingFlow({
                         name="experience_years"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Total Experience (years)</FormLabel>
+                            <FormLabel>Years of Experience</FormLabel>
                             <FormControl>
                               <Input
                                 type="number"
                                 min={0}
                                 max={50}
+                                placeholder="0"
+                                className="h-11 bg-white"
                                 {...field}
                                 onChange={(e) =>
                                   field.onChange(e.target.value ? parseInt(e.target.value) : undefined)
@@ -951,16 +1052,14 @@ export function CandidateOnboardingFlow({
                         name="expected_salary"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Expected Pay Rate *</FormLabel>
+                            <FormLabel>Expected Pay Rate <span className="text-red-500">*</span></FormLabel>
                             <FormControl>
                               <Input
-                                placeholder="e.g., $80/hr, $150,000/year"
+                                placeholder="e.g., $80/hr or $150K/year"
+                                className="h-11 bg-white"
                                 {...field}
                               />
                             </FormControl>
-                            <FormDescription>
-                              Enter your expected hourly rate or annual salary
-                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -968,144 +1067,128 @@ export function CandidateOnboardingFlow({
                     </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Preferred Roles */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Preferred Roles</h4>
-                    <div className="space-y-2">
-                      <Label>Preferred Job Roles</Label>
-                      <TagInput
-                        value={preferredRoles}
-                        onChange={(roles) => {
-                          if (roles.length > 10) {
-                            toast.error('Maximum 10 preferred roles allowed');
-                            return;
-                          }
-                          setPreferredRoles(roles);
-                        }}
-                        placeholder="Add preferred role (e.g., Software Engineer)..."
-                      />
-                      <p className="text-xs text-slate-500">
-                        {preferredRoles.length}/10 roles • Press Enter to add, click X to remove
-                      </p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* Preferred Locations */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Preferred Work Locations</h4>
-                    <div className="space-y-2">
-                      <Label>Preferred Locations</Label>
-                      <TagInput
-                        value={preferredLocations}
-                        onChange={(locations) => {
-                          if (locations.length > 10) {
-                            toast.error('Maximum 10 preferred locations allowed');
-                            return;
-                          }
-                          setPreferredLocations(locations);
-                        }}
-                        placeholder="Add preferred location (e.g., New York, Remote)..."
-                      />
-                      <p className="text-xs text-slate-500">
-                        {preferredLocations.length}/10 locations • Press Enter to add, click X to remove
-                      </p>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  {/* AI-Suggested Roles */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-purple-600" />
-                          AI-Suggested Roles
-                        </h4>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Get AI-powered role recommendations based on your profile
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleGenerateRoleSuggestions}
-                        disabled={isGeneratingRoles || (!skillTags.length && !workExperience.length && !professionalForm.getValues('position'))}
-                        className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                      >
-                        {isGeneratingRoles ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {suggestedRoles ? (
+                  {/* Section 2: Preferences */}
+                  <div className="p-6 bg-blue-50 rounded-xl space-y-6">
+                    <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-2">
+                      <Eye className="h-4 w-4" />
+                      Job Preferences
+                    </h4>
+                    
+                    <div className="grid gap-6 md:grid-cols-2">
+                      {/* Preferred Roles */}
                       <div className="space-y-2">
-                        {suggestedRoles.roles.slice(0, 5).map((suggestion, index) => (
-                          <div
-                            key={index}
-                            className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-2 flex-1">
-                                <Badge className="bg-purple-600 text-white border-2 border-black font-bold">
-                                  #{index + 1}
-                                </Badge>
-                                <div>
-                                  <h5 className="font-bold text-sm text-slate-900">{suggestion.role}</h5>
-                                  <p className="text-xs text-slate-600 mt-1">{suggestion.reasoning}</p>
-                                </div>
-                              </div>
-                              <Badge
-                                className={`font-bold border-2 border-black ${suggestion.score >= 0.8
-                                    ? 'bg-green-500 text-white'
-                                    : suggestion.score >= 0.6
-                                      ? 'bg-yellow-500 text-white'
-                                      : 'bg-slate-500 text-white'
-                                  }`}
-                              >
-                                {(suggestion.score * 100).toFixed(0)}%
-                              </Badge>
-                            </div>
-                          </div>
-                        ))}
-                        <p className="text-xs text-slate-500 text-center">
-                          Generated {new Date(suggestedRoles.generated_at).toLocaleString()}
+                        <Label className="text-slate-700">Preferred Job Roles</Label>
+                        <TagInput
+                          value={preferredRoles}
+                          onChange={(roles) => {
+                            if (roles.length > 10) {
+                              toast.error('Maximum 10 preferred roles allowed');
+                              return;
+                            }
+                            setPreferredRoles(roles);
+                          }}
+                          placeholder="Add role and press Enter..."
+                        />
+                        <p className="text-xs text-slate-500">
+                          {preferredRoles.length}/10 roles
                         </p>
                       </div>
-                    ) : (
-                      <div className="text-center py-6 text-slate-500 border-2 border-dashed border-slate-300 rounded">
-                        <Sparkles className="h-6 w-6 mx-auto mb-2 text-slate-300" />
-                        <p className="text-sm font-medium">No AI suggestions yet</p>
-                        <p className="text-xs mt-1">Click "Generate" to get role recommendations</p>
+
+                      {/* Preferred Locations */}
+                      <div className="space-y-2">
+                        <Label className="text-slate-700">Preferred Locations</Label>
+                        <TagInput
+                          value={preferredLocations}
+                          onChange={(locations) => {
+                            if (locations.length > 10) {
+                              toast.error('Maximum 10 locations allowed');
+                              return;
+                            }
+                            setPreferredLocations(locations);
+                          }}
+                          placeholder="Add location and press Enter..."
+                        />
+                        <p className="text-xs text-slate-500">
+                          {preferredLocations.length}/10 locations
+                        </p>
                       </div>
-                    )}
+                    </div>
+
+                    {/* AI Role Suggestions */}
+                    <div className="pt-4 border-t border-blue-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-purple-600" />
+                          <span className="text-sm font-medium text-slate-700">AI Role Suggestions</span>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateRoleSuggestions}
+                          disabled={isGeneratingRoles || (!skillTags.length && !workExperience.length && !professionalForm.getValues('position'))}
+                          className="bg-white"
+                        >
+                          {isGeneratingRoles ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Generate Suggestions
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {suggestedRoles ? (
+                        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                          {suggestedRoles.roles.slice(0, 5).map((suggestion, index) => (
+                            <div
+                              key={index}
+                              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-purple-300 transition-colors"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="font-medium text-sm text-slate-900">{suggestion.role}</p>
+                                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{suggestion.reasoning}</p>
+                                </div>
+                                <Badge
+                                  className={`text-xs shrink-0 ${
+                                    suggestion.score >= 0.8
+                                      ? 'bg-green-100 text-green-700'
+                                      : suggestion.score >= 0.6
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {(suggestion.score * 100).toFixed(0)}%
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500 text-center py-4">
+                          Add skills or experience to get AI-powered role recommendations
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Skills – structured chips, like candidate detail page */}
+                  {/* Section 3: Skills */}
                   <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Skills</h4>
+                    <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Skills & Expertise
+                    </h4>
                     <div className="space-y-2">
-                      <Label>Skills</Label>
                       <TagInput
                         value={skillTags}
                         onChange={setSkillTags}
-                        placeholder="Add a skill (e.g., React, Python)..."
+                        placeholder="Add a skill (e.g., React, Python, SQL)..."
                       />
                       <p className="text-xs text-slate-500">
                         Press Enter to add a skill. Click X to remove.
@@ -1113,47 +1196,52 @@ export function CandidateOnboardingFlow({
                     </div>
                   </div>
 
-                  <Separator />
-
-                  {/* Work Experience – structured editor like candidate detail page */}
+                  {/* Section 4: Work Experience */}
                   <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Work Experience</h4>
+                    <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Work Experience
+                    </h4>
                     <WorkExperienceEditor
                       value={workExperience}
                       onChange={setWorkExperience}
                     />
                   </div>
 
-                  <Separator />
-
-                  {/* Education – structured editor like candidate detail page */}
+                  {/* Section 5: Education */}
                   <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Education</h4>
+                    <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Education
+                    </h4>
                     <EducationEditor
                       value={education}
                       onChange={setEducation}
                     />
                   </div>
 
-                  <Separator />
-
-                  {/* Professional Summary – aligns with Professional Summary card */}
+                  {/* Section 6: Professional Summary */}
                   <div className="space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-900">Professional Summary</h4>
+                    <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wide flex items-center gap-2">
+                      <Edit3 className="h-4 w-4" />
+                      Professional Summary
+                    </h4>
                     <FormField
                       control={professionalForm.control}
                       name="summary"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Summary</FormLabel>
                           <FormControl>
                             <Textarea
-                              placeholder="Brief summary of your professional background, key achievements, and career goals..."
+                              placeholder="Write a brief summary of your professional background, key achievements, and career goals..."
                               rows={4}
+                              className="resize-none"
                               {...field}
                             />
                           </FormControl>
-                          <FormDescription>At least 50 characters</FormDescription>
+                          <FormDescription className="text-xs">
+                            Minimum 50 characters. A good summary helps recruiters understand your profile quickly.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1167,58 +1255,103 @@ export function CandidateOnboardingFlow({
           {/* Step 4: Documents (Dynamic based on tenant requirements) */}
           {currentStep === 4 && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Required Documents</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {documentRequirements.length > 0 
-                    ? 'Please upload the following documents. Items marked with * are required.'
-                    : 'Upload any additional documents such as ID proof, work authorization, certifications, or portfolio samples.'}
-                </p>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-100">
+                  <Paperclip className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Supporting Documents</h3>
+                  <p className="text-sm text-slate-500">
+                    {documentRequirements.length > 0 
+                      ? 'Upload the required documents to complete your application'
+                      : 'Upload any additional documents that support your application'}
+                  </p>
+                </div>
               </div>
 
               {isLoadingRequirements ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-muted-foreground">Loading document requirements...</span>
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400 mr-2" />
+                  <span className="text-slate-500">Loading requirements...</span>
                 </div>
               ) : documentRequirements.length > 0 ? (
                 <div className="space-y-6">
-                  {documentRequirements.map((req) => (
-                    <div key={req.id} className="border rounded-lg p-4">
-                      <div className="mb-3">
-                        <h4 className="font-medium flex items-center gap-2">
-                          {req.label}
-                          {req.is_required && (
-                            <Badge variant="destructive" className="text-xs">Required</Badge>
-                          )}
-                        </h4>
-                        {req.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{req.description}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Allowed: {getFileTypeLabels(req.allowed_file_types)} • Max size: {req.max_file_size_mb}MB
-                        </p>
-                      </div>
-                      <DocumentUpload
-                        onFilesChange={(files) => handleDocumentFileChange(req.document_type, files)}
-                        maxFiles={1}
-                        maxSizeInMB={req.max_file_size_mb}
-                        acceptedFileTypes={getMimeTypesFromExtensions(req.allowed_file_types)}
-                        documentType={req.document_type}
-                        label={`Upload ${req.label}`}
-                        description={req.is_required ? 'This document is required' : 'Optional'}
-                      />
+                  {/* Required documents */}
+                  {documentRequirements.filter(req => req.is_required).length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-red-500" />
+                        Required Documents
+                      </h4>
+                      {documentRequirements.filter(req => req.is_required).map((req) => (
+                        <div key={req.id} className="p-5 bg-red-50 border border-red-100 rounded-xl">
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h5 className="font-medium text-slate-900">{req.label}</h5>
+                              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-xs">
+                                Required
+                              </Badge>
+                            </div>
+                            {req.description && (
+                              <p className="text-sm text-slate-600">{req.description}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">
+                              Formats: {getFileTypeLabels(req.allowed_file_types)} | Max: {req.max_file_size_mb}MB
+                            </p>
+                          </div>
+                          <DocumentUpload
+                            onFilesChange={(files) => handleDocumentFileChange(req.document_type, files)}
+                            maxFiles={1}
+                            maxSizeInMB={req.max_file_size_mb}
+                            acceptedFileTypes={getMimeTypesFromExtensions(req.allowed_file_types)}
+                            documentType={req.document_type}
+                            label={`Upload ${req.label}`}
+                            description="Click or drag to upload"
+                          />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
 
-                  <Separator />
+                  {/* Optional documents */}
+                  {documentRequirements.filter(req => !req.is_required).length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                        <Paperclip className="h-4 w-4 text-slate-500" />
+                        Optional Documents
+                      </h4>
+                      {documentRequirements.filter(req => !req.is_required).map((req) => (
+                        <div key={req.id} className="p-5 bg-slate-50 border border-slate-200 rounded-xl">
+                          <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h5 className="font-medium text-slate-900">{req.label}</h5>
+                              <Badge variant="outline" className="text-xs">Optional</Badge>
+                            </div>
+                            {req.description && (
+                              <p className="text-sm text-slate-600">{req.description}</p>
+                            )}
+                            <p className="text-xs text-slate-500 mt-1">
+                              Formats: {getFileTypeLabels(req.allowed_file_types)} | Max: {req.max_file_size_mb}MB
+                            </p>
+                          </div>
+                          <DocumentUpload
+                            onFilesChange={(files) => handleDocumentFileChange(req.document_type, files)}
+                            maxFiles={1}
+                            maxSizeInMB={req.max_file_size_mb}
+                            acceptedFileTypes={getMimeTypesFromExtensions(req.allowed_file_types)}
+                            documentType={req.document_type}
+                            label={`Upload ${req.label}`}
+                            description="Click or drag to upload"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                  {/* Additional documents section for any other files */}
-                  <div>
-                    <h4 className="font-medium mb-2">Other Documents (Optional)</h4>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Upload any additional documents not listed above.
-                    </p>
+                  {/* Additional documents */}
+                  <div className="pt-6 border-t">
+                    <h4 className="text-sm font-medium text-slate-700 mb-4">Other Documents</h4>
                     <DocumentUpload
                       onFilesChange={setAdditionalFiles}
                       maxFiles={5}
@@ -1232,27 +1365,35 @@ export function CandidateOnboardingFlow({
                       ]}
                       documentType="other"
                       label="Upload Additional Documents"
-                      description="Optional: Add any other relevant documents"
+                      description="Certifications, portfolio samples, or other relevant files"
                     />
                   </div>
                 </div>
               ) : (
-                /* Fallback to original behavior if no requirements configured */
-                <DocumentUpload
-                  onFilesChange={setAdditionalFiles}
-                  maxFiles={5}
-                  maxSizeInMB={10}
-                  acceptedFileTypes={[
-                    'application/pdf',
-                    'application/msword',
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    'image/jpeg',
-                    'image/png',
-                  ]}
-                  documentType="other"
-                  label="Upload Additional Documents"
-                  description="Optional: Add certifications, portfolio, work authorization, or other relevant documents"
-                />
+                /* No requirements configured */
+                <div className="space-y-6">
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                    <p className="text-sm text-blue-800">
+                      <AlertCircle className="inline h-4 w-4 mr-1" />
+                      No specific documents are required, but you can upload any supporting materials.
+                    </p>
+                  </div>
+                  <DocumentUpload
+                    onFilesChange={setAdditionalFiles}
+                    maxFiles={5}
+                    maxSizeInMB={10}
+                    acceptedFileTypes={[
+                      'application/pdf',
+                      'application/msword',
+                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                      'image/jpeg',
+                      'image/png',
+                    ]}
+                    documentType="other"
+                    label="Upload Documents"
+                    description="Certifications, portfolio, work authorization, or other relevant documents"
+                  />
+                </div>
               )}
             </div>
           )}
@@ -1260,151 +1401,255 @@ export function CandidateOnboardingFlow({
           {/* Step 5: Final Review & Submit */}
           {currentStep === 5 && (
             <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Final Review</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Please review all information before submitting your application.
-                </p>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-100">
+                  <Eye className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">Review Your Application</h3>
+                  <p className="text-sm text-slate-500">
+                    Please verify all information before submitting
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <ReviewSection title="Personal Information">
-                  <ReviewItem label="Name" value={`${personalForm.getValues('first_name')} ${personalForm.getValues('last_name')}`} />
-                  <ReviewItem label="Email" value={personalForm.getValues('email')} />
-                  <ReviewItem label="Phone" value={personalForm.getValues('phone') || 'Not provided'} />
-                  <ReviewItem label="Location" value={personalForm.getValues('location') || 'Not provided'} />
-                  {personalForm.getValues('linkedin_url') && (
-                    <ReviewItem label="LinkedIn" value={personalForm.getValues('linkedin_url')!} />
-                  )}
-                </ReviewSection>
+              {/* Review Cards */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Personal Info Card */}
+                <div className="p-5 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-2 mb-4">
+                    <User className="h-4 w-4 text-slate-600" />
+                    <h4 className="font-medium text-slate-700">Personal Information</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Full Name</p>
+                      <p className="font-medium text-slate-900">
+                        {personalForm.getValues('first_name')} {personalForm.getValues('last_name')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Email</p>
+                      <p className="text-slate-900">{personalForm.getValues('email')}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Phone</p>
+                      <p className="text-slate-900">{personalForm.getValues('phone') || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Location</p>
+                      <p className="text-slate-900">{personalForm.getValues('location') || '-'}</p>
+                    </div>
+                  </div>
+                </div>
 
-                <Separator />
+                {/* Professional Info Card */}
+                <div className="p-5 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FileText className="h-4 w-4 text-slate-600" />
+                    <h4 className="font-medium text-slate-700">Professional Details</h4>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Desired Position</p>
+                      <p className="font-medium text-slate-900">
+                        {professionalForm.getValues('position') || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Experience</p>
+                      <p className="text-slate-900">
+                        {professionalForm.getValues('experience_years') || 0} years
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Expected Pay Rate</p>
+                      <p className="text-slate-900">
+                        {professionalForm.getValues('expected_salary') || '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                <ReviewSection title="Professional Information">
-                  <ReviewItem label="Position" value={professionalForm.getValues('position') || 'Not provided'} />
-                  <ReviewItem label="Experience" value={`${professionalForm.getValues('experience_years') || 0} years`} />
-                  <ReviewItem label="Expected Pay Rate" value={professionalForm.getValues('expected_salary') || 'Not provided'} />
-                  <ReviewItem label="Skills" value={professionalForm.getValues('skills') || 'Not provided'} />
-                </ReviewSection>
+              {/* Skills */}
+              {skillTags.length > 0 && (
+                <div className="p-5 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 className="h-4 w-4 text-slate-600" />
+                    <h4 className="font-medium text-slate-700">Skills ({skillTags.length})</h4>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {skillTags.map((skill, idx) => (
+                      <Badge key={idx} variant="secondary" className="bg-white">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                {preferredRoles.length > 0 && (
-                  <>
-                    <Separator />
-                    <ReviewSection title="Preferred Roles">
+              {/* Preferences */}
+              {(preferredRoles.length > 0 || preferredLocations.length > 0) && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {preferredRoles.length > 0 && (
+                    <div className="p-5 bg-blue-50 rounded-xl">
+                      <h4 className="font-medium text-slate-700 mb-3">Preferred Roles</h4>
                       <div className="flex flex-wrap gap-2">
                         {preferredRoles.map((role, idx) => (
-                          <Badge key={idx} variant="secondary">{role}</Badge>
+                          <Badge key={idx} className="bg-blue-100 text-blue-700">{role}</Badge>
                         ))}
                       </div>
-                    </ReviewSection>
-                  </>
-                )}
-
-                {preferredLocations.length > 0 && (
-                  <>
-                    <Separator />
-                    <ReviewSection title="Preferred Locations">
+                    </div>
+                  )}
+                  {preferredLocations.length > 0 && (
+                    <div className="p-5 bg-green-50 rounded-xl">
+                      <h4 className="font-medium text-slate-700 mb-3">Preferred Locations</h4>
                       <div className="flex flex-wrap gap-2">
                         {preferredLocations.map((loc, idx) => (
-                          <Badge key={idx} variant="outline">{loc}</Badge>
+                          <Badge key={idx} className="bg-green-100 text-green-700">{loc}</Badge>
                         ))}
                       </div>
-                    </ReviewSection>
-                  </>
-                )}
-
-                {professionalForm.getValues('work_experience') && (
-                  <>
-                    <Separator />
-                    <ReviewSection title="Work Experience">
-                      <div className="text-sm whitespace-pre-line">{professionalForm.getValues('work_experience')}</div>
-                    </ReviewSection>
-                  </>
-                )}
-
-                {professionalForm.getValues('education') && (
-                  <>
-                    <Separator />
-                    <ReviewSection title="Education">
-                      <div className="text-sm whitespace-pre-line">{professionalForm.getValues('education')}</div>
-                    </ReviewSection>
-                  </>
-                )}
-
-                <Separator />
-
-                <ReviewSection title="Documents">
-                  <div className="space-y-2">
-                    <div>
-                      <span className="text-sm font-medium">Resume:</span>
-                      <span className="text-sm text-muted-foreground ml-2">
-                        {resumeFiles.length > 0 ? resumeFiles[0].file.name : entryMethod === 'manual' ? 'Entered manually' : 'Not uploaded'}
-                      </span>
                     </div>
-                    {/* Show required documents */}
-                    {documentRequirements.map((req) => {
-                      const files = documentFiles[req.document_type] || [];
-                      return (
-                        <div key={req.id}>
-                          <span className="text-sm font-medium">{req.label}:</span>
-                          <span className="text-sm text-muted-foreground ml-2">
-                            {files.length > 0 
-                              ? files.map(f => f.file.name).join(', ')
-                              : req.is_required ? 'Not uploaded (Required)' : 'Not uploaded'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {additionalFiles.length > 0 && (
-                      <div>
-                        <span className="text-sm font-medium">Other Documents:</span>
-                        <span className="text-sm text-muted-foreground ml-2">
-                          {additionalFiles.map(f => f.file.name).join(', ')}
-                        </span>
+                  )}
+                </div>
+              )}
+
+              {/* Work Experience Summary */}
+              {workExperience.length > 0 && (
+                <div className="p-5 bg-slate-50 rounded-xl">
+                  <h4 className="font-medium text-slate-700 mb-3">Work Experience ({workExperience.length})</h4>
+                  <div className="space-y-2">
+                    {workExperience.slice(0, 3).map((exp, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="font-medium text-slate-900">{exp.title}</span>
+                        <span className="text-slate-600">{exp.company}</span>
                       </div>
+                    ))}
+                    {workExperience.length > 3 && (
+                      <p className="text-xs text-slate-500">+{workExperience.length - 3} more</p>
                     )}
                   </div>
-                </ReviewSection>
+                </div>
+              )}
 
-                {parsedData && (
-                  <Alert className="border-blue-600 bg-blue-50/50">
-                    <Sparkles className="h-4 w-4 text-blue-600" />
-                    <AlertTitle className="text-blue-600">AI-Assisted Application</AlertTitle>
-                    <AlertDescription>
-                      Your application includes information extracted using AI resume parsing technology.
-                    </AlertDescription>
-                  </Alert>
-                )}
+              {/* Education Summary */}
+              {education.length > 0 && (
+                <div className="p-5 bg-slate-50 rounded-xl">
+                  <h4 className="font-medium text-slate-700 mb-3">Education ({education.length})</h4>
+                  <div className="space-y-2">
+                    {education.slice(0, 2).map((edu, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span className="font-medium text-slate-900">{edu.degree}</span>
+                        <span className="text-slate-600">{edu.institution}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Documents Summary */}
+              <div className="p-5 bg-slate-50 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <Paperclip className="h-4 w-4 text-slate-600" />
+                  <h4 className="font-medium text-slate-700">Uploaded Documents</h4>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    {resumeFiles.length > 0 ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-slate-400" />
+                    )}
+                    <span className={resumeFiles.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+                      Resume: {resumeFiles.length > 0 ? resumeFiles[0].file.name : (entryMethod === 'manual' ? 'Manual entry' : 'Not uploaded')}
+                    </span>
+                  </div>
+                  {documentRequirements.map((req) => {
+                    const files = documentFiles[req.document_type] || [];
+                    return (
+                      <div key={req.id} className="flex items-center gap-2">
+                        {files.length > 0 ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : req.is_required ? (
+                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 text-slate-400" />
+                        )}
+                        <span className={files.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+                          {req.label}: {files.length > 0 ? files[0].file.name : 'Not uploaded'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {additionalFiles.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <span className="text-slate-900">
+                        {additionalFiles.length} additional document(s)
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* AI Badge */}
+              {parsedData && (
+                <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border border-purple-100">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  <p className="text-sm text-slate-700">
+                    Your application includes AI-extracted information from your resume
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
 
-        <CardFooter className="flex justify-between border-t pt-6">
+        <CardFooter className="flex justify-between border-t p-6 bg-slate-50">
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={handlePrevStep}
             disabled={currentStep === 1 || isSubmitting}
+            className="gap-2"
           >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Previous
+            <ChevronLeft className="h-4 w-4" />
+            {currentStep > 1 ? steps[currentStep - 2].title : 'Back'}
           </Button>
 
           {currentStep < steps.length ? (
-            <Button onClick={handleNextStep} disabled={isSubmitting || (currentStep === 2 && isParsing)}>
-              Next
-              <ChevronRight className="ml-2 h-4 w-4" />
+            <Button 
+              onClick={handleNextStep} 
+              disabled={isSubmitting || (currentStep === 2 && isParsing)}
+              className="gap-2 bg-slate-900 hover:bg-slate-800"
+            >
+              {currentStep === 2 && isParsing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Parsing...
+                </>
+              ) : (
+                <>
+                  {steps[currentStep].title}
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
             </Button>
           ) : (
-            <Button onClick={() => setShowConfirmDialog(true)} disabled={isSubmitting}>
+            <Button 
+              onClick={() => setShowConfirmDialog(true)} 
+              disabled={isSubmitting}
+              className="gap-2 bg-green-600 hover:bg-green-700"
+            >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Submitting...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  <CheckCircle2 className="h-4 w-4" />
                   Submit Application
                 </>
               )}
@@ -1413,70 +1658,62 @@ export function CandidateOnboardingFlow({
         </CardFooter>
       </Card>
 
-      {/* Confirmation Dialog */}
+      {/* Confirmation Dialog - Improved styling */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Confirm Submission
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>
-                You are about to submit your application. Please note:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Once submitted, you <strong>cannot modify</strong> your application</li>
-                <li>Your information will be reviewed by the hiring team</li>
-                <li>You will receive an email confirmation after submission</li>
-              </ul>
-              <p className="font-medium text-foreground">
-                Are you sure you want to proceed?
-              </p>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-full bg-amber-100">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              </div>
+              <AlertDialogTitle className="text-xl">Ready to Submit?</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p className="text-slate-600">
+                  Please confirm you're ready to submit your application.
+                </p>
+                <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+                  <div className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                    <span>Your application cannot be modified after submission</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                    <span>Our team will review and respond within 2-3 business days</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
+                    <span>You'll receive a confirmation email at {personalForm.getValues('email')}</span>
+                  </div>
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>
-              Go Back & Review
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={isSubmitting} className="flex-1">
+              Go Back
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="bg-primary"
+              className="flex-1 bg-green-600 hover:bg-green-700"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Submitting...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Yes, Submit Application
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Submit Now
                 </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function ReviewSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h4 className="text-sm font-semibold mb-3">{title}</h4>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function ReviewItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}:</span>
-      <span className="font-medium">{value}</span>
     </div>
   );
 }
