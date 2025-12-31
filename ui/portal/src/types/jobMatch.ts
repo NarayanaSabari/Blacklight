@@ -44,17 +44,18 @@ export interface JobMatch {
   job_posting_id: number;
   match_score: number;
   match_grade?: string;
-  // Unified Scoring Components (weights: Skills 40%, Keywords 25%, Experience 20%, Semantic 15%)
+  // Unified Scoring Components (weights: Skills 45%, Experience 20%, Semantic 35%)
+  // Note: Keyword scoring was removed to speed up job imports
   skill_match_score: number;
-  keyword_match_score: number;
+  keyword_match_score?: number | null; // DEPRECATED - no longer used
   experience_match_score: number;
   semantic_similarity: number;
   // Skill matching details
   matched_skills: string[];
   missing_skills: string[];
-  // Keyword matching details
-  matched_keywords?: string[];
-  missing_keywords?: string[];
+  // Keyword matching details (DEPRECATED - no longer used)
+  matched_keywords?: string[] | null;
+  missing_keywords?: string[] | null;
   // AI Compatibility (on-demand, cached 24h)
   ai_compatibility_score?: number;
   ai_compatibility_details?: {

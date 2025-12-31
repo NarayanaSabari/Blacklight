@@ -246,8 +246,8 @@ export function JobDetailPage() {
               <div className="flex items-center gap-4">
                 <div className="text-sm text-muted-foreground">
                   Skills: {matchData.skill_match_score.toFixed(0)}% • 
-                  Keywords: {(matchData.keyword_match_score ?? 0).toFixed(0)}% •
-                  Experience: {matchData.experience_match_score.toFixed(0)}%
+                  Experience: {matchData.experience_match_score.toFixed(0)}% •
+                  Semantic: {matchData.semantic_similarity.toFixed(0)}%
                 </div>
                 <Button 
                   onClick={handleStartTailoring}

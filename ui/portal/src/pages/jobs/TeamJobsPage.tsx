@@ -496,8 +496,9 @@ export function TeamJobsPage() {
             )}
           </div>
 
-          {/* Score Bars */}
-          <div className="grid grid-cols-4 gap-2 pt-2 border-t">
+          {/* Score Bars - Unified Scoring (Skills 45%, Experience 20%, Semantic 35%) */}
+          {/* Note: Keyword scoring was removed to speed up job imports */}
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="text-center">
@@ -507,18 +508,7 @@ export function TeamJobsPage() {
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Skills Match (40% weight)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Keywords</div>
-                  <div className={`text-sm font-semibold ${getScoreColor(match.keyword_match_score ?? 0)}`}>
-                    {Math.round(match.keyword_match_score ?? 0)}%
-                  </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>Keywords Match (25% weight)</TooltipContent>
+              <TooltipContent>Skills Match (45% weight)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -540,7 +530,7 @@ export function TeamJobsPage() {
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Semantic Similarity (15% weight)</TooltipContent>
+              <TooltipContent>Semantic Similarity (35% weight)</TooltipContent>
             </Tooltip>
           </div>
 

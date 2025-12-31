@@ -3,10 +3,11 @@ Candidate Job Match Model
 Stores AI-generated job matches for candidates with unified scoring details.
 
 Unified Scoring Weights:
-- Skills:     40% - Direct skill matching with synonyms
-- Keywords:   25% - JD keyword matching (technical, action verbs, industry terms)
+- Skills:     45% - Direct skill matching with synonyms
 - Experience: 20% - Years of experience fit
-- Semantic:   15% - Embedding cosine similarity
+- Semantic:   35% - Embedding cosine similarity
+
+Note: Keyword scoring was removed to speed up job imports.
 """
 from datetime import datetime
 from sqlalchemy import String, Integer, Text, DateTime, Boolean, DECIMAL, ARRAY, Index, ForeignKey
@@ -33,11 +34,11 @@ class CandidateJobMatch(db.Model):
     # ===========================================
     match_score = db.Column(DECIMAL(5, 2), nullable=False, index=True)  # Overall weighted score
     
-    # Individual component scores (weights: 40%, 25%, 20%, 15%)
-    skill_match_score = db.Column(DECIMAL(5, 2))      # 40% - Skills overlap
-    keyword_match_score = db.Column(DECIMAL(5, 2))    # 25% - JD keywords match
+    # Individual component scores (weights: 45%, 20%, 35%)
+    skill_match_score = db.Column(DECIMAL(5, 2))      # 45% - Skills overlap
+    keyword_match_score = db.Column(DECIMAL(5, 2))    # DEPRECATED - No longer used
     experience_match_score = db.Column(DECIMAL(5, 2)) # 20% - Experience level match
-    semantic_similarity = db.Column(DECIMAL(5, 2))    # 15% - Embedding cosine similarity
+    semantic_similarity = db.Column(DECIMAL(5, 2))    # 35% - Embedding cosine similarity
     
     # Match grade (A+, A, B+, B, C+, C - no D/F)
     match_grade = db.Column(String(5), index=True)
@@ -47,8 +48,8 @@ class CandidateJobMatch(db.Model):
     # ===========================================
     matched_skills = db.Column(ARRAY(String))   # Skills that match
     missing_skills = db.Column(ARRAY(String))   # Required skills candidate lacks
-    matched_keywords = db.Column(ARRAY(String)) # Keywords found in resume
-    missing_keywords = db.Column(ARRAY(String)) # Keywords not found in resume
+    matched_keywords = db.Column(ARRAY(String)) # DEPRECATED - No longer used
+    missing_keywords = db.Column(ARRAY(String)) # DEPRECATED - No longer used
     match_reasons = db.Column(ARRAY(String))    # ["Strong Python skills", "AWS experience"]
     
     # ===========================================
@@ -108,14 +109,14 @@ class CandidateJobMatch(db.Model):
             'match_score': float(self.match_score) if self.match_score else 0.0,
             'match_grade': self.match_grade,
             'skill_match_score': float(self.skill_match_score) if self.skill_match_score else 0.0,
-            'keyword_match_score': float(self.keyword_match_score) if self.keyword_match_score else 0.0,
+            'keyword_match_score': float(self.keyword_match_score) if self.keyword_match_score else None,  # DEPRECATED
             'experience_match_score': float(self.experience_match_score) if self.experience_match_score else 0.0,
             'semantic_similarity': float(self.semantic_similarity) if self.semantic_similarity else 0.0,
             # Match details
             'matched_skills': self.matched_skills or [],
             'missing_skills': self.missing_skills or [],
-            'matched_keywords': self.matched_keywords or [],
-            'missing_keywords': self.missing_keywords or [],
+            'matched_keywords': self.matched_keywords or [],  # DEPRECATED
+            'missing_keywords': self.missing_keywords or [],  # DEPRECATED
             'match_reasons': self.match_reasons or [],
             # AI compatibility (on-demand)
             'ai_compatibility_score': float(self.ai_compatibility_score) if self.ai_compatibility_score else None,

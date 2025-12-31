@@ -87,17 +87,9 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
         lambda: import_jobs_batch_for_platform(jobs_data, session_data, platform_name)
     )
     
-    # Step 3: Extract keywords for imported jobs (for unified scoring)
-    if import_result["job_ids"]:
-        keywords_result = await ctx.step.run(
-            "extract-keywords",
-            lambda: extract_keywords_for_jobs(import_result["job_ids"])
-        )
-        logger.info(
-            f"[JOB-IMPORT] Keywords extracted for {keywords_result['extracted']}/{len(import_result['job_ids'])} jobs"
-        )
+    # NOTE: Keyword extraction removed - scoring now uses Skills (45%), Semantic (35%), Experience (20%)
     
-    # Step 4: Update platform status to completed
+    # Step 3: Update platform status to completed
     await ctx.step.run(
         "complete-platform",
         lambda: complete_platform_status(

@@ -17,7 +17,6 @@ import {
   Clock,
   Sparkles,
   Mail,
-  FileText,
   Brain,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -197,12 +196,12 @@ export function MatchCard({
           </p>
         )}
 
-        {/* Score Breakdown - Unified Scoring (Skills 40%, Keywords 25%, Experience 20%, Semantic 15%) */}
+        {/* Score Breakdown - Unified Scoring (Skills 45%, Experience 20%, Semantic 35%) */}
+        {/* Note: Keyword scoring was removed to speed up job imports */}
         <div className="space-y-2.5 pt-2">
-          <ScoreBar label="Skills (40%)" value={match.skill_match_score} icon={TrendingUp} />
-          <ScoreBar label="Keywords (25%)" value={match.keyword_match_score ?? 0} icon={FileText} />
+          <ScoreBar label="Skills (45%)" value={match.skill_match_score} icon={TrendingUp} />
           <ScoreBar label="Experience (20%)" value={match.experience_match_score} icon={Briefcase} />
-          <ScoreBar label="Semantic (15%)" value={match.semantic_similarity} icon={Brain} />
+          <ScoreBar label="Semantic (35%)" value={match.semantic_similarity} icon={Brain} />
         </div>
 
         {/* Skills Match */}

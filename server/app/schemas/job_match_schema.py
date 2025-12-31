@@ -12,24 +12,25 @@ class CandidateJobMatchBase(BaseModel):
     """Base schema for candidate job match shared fields
     
     Unified Scoring System Weights:
-    - Skills: 40%
-    - Keywords: 25%
+    - Skills: 45%
     - Experience: 20%
-    - Semantic: 15%
+    - Semantic: 35%
+    
+    Note: Keyword scoring was removed to speed up job imports.
     """
     match_score: Decimal = Field(..., ge=0, le=100, description="Overall match score (0-100)")
     match_grade: Optional[str] = Field(None, max_length=5, description="Match grade (A+, A, B+, B, C+, C)")
     # Unified scoring components
-    skill_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Skill match score (40% weight)")
-    keyword_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Keyword match score (25% weight)")
+    skill_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Skill match score (45% weight)")
+    keyword_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="DEPRECATED: No longer used")
     experience_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Experience match score (20% weight)")
-    semantic_similarity: Optional[Decimal] = Field(None, ge=0, le=100, description="Semantic similarity (15% weight)")
+    semantic_similarity: Optional[Decimal] = Field(None, ge=0, le=100, description="Semantic similarity (35% weight)")
     # Skill matching details
     matched_skills: Optional[List[str]] = Field(default_factory=list, description="Matched skills")
     missing_skills: Optional[List[str]] = Field(default_factory=list, description="Missing skills")
-    # Keyword matching details
-    matched_keywords: Optional[List[str]] = Field(default_factory=list, description="Matched keywords from JD")
-    missing_keywords: Optional[List[str]] = Field(default_factory=list, description="Missing keywords from JD")
+    # Keyword matching details (DEPRECATED - kept for backwards compatibility)
+    matched_keywords: Optional[List[str]] = Field(default_factory=list, description="DEPRECATED: No longer used")
+    missing_keywords: Optional[List[str]] = Field(default_factory=list, description="DEPRECATED: No longer used")
     # AI compatibility (on-demand, cached 24h)
     ai_compatibility_score: Optional[Decimal] = Field(None, ge=0, le=100, description="AI compatibility score")
     ai_compatibility_details: Optional[dict] = Field(None, description="AI analysis details (strengths, gaps, recommendations)")
@@ -122,10 +123,11 @@ class MatchScoreBreakdown(BaseModel):
     """Schema for detailed match score breakdown
     
     Unified Scoring System:
-    - Skills: 40% weight
-    - Keywords: 25% weight
+    - Skills: 45% weight
     - Experience: 20% weight
-    - Semantic: 15% weight
+    - Semantic: 35% weight
+    
+    Note: Keyword scoring was removed to speed up job imports.
     
     Grades (no D/F):
     - A+: 90+
@@ -136,12 +138,12 @@ class MatchScoreBreakdown(BaseModel):
     - C: <65
     """
     overall_score: Decimal = Field(..., ge=0, le=100, description="Overall match score")
-    skill_score: Decimal = Field(..., ge=0, le=100, description="Skill match (40% weight)")
-    keyword_score: Decimal = Field(..., ge=0, le=100, description="Keyword match (25% weight)")
+    skill_score: Decimal = Field(..., ge=0, le=100, description="Skill match (45% weight)")
+    keyword_score: Optional[Decimal] = Field(None, ge=0, le=100, description="DEPRECATED: No longer used")
     experience_score: Decimal = Field(..., ge=0, le=100, description="Experience match (20% weight)")
-    semantic_score: Decimal = Field(..., ge=0, le=100, description="Semantic similarity (15% weight)")
+    semantic_score: Decimal = Field(..., ge=0, le=100, description="Semantic similarity (35% weight)")
     matched_skills_count: int = Field(..., ge=0, description="Number of matched skills")
-    matched_keywords_count: int = Field(..., ge=0, description="Number of matched keywords")
+    matched_keywords_count: Optional[int] = Field(None, ge=0, description="DEPRECATED: No longer used")
     total_required_skills: int = Field(..., ge=0, description="Total required skills")
     skill_coverage_percent: Decimal = Field(..., ge=0, le=100, description="Skill coverage percentage")
     match_grade: str = Field(..., description="Letter grade (A+ to C)")

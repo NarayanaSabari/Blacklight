@@ -50,13 +50,8 @@ class JobPosting(db.Model):
     
     # Skills & Keywords
     skills = db.Column(ARRAY(String))  # Array of skill keywords
-    # Structured keywords extracted from JD for unified scoring
-    # Structure: {
-    #     "technical_keywords": ["python", "react", ...],
-    #     "action_verbs": ["develop", "lead", ...],
-    #     "industry_terms": ["fintech", "saas", ...],
-    #     "soft_skills": ["leadership", "communication", ...]
-    # }
+    # DEPRECATED: extracted_keywords is no longer used (keyword scoring removed to speed up job imports)
+    # Will be dropped in migration ff6b8764e616
     extracted_keywords = db.Column(JSONB, nullable=True, default=dict)
     
     # Application Links

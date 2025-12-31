@@ -5,10 +5,9 @@ Single source of truth for candidate-job matching scores.
 Used by both job matching (automated) and resume tailoring (on-demand).
 
 Scoring Weights:
-- Skills:     40% - Direct skill matching with synonyms and fuzzy matching
-- Keywords:   25% - JD keyword matching (technical, action verbs, industry terms)
+- Skills:     45% - Direct skill matching with synonyms and fuzzy matching
 - Experience: 20% - Years of experience fit (rule-based)
-- Semantic:   15% - Embedding cosine similarity
+- Semantic:   35% - Embedding cosine similarity
 
 Grades (no D/F):
 - A+: 90+
@@ -49,29 +48,25 @@ class SkillMatchResult(BaseModel):
     match_details: Dict[str, str] = Field(default_factory=dict)  # skill -> match_type
 
 
-class KeywordMatchResult(BaseModel):
-    """Result of keyword matching"""
-    score: float = Field(..., ge=0, le=100, description="Keyword match score 0-100")
-    matched_keywords: List[str] = Field(default_factory=list)
-    missing_keywords: List[str] = Field(default_factory=list)
-
-
 class UnifiedMatchScore(BaseModel):
-    """Complete unified match score result"""
+    """Complete unified match score result
+    
+    Scoring Weights:
+    - Skills:     45%
+    - Experience: 20%
+    - Semantic:   35%
+    """
     overall_score: float = Field(..., ge=0, le=100, description="Overall weighted score")
     match_grade: str = Field(..., description="Letter grade: A+, A, B+, B, C+, C")
     
-    # Component scores
+    # Component scores (Keywords removed - was causing slow job imports)
     skill_score: float = Field(..., ge=0, le=100)
-    keyword_score: float = Field(..., ge=0, le=100)
     experience_score: float = Field(..., ge=0, le=100)
     semantic_score: float = Field(..., ge=0, le=100)
     
     # Match details
     matched_skills: List[str] = Field(default_factory=list)
     missing_skills: List[str] = Field(default_factory=list)
-    matched_keywords: List[str] = Field(default_factory=list)
-    missing_keywords: List[str] = Field(default_factory=list)
     
     # Human-readable explanation
     match_reasons: List[str] = Field(default_factory=list)
@@ -100,11 +95,11 @@ class UnifiedScorerService:
     
     # ===========================================
     # Scoring Weights (must sum to 1.0)
+    # Keywords removed to speed up job imports
     # ===========================================
-    WEIGHT_SKILLS = 0.40      # 40%
-    WEIGHT_KEYWORDS = 0.25    # 25%
+    WEIGHT_SKILLS = 0.45      # 45%
     WEIGHT_EXPERIENCE = 0.20  # 20%
-    WEIGHT_SEMANTIC = 0.15    # 15%
+    WEIGHT_SEMANTIC = 0.35    # 35%
     
     # ===========================================
     # Grade Thresholds (no D/F grades)
@@ -386,34 +381,25 @@ class UnifiedScorerService:
             candidate_skills = list(candidate.skills) if candidate.skills else []
             job_skills = list(job_posting.skills) if job_posting.skills else []
             
-            # 1. Calculate skill match (40%)
+            # 1. Calculate skill match (45%)
             skill_result = self.calculate_skill_score(candidate_skills, job_skills)
             
-            # 2. Calculate keyword match (25%)
-            extracted_keywords = job_posting.extracted_keywords or {}
-            keyword_result = self.calculate_keyword_score(
-                extracted_keywords,
-                candidate_skills,
-                candidate_resume_text
-            )
-            
-            # 3. Calculate experience match (20%)
+            # 2. Calculate experience match (20%)
             experience_score = self.calculate_experience_score(
                 candidate.total_experience_years or 0,
                 job_posting.experience_min or 0,
                 job_posting.experience_max
             )
             
-            # 4. Calculate semantic similarity (15%)
+            # 3. Calculate semantic similarity (35%)
             semantic_score = self.calculate_semantic_score(
                 candidate.embedding,
                 job_posting.embedding
             )
             
-            # Calculate weighted overall score
+            # Calculate weighted overall score (Keywords removed to speed up job imports)
             overall_score = (
                 skill_result.score * self.WEIGHT_SKILLS +
-                keyword_result.score * self.WEIGHT_KEYWORDS +
                 experience_score * self.WEIGHT_EXPERIENCE +
                 semantic_score * self.WEIGHT_SEMANTIC
             )
@@ -423,13 +409,13 @@ class UnifiedScorerService:
             
             # Generate match reasons
             match_reasons = self._generate_match_reasons(
-                skill_result, keyword_result, experience_score, semantic_score,
+                skill_result, experience_score, semantic_score,
                 candidate, job_posting
             )
             
             # Generate explanation
             explanation = self._generate_explanation(
-                overall_score, match_grade, skill_result, keyword_result,
+                overall_score, match_grade, skill_result,
                 experience_score, semantic_score, job_posting
             )
             
@@ -437,13 +423,10 @@ class UnifiedScorerService:
                 overall_score=round(overall_score, 2),
                 match_grade=match_grade,
                 skill_score=round(skill_result.score, 2),
-                keyword_score=round(keyword_result.score, 2),
                 experience_score=round(experience_score, 2),
                 semantic_score=round(semantic_score, 2),
                 matched_skills=skill_result.matched_skills,
                 missing_skills=skill_result.missing_skills,
-                matched_keywords=keyword_result.matched_keywords,
-                missing_keywords=keyword_result.missing_keywords,
                 match_reasons=match_reasons,
                 explanation=explanation
             )
@@ -495,15 +478,15 @@ class UnifiedScorerService:
         match.match_score = Decimal(str(score.overall_score))
         match.match_grade = score.match_grade
         match.skill_match_score = Decimal(str(score.skill_score))
-        match.keyword_match_score = Decimal(str(score.keyword_score))
+        match.keyword_match_score = None  # Keywords removed to speed up job imports
         match.experience_match_score = Decimal(str(score.experience_score))
         match.semantic_similarity = Decimal(str(score.semantic_score))
         
         # Update details
         match.matched_skills = score.matched_skills
         match.missing_skills = score.missing_skills
-        match.matched_keywords = score.matched_keywords
-        match.missing_keywords = score.missing_keywords
+        match.matched_keywords = None  # Keywords removed
+        match.missing_keywords = None  # Keywords removed
         match.match_reasons = score.match_reasons
         
         # Determine recommendation
@@ -614,83 +597,6 @@ class UnifiedScorerService:
             match_details=match_details
         )
     
-    def calculate_keyword_score(
-        self,
-        extracted_keywords: Dict[str, List[str]],
-        candidate_skills: List[str],
-        resume_text: Optional[str] = None
-    ) -> KeywordMatchResult:
-        """
-        Calculate keyword match score (25% weight).
-        
-        Matches keywords from job description against candidate skills and resume text.
-        
-        Args:
-            extracted_keywords: Dict with technical_keywords, action_verbs, etc.
-            candidate_skills: Candidate's skills list
-            resume_text: Optional resume text for deeper matching
-            
-        Returns:
-            KeywordMatchResult with score, matched/missing keywords
-        """
-        if not extracted_keywords:
-            return KeywordMatchResult(score=100.0, matched_keywords=[], missing_keywords=[])
-        
-        # Combine all keywords
-        all_keywords = []
-        for key in ['technical_keywords', 'action_verbs', 'industry_terms', 'soft_skills']:
-            all_keywords.extend(extracted_keywords.get(key, []))
-        
-        if not all_keywords:
-            return KeywordMatchResult(score=100.0, matched_keywords=[], missing_keywords=[])
-        
-        # Normalize
-        keywords_normalized = [str(k).lower().strip() for k in all_keywords if k]
-        candidate_skills_normalized = [str(s).lower().strip() for s in candidate_skills if s]
-        resume_lower = (resume_text or "").lower()
-        
-        matched = []
-        missing = []
-        
-        for keyword in keywords_normalized:
-            is_matched = False
-            
-            # Check in skills
-            if keyword in candidate_skills_normalized:
-                matched.append(keyword)
-                is_matched = True
-            # Check in resume text
-            elif resume_lower and keyword in resume_lower:
-                matched.append(keyword)
-                is_matched = True
-            # Check with synonyms
-            elif not is_matched:
-                for base_skill, synonyms in self.SKILL_SYNONYMS.items():
-                    if keyword == base_skill or keyword in synonyms:
-                        if base_skill in candidate_skills_normalized or \
-                           any(syn in candidate_skills_normalized for syn in synonyms):
-                            matched.append(keyword)
-                            is_matched = True
-                            break
-                        if resume_lower:
-                            if base_skill in resume_lower or \
-                               any(syn in resume_lower for syn in synonyms):
-                                matched.append(keyword)
-                                is_matched = True
-                                break
-            
-            if not is_matched:
-                missing.append(keyword)
-        
-        # Calculate score
-        score = (len(matched) / len(keywords_normalized)) * 100 if keywords_normalized else 100
-        
-        return KeywordMatchResult(
-            score=round(score, 2),
-            matched_keywords=list(set(matched)),  # Deduplicate
-            missing_keywords=list(set(missing))
-        )
-    
     def calculate_experience_score(
         self,
         candidate_years: int,
@@ -754,7 +660,7 @@ class UnifiedScorerService:
         job_embedding: Optional[List[float]]
     ) -> float:
         """
-        Calculate semantic similarity score (15% weight).
+        Calculate semantic similarity score (35% weight).
         
         Uses cosine similarity between candidate and job embeddings.
         
@@ -891,7 +797,6 @@ Format your response as JSON with these exact keys:
     def _generate_match_reasons(
         self,
         skill_result: SkillMatchResult,
-        keyword_result: KeywordMatchResult,
         experience_score: float,
         semantic_score: float,
         candidate: Candidate,
@@ -917,9 +822,9 @@ Format your response as JSON with these exact keys:
         elif experience_score >= 70:
             reasons.append("Experience level is suitable")
         
-        # Keyword reasons
-        if keyword_result.score >= 70:
-            reasons.append("Strong alignment with job requirements")
+        # Semantic similarity reasons
+        if semantic_score >= 70:
+            reasons.append("Strong overall profile alignment")
         
         return reasons
     
@@ -928,7 +833,6 @@ Format your response as JSON with these exact keys:
         overall_score: float,
         match_grade: str,
         skill_result: SkillMatchResult,
-        keyword_result: KeywordMatchResult,
         experience_score: float,
         semantic_score: float,
         job_posting: JobPosting
