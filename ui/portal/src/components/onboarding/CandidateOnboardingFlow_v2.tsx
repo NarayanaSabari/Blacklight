@@ -1706,7 +1706,6 @@ export function CandidateOnboardingFlow({
         </CardFooter>
       </Card>
     </div>
-  </div>
 
       {/* Confirmation Dialog - Improved styling */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
