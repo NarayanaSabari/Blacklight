@@ -529,10 +529,17 @@ class CandidateAssignmentService:
         # Part 2: Get candidates with is_visible_to_all_team=True (only if showing active)
         # These are automatically visible to all team members without explicit assignment
         if status_filter == 'ACTIVE' or (not status_filter and not include_completed):
-            broadcast_candidates_query = select(Candidate).where(
+            # Build the query for broadcast candidates
+            broadcast_conditions = [
                 Candidate.tenant_id == tenant_id,
                 Candidate.is_visible_to_all_team == True,
-                ~Candidate.id.in_(seen_candidate_ids) if seen_candidate_ids else True
+            ]
+            # Exclude candidates already added from explicit assignments
+            if seen_candidate_ids:
+                broadcast_conditions.append(~Candidate.id.in_(seen_candidate_ids))
+            
+            broadcast_candidates_query = select(Candidate).where(
+                *broadcast_conditions
             ).order_by(Candidate.updated_at.desc())
 
             broadcast_candidates = list(db.session.scalars(broadcast_candidates_query))
