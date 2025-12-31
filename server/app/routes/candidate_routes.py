@@ -1116,7 +1116,7 @@ def get_candidate_jobs(candidate_id: int):
         from sqlalchemy import func
         count_query = select(func.count(JobPosting.id)).where(
             JobPosting.id.in_(job_ids),
-            JobPosting.status == 'active'
+            JobPosting.status == 'ACTIVE'
         )
         
         if platform:
@@ -1129,7 +1129,7 @@ def get_candidate_jobs(candidate_id: int):
         # Fetch jobs
         job_query = select(JobPosting).where(
             JobPosting.id.in_(job_ids),
-            JobPosting.status == 'active'
+            JobPosting.status == 'ACTIVE'
         )
         
         if platform:
@@ -1274,7 +1274,7 @@ def get_candidate_job_matches(candidate_id: int):
         # Fetch jobs
         job_query = select(JobPosting).where(
             JobPosting.id.in_(job_ids),
-            JobPosting.status == 'active'
+            JobPosting.status == 'ACTIVE'
         )
         jobs = db.session.execute(job_query).scalars().all()
         
@@ -1328,15 +1328,15 @@ def get_candidate_job_matches(candidate_id: int):
                         'posted_date': m['job'].posted_date.isoformat() if m['job'].posted_date else None
                     },
                     'match_score': round(m['match_result'].overall_score, 2),
-                    'match_grade': m['match_result'].grade,
-                    'skill_match_score': round(m['match_result'].skill_result.score, 2),
-                    'keyword_match_score': round(m['match_result'].keyword_result.score, 2),
+                    'match_grade': m['match_result'].match_grade,
+                    'skill_match_score': round(m['match_result'].skill_score, 2),
+                    'keyword_match_score': None,  # DEPRECATED - no longer used
                     'experience_match_score': round(m['match_result'].experience_score, 2),
                     'semantic_similarity': round(m['match_result'].semantic_score, 2),
-                    'matched_skills': m['match_result'].skill_result.matched_skills,
-                    'missing_skills': m['match_result'].skill_result.missing_skills,
-                    'matched_keywords': m['match_result'].keyword_result.matched_keywords,
-                    'missing_keywords': m['match_result'].keyword_result.missing_keywords
+                    'matched_skills': m['match_result'].matched_skills,
+                    'missing_skills': m['match_result'].missing_skills,
+                    'matched_keywords': None,  # DEPRECATED - no longer used
+                    'missing_keywords': None  # DEPRECATED - no longer used
                 }
                 for m in paginated_matches
             ],

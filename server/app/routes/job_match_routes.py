@@ -472,7 +472,7 @@ def get_candidate_matches(candidate_id: int):
             try:
                 match_result = service.calculate_score(candidate, job)
                 overall_score = match_result.overall_score
-                match_grade = match_result.grade
+                match_grade = match_result.match_grade
                 
                 # Apply min_score filter
                 if overall_score >= min_score:
@@ -519,15 +519,15 @@ def get_candidate_matches(candidate_id: int):
                 'candidate_id': candidate_id,
                 'job_posting_id': job.id,
                 'match_score': round(result.overall_score, 2),
-                'match_grade': result.grade,
-                'skill_match_score': round(result.skill_result.score, 2),
-                'keyword_match_score': round(result.keyword_result.score, 2),
+                'match_grade': result.match_grade,
+                'skill_match_score': round(result.skill_score, 2),
+                'keyword_match_score': None,  # DEPRECATED - no longer used
                 'experience_match_score': round(result.experience_score, 2),
                 'semantic_similarity': round(result.semantic_score, 2),
-                'matched_skills': result.skill_result.matched_skills,
-                'missing_skills': result.skill_result.missing_skills,
-                'matched_keywords': result.keyword_result.matched_keywords,
-                'missing_keywords': result.keyword_result.missing_keywords,
+                'matched_skills': result.matched_skills,
+                'missing_skills': result.missing_skills,
+                'matched_keywords': None,  # DEPRECATED - no longer used
+                'missing_keywords': None,  # DEPRECATED - no longer used
                 'status': 'SUGGESTED',
                 'is_recommended': True,
                 'job_posting': {

@@ -193,7 +193,7 @@ def search_job_postings():
         
         query = (
             select(JobPosting)
-            .where(and_(search_filter, JobPosting.status == 'active'))
+            .where(and_(search_filter, JobPosting.status == 'ACTIVE'))
             .order_by(JobPosting.posted_date.desc().nullslast())
             .limit(50)
         )
@@ -225,7 +225,7 @@ def get_job_statistics():
         
         active_jobs = db.session.scalar(
             select(func.count(JobPosting.id))
-            .where(JobPosting.status == 'active')
+            .where(JobPosting.status == 'ACTIVE')
         )
         
         remote_jobs = db.session.scalar(
