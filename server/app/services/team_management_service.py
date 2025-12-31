@@ -671,12 +671,13 @@ class TeamManagementService:
         if not TeamManagementService._is_in_hierarchy(requester_id, member_id, tenant_id):
             raise ValueError("You don't have permission to view this team member's candidates")
         
-        # Get candidates assigned to this member
+        # Get candidates assigned to this member OR visible to all team (broadcast)
         candidates_query = select(Candidate).where(
             Candidate.tenant_id == tenant_id,
             or_(
                 Candidate.manager_id == member_id,
-                Candidate.recruiter_id == member_id
+                Candidate.recruiter_id == member_id,
+                Candidate.is_visible_to_all_team == True  # Include broadcast candidates
             )
         ).order_by(Candidate.created_at.desc())
         
