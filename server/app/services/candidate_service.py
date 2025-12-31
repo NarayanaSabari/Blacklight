@@ -740,6 +740,14 @@ class CandidateService:
             raise ValueError("Candidate has already been rejected. Cannot approve after rejection.")
         
         # VALIDATION: Check preferred_roles is filled (required for job scraping)
+        # Auto-fill from parsed_resume_data if empty (fallback for legacy/incomplete data)
+        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
+            parsed_data = candidate.parsed_resume_data or {}
+            if isinstance(parsed_data, dict) and parsed_data.get('preferred_roles'):
+                candidate.preferred_roles = parsed_data['preferred_roles']
+                logger.info(f"Auto-filled preferred_roles from parsed_resume_data for candidate {candidate_id}")
+        
+        # Still validate after fallback attempt
         if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
             raise ValueError(
                 "Preferred roles are required for approval. "
@@ -747,6 +755,14 @@ class CandidateService:
             )
         
         # VALIDATION: Check preferred_locations is filled (required for location-based job scraping)
+        # Auto-fill from parsed_resume_data if empty (fallback for legacy/incomplete data)
+        if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
+            parsed_data = candidate.parsed_resume_data or {}
+            if isinstance(parsed_data, dict) and parsed_data.get('preferred_locations'):
+                candidate.preferred_locations = parsed_data['preferred_locations']
+                logger.info(f"Auto-filled preferred_locations from parsed_resume_data for candidate {candidate_id}")
+        
+        # Still validate after fallback attempt
         if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
             raise ValueError(
                 "Preferred locations are required for approval. "

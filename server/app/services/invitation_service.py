@@ -543,6 +543,14 @@ class InvitationService:
                 logger.warning(f"Preferred roles truncated from {len(preferred_roles)} to 10")
                 preferred_roles = preferred_roles[:10]
 
+            # Extract preferred locations
+            preferred_locations = data.get('preferred_locations') or parsed_resume.get('preferred_locations') or []
+            if isinstance(preferred_locations, str):
+                # Handle comma-separated string
+                preferred_locations = [loc.strip() for loc in preferred_locations.split(',') if loc.strip()]
+            elif not isinstance(preferred_locations, list):
+                preferred_locations = []
+
             # Simple education/work_experience as text fallbacks
             education_text = data.get('education')
             work_exp_text = data.get('work_experience')
@@ -591,6 +599,7 @@ class InvitationService:
                 professional_summary=summary or parsed_resume.get('professional_summary'),
                 skills=skills,
                 preferred_roles=preferred_roles,
+                preferred_locations=preferred_locations,
                 education=education_data,
                 work_experience=work_exp_data,
                 parsed_resume_data=parsed_resume or None,
