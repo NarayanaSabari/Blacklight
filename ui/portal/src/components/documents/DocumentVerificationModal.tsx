@@ -80,35 +80,33 @@ export function DocumentVerificationModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="sm:max-w-[500px] border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] rounded-lg overflow-visible">
-        <DialogHeader className="border-b border-slate-200 pb-4">
-          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center">
-              <CheckCircle2 className="h-4 w-4" />
-            </div>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
             Verify Document
           </DialogTitle>
-          <DialogDescription className="text-slate-600 mt-1">
+          <DialogDescription>
             Review and verify this document. Add any notes about the verification.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4">
           {/* Document Info Card */}
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 h-12 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-2xl">
-                {DOCUMENT_TYPE_ICONS[document.document_type] || <FileText className="h-6 w-6" />}
+          <div className="rounded-md border bg-muted/50 p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0 h-10 w-10 rounded bg-background border flex items-center justify-center text-xl">
+                {DOCUMENT_TYPE_ICONS[document.document_type] || <FileText className="h-5 w-5" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-900 truncate text-sm" title={document.file_name}>
+                <p className="font-medium text-sm truncate" title={document.file_name}>
                   {document.file_name}
                 </p>
-                <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                  <Badge variant="outline" className="text-xs font-medium">
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="secondary" className="text-xs">
                     {DOCUMENT_TYPE_LABELS[document.document_type]}
                   </Badge>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted-foreground">
                     {formatFileSize(document.file_size)}
                   </span>
                 </div>
@@ -116,21 +114,20 @@ export function DocumentVerificationModal({
             </div>
 
             {document.description && (
-              <div className="text-sm text-slate-600 pt-3 mt-3 border-t border-dashed border-slate-300">
-                <p className="font-medium text-slate-700 mb-1">Description:</p>
-                <p>{document.description}</p>
-              </div>
+              <p className="text-sm text-muted-foreground mt-3 pt-3 border-t">
+                {document.description}
+              </p>
             )}
 
             {document.is_verified && (
-              <div className="pt-3 mt-3 border-t border-dashed border-slate-300">
-                <Badge className="gap-1 bg-green-500 text-white">
-                  <CheckCircle2 className="h-3 w-3" />
+              <div className="mt-3 pt-3 border-t">
+                <Badge className="bg-green-600">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
                   Already Verified
                 </Badge>
                 {document.verification_notes && (
-                  <p className="text-sm text-slate-600 mt-2">
-                    <span className="font-medium text-slate-700">Previous notes:</span> {document.verification_notes}
+                  <p className="text-sm text-muted-foreground mt-2">
+                    <span className="font-medium">Notes:</span> {document.verification_notes}
                   </p>
                 )}
               </div>
@@ -140,49 +137,44 @@ export function DocumentVerificationModal({
           {/* Verification Notes */}
           {!document.is_verified && (
             <div className="space-y-2">
-              <Label htmlFor="notes" className="text-sm font-medium text-slate-700">
+              <Label htmlFor="verification-notes">
                 Verification Notes (Optional)
               </Label>
               <Textarea
-                id="notes"
+                id="verification-notes"
                 placeholder="Add any notes about this verification..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
                 disabled={loading}
-                className="resize-none"
+                className="resize-none w-full"
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 These notes will be saved with the verification record.
               </p>
             </div>
           )}
 
-          {/* Already Verified Warning */}
+          {/* Already Verified Notice */}
           {document.is_verified && (
-            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-amber-800">
-                <p className="font-medium">This document has already been verified.</p>
-                <p className="mt-1 text-amber-700">No further action is required.</p>
-              </div>
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-amber-800">
+                This document has already been verified. No further action is required.
+              </p>
             </div>
           )}
         </div>
 
-        <DialogFooter className="border-t border-slate-200 pt-4 gap-2">
-          <Button 
-            variant="outline" 
-            onClick={handleClose} 
-            disabled={loading}
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={loading}>
             Cancel
           </Button>
           {!document.is_verified && (
             <Button 
               onClick={handleVerify} 
               disabled={loading}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 hover:bg-green-700"
             >
               {loading ? (
                 <>
