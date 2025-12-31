@@ -12,6 +12,7 @@ from app.models.candidate_job_match import CandidateJobMatch
 from app.models.job_posting import JobPosting
 from app.models.candidate_assignment import CandidateAssignment
 from app.services.job_matching_service import JobMatchingService
+from app.services.unified_scorer_service import UnifiedScorerService
 from app.middleware.portal_auth import require_portal_auth
 from app.middleware.tenant_context import with_tenant_context
 from app.middleware.portal_auth import require_permission
@@ -463,29 +464,33 @@ def get_candidate_matches(candidate_id: int):
         else:
             jobs = all_jobs
         
-        # Initialize matching service and calculate scores on-the-fly
-        service = JobMatchingService(tenant_id=tenant_id)
+        # Initialize unified scoring service and calculate scores on-the-fly
+        service = UnifiedScorerService()
         scored_matches = []
         
         for job in jobs:
-            match_result = service.calculate_match_score(candidate, job)
-            overall_score = match_result.get('overall_score', 0)
-            match_grade = match_result.get('match_grade', 'F')
-            
-            # Apply min_score filter
-            if overall_score >= min_score:
-                # Apply grade filter if specified
-                if grades_filter and match_grade not in grades_filter:
-                    continue
-                scored_matches.append({
-                    'job': job,
-                    'match_result': match_result
-                })
+            try:
+                match_result = service.calculate_score(candidate, job)
+                overall_score = match_result.overall_score
+                match_grade = match_result.grade
+                
+                # Apply min_score filter
+                if overall_score >= min_score:
+                    # Apply grade filter if specified
+                    if grades_filter and match_grade not in grades_filter:
+                        continue
+                    scored_matches.append({
+                        'job': job,
+                        'match_result': match_result
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to calculate score for job {job.id}: {e}")
+                continue
         
         # Sort matches
         reverse_order = (sort_order != 'asc')
         if sort_by == 'match_score':
-            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=reverse_order)
+            scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=reverse_order)
         elif sort_by == 'posted_date':
             from datetime import datetime as dt
             scored_matches.sort(
@@ -493,7 +498,7 @@ def get_candidate_matches(candidate_id: int):
                 reverse=reverse_order
             )
         else:
-            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=reverse_order)
+            scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=reverse_order)
         
         # Total count (after filtering)
         total_matches = len(scored_matches)
@@ -504,7 +509,7 @@ def get_candidate_matches(candidate_id: int):
         end = start + per_page
         paginated_matches = scored_matches[start:end]
         
-        # Format response to match expected JobMatch interface
+        # Format response to match expected JobMatch interface (using unified scoring)
         matches_response = []
         for m in paginated_matches:
             job = m['job']
@@ -513,15 +518,16 @@ def get_candidate_matches(candidate_id: int):
                 'id': job.id,  # Use job ID as match ID (for on-the-fly matches)
                 'candidate_id': candidate_id,
                 'job_posting_id': job.id,
-                'match_score': round(result['overall_score'], 2),
-                'skill_match_score': round(result['skill_match_score'], 2),
-                'experience_match_score': round(result['experience_match_score'], 2),
-                'location_match_score': round(result['location_match_score'], 2),
-                'salary_match_score': round(result['salary_match_score'], 2),
-                'semantic_similarity': round(result['semantic_similarity'], 2),
-                'matched_skills': result['matched_skills'],
-                'missing_skills': result['missing_skills'],
-                'match_grade': result['match_grade'],
+                'match_score': round(result.overall_score, 2),
+                'match_grade': result.grade,
+                'skill_match_score': round(result.skill_result.score, 2),
+                'keyword_match_score': round(result.keyword_result.score, 2),
+                'experience_match_score': round(result.experience_score, 2),
+                'semantic_similarity': round(result.semantic_score, 2),
+                'matched_skills': result.skill_result.matched_skills,
+                'missing_skills': result.skill_result.missing_skills,
+                'matched_keywords': result.keyword_result.matched_keywords,
+                'missing_keywords': result.keyword_result.missing_keywords,
                 'status': 'SUGGESTED',
                 'is_recommended': True,
                 'job_posting': {
@@ -835,3 +841,123 @@ def get_match_stats():
     except Exception as e:
         logger.error(f"Error fetching match stats: {str(e)}")
         return error_response("Failed to fetch statistics", 500)
+
+
+@job_match_bp.route('/<int:match_id>/ai-analysis', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_ai_compatibility_analysis(match_id: int):
+    """
+    Get AI-powered detailed compatibility analysis for a match.
+    Results are cached for 24 hours.
+    
+    POST /api/job-matches/:id/ai-analysis
+    
+    Request body (optional):
+    {
+        "force_refresh": false  // Optional: Force re-analysis even if cached
+    }
+    
+    Permissions: candidates.view
+    
+    Returns:
+    - compatibility_score: AI-calculated score
+    - strengths: List of candidate strengths for this role
+    - gaps: List of skill/experience gaps
+    - recommendations: Actionable recommendations
+    - experience_analysis: Detailed experience analysis
+    - culture_fit_indicators: Cultural fit observations
+    - cached: Whether result was from cache
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        tenant_id = g.tenant_id
+        
+        # Fetch match record
+        match = db.session.get(CandidateJobMatch, match_id)
+        if not match:
+            return error_response(f"Match {match_id} not found", 404)
+        
+        # Verify candidate belongs to tenant
+        candidate = db.session.get(Candidate, match.candidate_id)
+        if not candidate:
+            return error_response("Candidate not found", 404)
+        
+        if candidate.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        # Fetch job posting
+        job_posting = db.session.get(JobPosting, match.job_posting_id)
+        if not job_posting:
+            return error_response("Job posting not found", 404)
+        
+        # Parse request body
+        data = request.get_json() or {}
+        force_refresh = data.get('force_refresh', False)
+        
+        # Check if we have cached AI analysis (within 24 hours)
+        cache_valid = False
+        if match.ai_scored_at and not force_refresh:
+            cache_expiry = match.ai_scored_at + timedelta(hours=24)
+            if datetime.utcnow() < cache_expiry:
+                cache_valid = True
+        
+        if cache_valid and match.ai_compatibility_score is not None:
+            # Return cached result
+            logger.info(f"Returning cached AI analysis for match {match_id}")
+            return jsonify({
+                'match_id': match_id,
+                'candidate_id': candidate.id,
+                'job_posting_id': job_posting.id,
+                'compatibility_score': float(match.ai_compatibility_score),
+                'details': match.ai_compatibility_details or {},
+                'analyzed_at': match.ai_scored_at.isoformat() if match.ai_scored_at else None,
+                'cached': True
+            }), 200
+        
+        # Calculate new AI analysis
+        logger.info(f"Calculating AI analysis for match {match_id}")
+        
+        service = UnifiedScorerService()
+        ai_result = service.calculate_ai_compatibility(candidate, job_posting)
+        
+        # Store result in match record
+        match.ai_compatibility_score = ai_result.compatibility_score
+        match.ai_compatibility_details = {
+            'strengths': ai_result.strengths,
+            'gaps': ai_result.gaps,
+            'recommendations': ai_result.recommendations,
+            'experience_analysis': ai_result.experience_analysis,
+            'culture_fit_indicators': ai_result.culture_fit_indicators
+        }
+        match.ai_scored_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        logger.info(f"AI analysis complete for match {match_id}, score: {ai_result.compatibility_score}")
+        
+        return jsonify({
+            'match_id': match_id,
+            'candidate_id': candidate.id,
+            'job_posting_id': job_posting.id,
+            'compatibility_score': ai_result.compatibility_score,
+            'details': {
+                'strengths': ai_result.strengths,
+                'gaps': ai_result.gaps,
+                'recommendations': ai_result.recommendations,
+                'experience_analysis': ai_result.experience_analysis,
+                'culture_fit_indicators': ai_result.culture_fit_indicators
+            },
+            'analyzed_at': match.ai_scored_at.isoformat(),
+            'cached': False
+        }), 200
+        
+    except ValueError as e:
+        logger.error(f"AI analysis error for match {match_id}: {str(e)}")
+        return error_response(str(e), 400)
+    except Exception as e:
+        logger.error(f"Error getting AI analysis for match {match_id}: {str(e)}")
+        db.session.rollback()
+        return error_response("Failed to get AI analysis", 500)

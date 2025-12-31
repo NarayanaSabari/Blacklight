@@ -50,7 +50,14 @@ class JobPosting(db.Model):
     
     # Skills & Keywords
     skills = db.Column(ARRAY(String))  # Array of skill keywords
-    keywords = db.Column(ARRAY(String))  # Additional extracted keywords
+    # Structured keywords extracted from JD for unified scoring
+    # Structure: {
+    #     "technical_keywords": ["python", "react", ...],
+    #     "action_verbs": ["develop", "lead", ...],
+    #     "industry_terms": ["fintech", "saas", ...],
+    #     "soft_skills": ["leadership", "communication", ...]
+    # }
+    extracted_keywords = db.Column(JSONB, nullable=True, default=dict)
     
     # Application Links
     job_url = db.Column(Text, nullable=False)
@@ -124,7 +131,6 @@ class JobPosting(db.Model):
     __table_args__ = (
         Index('idx_job_posting_platform_external', 'platform', 'external_job_id', unique=True),
         Index('idx_job_posting_skills', 'skills', postgresql_using='gin'),
-        Index('idx_job_posting_keywords', 'keywords', postgresql_using='gin'),
         Index('idx_job_posting_posted_date_desc', 'posted_date', postgresql_ops={'posted_date': 'DESC'}),
         Index('idx_job_posting_embedding', 'embedding', postgresql_using='ivfflat', postgresql_with={'lists': 100}, postgresql_ops={'embedding': 'vector_cosine_ops'}),
     )
@@ -155,7 +161,7 @@ class JobPosting(db.Model):
             'experience_min': self.experience_min,
             'experience_max': self.experience_max,
             'skills': self.skills,
-            'keywords': self.keywords,
+            'extracted_keywords': self.extracted_keywords,
             'job_url': self.job_url,
             'apply_url': self.apply_url,
             'status': self.status,

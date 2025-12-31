@@ -19,6 +19,7 @@ from app.models.global_role import GlobalRole
 from app.models.candidate_global_role import CandidateGlobalRole
 from app.models.candidate_job_match import CandidateJobMatch
 from app.services.job_matching_service import JobMatchingService
+from app.services.unified_scorer_service import UnifiedScorerService
 from app.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -300,19 +301,19 @@ async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
     
     logger.info(f"[INNGEST] Found {len(matching_candidates)} candidates for role '{role_name}'")
     
-    # Step 3: Generate matches for each candidate
+    # Step 3: Generate matches for each candidate using UnifiedScorerService
     def generate_matches_for_candidates():
         total_matches = 0
         
+        # Initialize unified scorer (tenant-agnostic)
+        unified_scorer = UnifiedScorerService()
+        
         for candidate_info in matching_candidates:
             candidate_id = candidate_info["id"]
-            tenant_id = candidate_info["tenant_id"]
             
             candidate = db.session.get(Candidate, candidate_id)
             if not candidate or candidate.embedding is None:
                 continue
-            
-            service = JobMatchingService(tenant_id=tenant_id)
             
             for job_id in job_ids:
                 job = db.session.get(JobPosting, job_id)
@@ -328,28 +329,18 @@ async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                 if existing:
                     continue
                 
-                # Calculate match score
+                # Calculate and store match using unified scorer
                 try:
-                    match_result = service.calculate_match_score(candidate, job)
+                    # This calculates score AND creates/updates CandidateJobMatch
+                    match = unified_scorer.calculate_and_store_match(candidate, job)
                     
-                    # Only create match if score is above threshold
-                    if match_result['overall_score'] >= 50:
-                        match = CandidateJobMatch(
-                            candidate_id=candidate_id,
-                            job_posting_id=job_id,
-                            match_score=match_result['overall_score'],
-                            skill_match_score=match_result['skill_match_score'],
-                            experience_match_score=match_result['experience_match_score'],
-                            location_match_score=match_result['location_match_score'],
-                            salary_match_score=match_result['salary_match_score'],
-                            semantic_similarity=match_result['semantic_similarity'],
-                            matched_skills=match_result['matched_skills'],
-                            missing_skills=match_result['missing_skills'],
-                            match_reasons=match_result.get('explanation', []),
-                            is_recommended=match_result['overall_score'] >= 70
-                        )
-                        db.session.add(match)
+                    # Only count if score is above threshold
+                    if match.match_score >= 50:
                         total_matches += 1
+                    else:
+                        # Remove match if below threshold
+                        db.session.delete(match)
+                        
                 except Exception as e:
                     logger.error(
                         f"[INNGEST] Failed to calculate match for candidate {candidate_id}, "
@@ -450,32 +441,76 @@ def fetch_active_tenants_step() -> List[Dict[str, Any]]:
 
 
 def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
-    """Process job matches for all candidates in a tenant"""
+    """Process job matches for all candidates in a tenant using UnifiedScorerService"""
     tenant_id = tenant["id"]
     
     try:
         logger.info(f"[INNGEST] Processing matches for tenant {tenant_id} ({tenant['company_name']})")
         
-        # Initialize matching service
-        service = JobMatchingService(tenant_id=tenant_id)
+        # Get all active candidates for this tenant
+        candidates = Candidate.query.filter(
+            Candidate.tenant_id == tenant_id,
+            Candidate.status.in_(['approved', 'ready_for_assignment']),
+            Candidate.embedding.isnot(None)
+        ).all()
         
-        # Generate matches for all active candidates
-        stats = service.generate_matches_for_all_candidates(
-            batch_size=10,
-            min_score=50.0
-        )
+        # Get all active jobs with embeddings
+        jobs = JobPosting.query.filter(
+            JobPosting.embedding.isnot(None),
+            JobPosting.status == 'ACTIVE'
+        ).all()
+        
+        # Initialize unified scorer
+        unified_scorer = UnifiedScorerService()
+        
+        total_candidates = len(candidates)
+        successful_candidates = 0
+        failed_candidates = 0
+        total_matches = 0
+        
+        for candidate in candidates:
+            try:
+                candidate_matches = 0
+                for job in jobs:
+                    # Check if match already exists
+                    existing = CandidateJobMatch.query.filter_by(
+                        candidate_id=candidate.id,
+                        job_posting_id=job.id
+                    ).first()
+                    
+                    if existing:
+                        continue
+                    
+                    # Calculate and store match
+                    match = unified_scorer.calculate_and_store_match(candidate, job)
+                    if match.match_score >= 50:
+                        candidate_matches += 1
+                    else:
+                        db.session.delete(match)
+                
+                total_matches += candidate_matches
+                successful_candidates += 1
+                
+            except Exception as e:
+                logger.error(f"[INNGEST] Error processing candidate {candidate.id}: {e}")
+                failed_candidates += 1
+        
+        db.session.commit()
         
         logger.info(
             f"[INNGEST] Tenant {tenant_id} complete: "
-            f"{stats['successful_candidates']}/{stats['total_candidates']} candidates, "
-            f"{stats['total_matches']} matches generated"
+            f"{successful_candidates}/{total_candidates} candidates, "
+            f"{total_matches} matches generated"
         )
         
         return {
             "tenant_id": tenant_id,
             "tenant_name": tenant["company_name"],
             "status": "success",
-            **stats
+            "total_candidates": total_candidates,
+            "successful_candidates": successful_candidates,
+            "failed_candidates": failed_candidates,
+            "total_matches": total_matches
         }
         
     except Exception as e:
@@ -569,18 +604,51 @@ def ensure_candidate_embedding_step(candidate_id: int, tenant_id: int) -> Dict[s
 
 
 def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -> Dict[str, Any]:
-    """Generate job matches for a candidate"""
+    """Generate job matches for a candidate using UnifiedScorerService"""
     try:
-        service = JobMatchingService(tenant_id=tenant_id)
-        matches = service.generate_matches_for_candidate(
-            candidate_id=candidate_id,
-            min_score=min_score,
-            limit=50
-        )
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate or candidate.embedding is None:
+            return {
+                "success": False,
+                "total_matches": 0,
+                "error": "Candidate not found or has no embedding"
+            }
+        
+        # Get all active jobs with embeddings
+        jobs = JobPosting.query.filter(
+            JobPosting.embedding.isnot(None),
+            JobPosting.status == 'ACTIVE'
+        ).all()
+        
+        # Initialize unified scorer
+        unified_scorer = UnifiedScorerService()
+        total_matches = 0
+        
+        for job in jobs:
+            # Check if match already exists
+            existing = CandidateJobMatch.query.filter_by(
+                candidate_id=candidate_id,
+                job_posting_id=job.id
+            ).first()
+            
+            if existing:
+                continue
+            
+            # Calculate and store match
+            try:
+                match = unified_scorer.calculate_and_store_match(candidate, job)
+                if match.match_score >= min_score:
+                    total_matches += 1
+                else:
+                    db.session.delete(match)
+            except Exception as e:
+                logger.error(f"[INNGEST] Error matching candidate {candidate_id} to job {job.id}: {e}")
+        
+        db.session.commit()
         
         return {
             "success": True,
-            "total_matches": len(matches)
+            "total_matches": total_matches
         }
         
     except Exception as e:

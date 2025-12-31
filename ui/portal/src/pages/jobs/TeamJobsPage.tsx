@@ -69,10 +69,10 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const GRADE_CONFIG: Record<MatchGrade, { label: string; colorClass: string; bgClass: string }> = {
   'A+': { label: 'A+', colorClass: 'text-emerald-700', bgClass: 'bg-emerald-100' },
   A: { label: 'A', colorClass: 'text-green-700', bgClass: 'bg-green-100' },
-  B: { label: 'B', colorClass: 'text-blue-700', bgClass: 'bg-blue-100' },
-  C: { label: 'C', colorClass: 'text-yellow-700', bgClass: 'bg-yellow-100' },
-  D: { label: 'D', colorClass: 'text-orange-700', bgClass: 'bg-orange-100' },
-  F: { label: 'F', colorClass: 'text-red-700', bgClass: 'bg-red-100' },
+  'B+': { label: 'B+', colorClass: 'text-blue-700', bgClass: 'bg-blue-100' },
+  B: { label: 'B', colorClass: 'text-blue-600', bgClass: 'bg-blue-50' },
+  'C+': { label: 'C+', colorClass: 'text-yellow-700', bgClass: 'bg-yellow-100' },
+  C: { label: 'C', colorClass: 'text-yellow-600', bgClass: 'bg-yellow-50' },
 };
 
 const ONBOARDING_STATUS_COLORS: Record<string, string> = {
@@ -84,13 +84,14 @@ const ONBOARDING_STATUS_COLORS: Record<string, string> = {
   REJECTED: 'bg-red-100 text-red-800',
 };
 
+// Unified Scoring Grades: A+ (90+), A (80-89), B+ (75-79), B (70-74), C+ (65-69), C (<65)
 const calculateGrade = (score: number): MatchGrade => {
-  if (score >= 95) return 'A+';
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  return 'F';
+  if (score >= 90) return 'A+';
+  if (score >= 80) return 'A';
+  if (score >= 75) return 'B+';
+  if (score >= 70) return 'B';
+  if (score >= 65) return 'C+';
+  return 'C';
 };
 
 const getScoreColor = (score: number) => {
@@ -135,7 +136,7 @@ export function TeamJobsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
-  const AVAILABLE_GRADES = ['A+', 'A', 'B', 'C', 'D', 'F'] as const;
+  const AVAILABLE_GRADES = ['A+', 'A', 'B+', 'B', 'C+', 'C'] as const;
 
   // Submission dialog state
   const [submissionDialogOpen, setSubmissionDialogOpen] = useState(false);
@@ -506,7 +507,18 @@ export function TeamJobsPage() {
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Skill Match Score</TooltipContent>
+              <TooltipContent>Skills Match (40% weight)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="text-center">
+                  <div className="text-xs text-muted-foreground mb-1">Keywords</div>
+                  <div className={`text-sm font-semibold ${getScoreColor(match.keyword_match_score ?? 0)}`}>
+                    {Math.round(match.keyword_match_score ?? 0)}%
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>Keywords Match (25% weight)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -517,29 +529,18 @@ export function TeamJobsPage() {
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Experience Match Score</TooltipContent>
+              <TooltipContent>Experience Match (20% weight)</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Location</div>
-                  <div className={`text-sm font-semibold ${getScoreColor(match.location_match_score)}`}>
-                    {Math.round(match.location_match_score)}%
+                  <div className="text-xs text-muted-foreground mb-1">Semantic</div>
+                  <div className={`text-sm font-semibold ${getScoreColor(match.semantic_similarity)}`}>
+                    {Math.round(match.semantic_similarity)}%
                   </div>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>Location Match Score</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">Salary</div>
-                  <div className={`text-sm font-semibold ${getScoreColor(match.salary_match_score)}`}>
-                    {Math.round(match.salary_match_score)}%
-                  </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>Salary Match Score</TooltipContent>
+              <TooltipContent>Semantic Similarity (15% weight)</TooltipContent>
             </Tooltip>
           </div>
 

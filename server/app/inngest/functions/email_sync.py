@@ -448,7 +448,9 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                 return {"candidates_found": 0, "matches_created": 0}
             
             # Initialize matching service
-            matching_service = JobMatchingService(tenant_id=tenant_id)
+            # Use UnifiedScorerService for consistent scoring
+            from app.services.unified_scorer_service import UnifiedScorerService
+            unified_scorer = UnifiedScorerService()
             matches_created = 0
             
             # For each job, calculate match scores against all candidates
@@ -468,29 +470,10 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                         if existing:
                             continue
                         
-                        # Calculate match score (takes candidate and job objects directly)
-                        match_result = matching_service.calculate_match_score(
-                            candidate=candidate,
-                            job_posting=job,
-                        )
+                        # Calculate and store match using unified scorer
+                        match = unified_scorer.calculate_and_store_match(candidate, job)
                         
-                        if match_result and match_result.get("overall_score", 0) >= 50:
-                            # Create match record
-                            match = CandidateJobMatch(
-                                candidate_id=candidate.id,
-                                job_posting_id=job.id,
-                                match_score=match_result["overall_score"],
-                                skill_match_score=match_result.get("skill_match_score", 0),
-                                experience_match_score=match_result.get("experience_match_score", 0),
-                                location_match_score=match_result.get("location_match_score", 0),
-                                semantic_similarity=match_result.get("semantic_similarity", 0),
-                                salary_match_score=match_result.get("salary_match_score", 0),
-                                matched_skills=match_result.get("matched_skills", []),
-                                missing_skills=match_result.get("missing_skills", []),
-                                match_reasons=[f"Email source job match: {match_result.get('match_grade', 'N/A')}"],
-                                recommendation_reason=match_result.get("explanation", ""),
-                            )
-                            db.session.add(match)
+                        if match and match.match_score >= 50:
                             matches_created += 1
                     
                     except Exception as e:

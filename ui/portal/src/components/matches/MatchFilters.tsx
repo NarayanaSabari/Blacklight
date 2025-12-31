@@ -22,21 +22,22 @@ interface MatchFiltersProps {
 
 const GRADE_OPTIONS = [
   { value: 'all', label: 'All Grades' },
-  { value: 'A+', label: 'A+ (Excellent)' },
-  { value: 'A', label: 'A (Great)' },
-  { value: 'B', label: 'B (Good)' },
-  { value: 'C', label: 'C (Fair)' },
-  { value: 'D', label: 'D (Below Avg)' },
-  { value: 'F', label: 'F (Poor)' },
+  { value: 'A+', label: 'A+ (90%+ Excellent)' },
+  { value: 'A', label: 'A (80-89% Great)' },
+  { value: 'B+', label: 'B+ (75-79% Very Good)' },
+  { value: 'B', label: 'B (70-74% Good)' },
+  { value: 'C+', label: 'C+ (65-69% Fair)' },
+  { value: 'C', label: 'C (<65% Minimum)' },
 ];
 
 const SCORE_RANGES = [
   { value: 'all', label: 'All Scores', min: undefined, max: undefined },
-  { value: '90-100', label: '90-100% (Excellent)', min: 90, max: 100 },
-  { value: '80-89', label: '80-89% (Very Good)', min: 80, max: 89 },
-  { value: '70-79', label: '70-79% (Good)', min: 70, max: 79 },
-  { value: '60-69', label: '60-69% (Fair)', min: 60, max: 69 },
-  { value: '50-59', label: '50-59% (Below Avg)', min: 50, max: 59 },
+  { value: '90-100', label: '90-100% (A+ Excellent)', min: 90, max: 100 },
+  { value: '80-89', label: '80-89% (A Great)', min: 80, max: 89 },
+  { value: '75-79', label: '75-79% (B+ Very Good)', min: 75, max: 79 },
+  { value: '70-74', label: '70-74% (B Good)', min: 70, max: 74 },
+  { value: '65-69', label: '65-69% (C+ Fair)', min: 65, max: 69 },
+  { value: '0-64', label: '<65% (C Minimum)', min: 0, max: 64 },
 ];
 
 const SORT_OPTIONS = [

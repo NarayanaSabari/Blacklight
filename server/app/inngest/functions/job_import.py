@@ -30,6 +30,7 @@ from app.models.role_job_mapping import RoleJobMapping
 from app.models.session_platform_status import SessionPlatformStatus
 from app.models.scraper_platform import ScraperPlatform
 from app.inngest import inngest_client
+from app.services.resume_tailor.keyword_extractor import KeywordExtractorService
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,17 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
         lambda: import_jobs_batch_for_platform(jobs_data, session_data, platform_name)
     )
     
-    # Step 3: Update platform status to completed
+    # Step 3: Extract keywords for imported jobs (for unified scoring)
+    if import_result["job_ids"]:
+        keywords_result = await ctx.step.run(
+            "extract-keywords",
+            lambda: extract_keywords_for_jobs(import_result["job_ids"])
+        )
+        logger.info(
+            f"[JOB-IMPORT] Keywords extracted for {keywords_result['extracted']}/{len(import_result['job_ids'])} jobs"
+        )
+    
+    # Step 4: Update platform status to completed
     await ctx.step.run(
         "complete-platform",
         lambda: complete_platform_status(
@@ -537,6 +548,87 @@ def import_jobs_batch_for_platform(
         "skipped": skipped_count,
         "job_ids": job_ids,
         "skip_reasons": skip_reasons
+    }
+
+
+# ============================================================================
+# HELPER FUNCTIONS - Keyword Extraction
+# ============================================================================
+
+def extract_keywords_for_jobs(job_ids: List[int]) -> Dict[str, Any]:
+    """
+    Extract keywords from job descriptions for unified scoring.
+    
+    Uses KeywordExtractorService to extract:
+    - technical_keywords
+    - action_verbs  
+    - industry_terms
+    - soft_skills
+    
+    These are stored in JobPosting.extracted_keywords JSONB field.
+    
+    Args:
+        job_ids: List of job posting IDs to process
+        
+    Returns:
+        Dict with extracted count and failed count
+    """
+    extracted_count = 0
+    failed_count = 0
+    
+    try:
+        keyword_extractor = KeywordExtractorService()
+    except Exception as e:
+        logger.error(f"[JOB-IMPORT] Failed to initialize KeywordExtractorService: {e}")
+        return {"extracted": 0, "failed": len(job_ids), "error": str(e)}
+    
+    for job_id in job_ids:
+        try:
+            job = db.session.get(JobPosting, job_id)
+            if not job:
+                logger.warning(f"[JOB-IMPORT] Job {job_id} not found for keyword extraction")
+                failed_count += 1
+                continue
+            
+            # Skip if keywords already extracted
+            if job.extracted_keywords:
+                extracted_count += 1
+                continue
+            
+            # Extract keywords using AI
+            job_keywords = keyword_extractor.extract_keywords_only(
+                job.description or ""
+            )
+            
+            # Store as JSONB in the extracted_keywords field
+            job.extracted_keywords = {
+                "technical_keywords": job_keywords.technical_keywords,
+                "action_verbs": job_keywords.action_verbs,
+                "industry_terms": job_keywords.industry_terms,
+                "soft_skills": job_keywords.soft_skills
+            }
+            
+            extracted_count += 1
+            
+            # Commit every 5 jobs to avoid long transactions
+            if extracted_count % 5 == 0:
+                db.session.commit()
+                
+        except Exception as e:
+            logger.error(f"[JOB-IMPORT] Failed to extract keywords for job {job_id}: {e}")
+            failed_count += 1
+    
+    # Final commit
+    db.session.commit()
+    
+    logger.info(
+        f"[JOB-IMPORT] Keyword extraction complete: "
+        f"{extracted_count} extracted, {failed_count} failed"
+    )
+    
+    return {
+        "extracted": extracted_count,
+        "failed": failed_count
     }
 
 

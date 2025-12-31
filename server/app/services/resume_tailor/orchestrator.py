@@ -24,6 +24,7 @@ from app.models.candidate_job_match import CandidateJobMatch
 from app.services.resume_tailor.keyword_extractor import KeywordExtractorService, ExtractedJobData
 from app.services.resume_tailor.resume_scorer import ResumeScorerService, DetailedMatchScore
 from app.services.resume_tailor.resume_improver import ResumeImproverService
+from app.services.unified_scorer_service import UnifiedScorerService
 from app.services.file_storage import FileStorageService
 from app.utils.text_extractor import TextExtractor
 from config.settings import settings
@@ -114,7 +115,8 @@ class ResumeTailorOrchestrator:
         
         # Initialize sub-services
         self.keyword_extractor = KeywordExtractorService(api_key=self.api_key)
-        self.scorer = ResumeScorerService(api_key=self.api_key)
+        self.scorer = ResumeScorerService(api_key=self.api_key)  # For improvement iterations
+        self.unified_scorer = UnifiedScorerService(api_key=self.api_key)  # For initial score
         self.improver = ResumeImproverService(api_key=self.api_key)
         self.file_storage = FileStorageService()
         
@@ -190,20 +192,49 @@ class ResumeTailorOrchestrator:
             tailored_resume.update_progress('analyzing_resume', 15)
             db.session.commit()
             
-            # Calculate initial score (convert to 0-1 scale)
-            initial_score = self.scorer.calculate_match_score(
-                resume_text=resume_text,
-                job_title=job_posting.title,
-                job_description=job_posting.description or "",
-                resume_skills=candidate.skills
-            )
+            # Try to get initial score from existing CandidateJobMatch (unified scoring)
+            existing_match = CandidateJobMatch.query.filter_by(
+                candidate_id=candidate_id,
+                job_posting_id=job_posting_id
+            ).first()
+            
+            if existing_match and existing_match.match_score:
+                # Use stored unified score
+                logger.info(f"Using existing unified match score: {existing_match.match_score}")
+                initial_score_decimal = float(existing_match.match_score) / 100.0
+                matched_skills = existing_match.matched_skills or []
+                missing_skills = existing_match.missing_skills or []
+                
+                # Create a compatible object for skill comparison
+                class StoredMatchScore:
+                    def __init__(self, score, matched, missing):
+                        self.overall_score = score
+                        self.matched_skills = matched
+                        self.missing_skills = missing
+                
+                initial_score = StoredMatchScore(
+                    float(existing_match.match_score),
+                    matched_skills,
+                    missing_skills
+                )
+            else:
+                # Fall back to calculating score with ResumeScorerService
+                logger.info("No existing match found, calculating initial score")
+                initial_score = self.scorer.calculate_match_score(
+                    resume_text=resume_text,
+                    job_title=job_posting.title,
+                    job_description=job_posting.description or "",
+                    resume_skills=candidate.skills
+                )
+                initial_score_decimal = initial_score.overall_score / 100.0
+                matched_skills = initial_score.matched_skills
+                missing_skills = initial_score.missing_skills
             
             # Update with initial analysis (scores are 0-1 in model)
-            initial_score_decimal = initial_score.overall_score / 100.0
             tailored_resume.original_match_score = Decimal(str(round(initial_score_decimal, 4)))
-            tailored_resume.original_resume_keywords = initial_score.matched_skills[:20]
-            tailored_resume.matched_skills = initial_score.matched_skills
-            tailored_resume.missing_skills = initial_score.missing_skills
+            tailored_resume.original_resume_keywords = matched_skills[:20]
+            tailored_resume.matched_skills = matched_skills
+            tailored_resume.missing_skills = missing_skills
             tailored_resume.update_progress('calculating_initial_score', 25)
             db.session.commit()
             
@@ -435,21 +466,52 @@ class ResumeTailorOrchestrator:
             
             yield emit('calculating_initial_score', 'Calculating initial match score...')
             
-            initial_score = self.scorer.calculate_match_score(
-                resume_text=resume_text,
-                job_title=job_posting.title,
-                job_description=job_posting.description or "",
-                resume_skills=candidate.skills
-            )
+            # Try to get initial score from existing CandidateJobMatch (unified scoring)
+            existing_match = CandidateJobMatch.query.filter_by(
+                candidate_id=candidate_id,
+                job_posting_id=job_posting_id
+            ).first()
+            
+            if existing_match and existing_match.match_score:
+                # Use stored unified score
+                logger.info(f"Using existing unified match score: {existing_match.match_score}")
+                initial_score_value = float(existing_match.match_score)
+                initial_score_decimal = initial_score_value / 100.0
+                matched_skills = existing_match.matched_skills or []
+                missing_skills = existing_match.missing_skills or []
+                
+                # Create a compatible object for later use
+                class StoredMatchScore:
+                    def __init__(self, score, matched, missing):
+                        self.overall_score = score
+                        self.matched_skills = matched
+                        self.missing_skills = missing
+                
+                initial_score = StoredMatchScore(
+                    initial_score_value,
+                    matched_skills,
+                    missing_skills
+                )
+            else:
+                # Fall back to calculating score
+                logger.info("No existing match found, calculating initial score")
+                initial_score = self.scorer.calculate_match_score(
+                    resume_text=resume_text,
+                    job_title=job_posting.title,
+                    job_description=job_posting.description or "",
+                    resume_skills=candidate.skills
+                )
+                initial_score_decimal = initial_score.overall_score / 100.0
+                matched_skills = initial_score.matched_skills
+                missing_skills = initial_score.missing_skills
             
             # Store scores as 0-1 decimals
-            initial_score_decimal = initial_score.overall_score / 100.0
             target_score_decimal = target_score / 100.0
             
             tailored_resume.original_match_score = Decimal(str(round(initial_score_decimal, 4)))
-            tailored_resume.original_resume_keywords = initial_score.matched_skills[:20]
-            tailored_resume.matched_skills = initial_score.matched_skills
-            tailored_resume.missing_skills = initial_score.missing_skills
+            tailored_resume.original_resume_keywords = matched_skills[:20]
+            tailored_resume.matched_skills = matched_skills
+            tailored_resume.missing_skills = missing_skills
             tailored_resume.update_progress('calculating_initial_score', 25)
             db.session.commit()
             

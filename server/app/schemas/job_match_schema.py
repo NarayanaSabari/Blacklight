@@ -9,22 +9,39 @@ from decimal import Decimal
 
 
 class CandidateJobMatchBase(BaseModel):
-    """Base schema for candidate job match shared fields"""
+    """Base schema for candidate job match shared fields
+    
+    Unified Scoring System Weights:
+    - Skills: 40%
+    - Keywords: 25%
+    - Experience: 20%
+    - Semantic: 15%
+    """
     match_score: Decimal = Field(..., ge=0, le=100, description="Overall match score (0-100)")
-    skill_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Skill match score")
-    experience_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Experience match score")
-    location_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Location match score")
-    salary_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Salary match score")
-    semantic_similarity: Optional[Decimal] = Field(None, ge=0, le=1, description="Semantic similarity (0-1)")
+    match_grade: Optional[str] = Field(None, max_length=5, description="Match grade (A+, A, B+, B, C+, C)")
+    # Unified scoring components
+    skill_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Skill match score (40% weight)")
+    keyword_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Keyword match score (25% weight)")
+    experience_match_score: Optional[Decimal] = Field(None, ge=0, le=100, description="Experience match score (20% weight)")
+    semantic_similarity: Optional[Decimal] = Field(None, ge=0, le=100, description="Semantic similarity (15% weight)")
+    # Skill matching details
     matched_skills: Optional[List[str]] = Field(default_factory=list, description="Matched skills")
     missing_skills: Optional[List[str]] = Field(default_factory=list, description="Missing skills")
+    # Keyword matching details
+    matched_keywords: Optional[List[str]] = Field(default_factory=list, description="Matched keywords from JD")
+    missing_keywords: Optional[List[str]] = Field(default_factory=list, description="Missing keywords from JD")
+    # AI compatibility (on-demand, cached 24h)
+    ai_compatibility_score: Optional[Decimal] = Field(None, ge=0, le=100, description="AI compatibility score")
+    ai_compatibility_details: Optional[dict] = Field(None, description="AI analysis details (strengths, gaps, recommendations)")
+    ai_scored_at: Optional[datetime] = Field(None, description="When AI analysis was performed")
+    # Legacy/optional fields
     match_reasons: Optional[List[str]] = Field(default_factory=list, description="Reasons for match")
     status: Optional[str] = Field(default="NEW", max_length=50, description="Match status")
     is_recommended: Optional[bool] = Field(default=False, description="Is this a recommended match")
     recommendation_reason: Optional[str] = Field(None, description="Reason for recommendation")
     notes: Optional[str] = Field(None, description="Additional notes")
     
-    @field_validator('matched_skills', 'missing_skills', 'match_reasons', mode='before')
+    @field_validator('matched_skills', 'missing_skills', 'matched_keywords', 'missing_keywords', 'match_reasons', mode='before')
     @classmethod
     def ensure_list(cls, v):
         """Ensure array fields are lists"""
@@ -65,9 +82,6 @@ class CandidateJobMatchResponse(CandidateJobMatchBase):
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     
-    # Computed field from model property
-    match_grade: Optional[str] = Field(None, description="Match grade (A+, A, B+, B, C, D)")
-    
     # Related data (populated from joins)
     job_title: Optional[str] = Field(None, description="Job title")
     company: Optional[str] = Field(None, description="Company name")
@@ -105,17 +119,32 @@ class GenerateMatchesRequest(BaseModel):
 
 
 class MatchScoreBreakdown(BaseModel):
-    """Schema for detailed match score breakdown"""
+    """Schema for detailed match score breakdown
+    
+    Unified Scoring System:
+    - Skills: 40% weight
+    - Keywords: 25% weight
+    - Experience: 20% weight
+    - Semantic: 15% weight
+    
+    Grades (no D/F):
+    - A+: 90+
+    - A: 80-89
+    - B+: 75-79
+    - B: 70-74
+    - C+: 65-69
+    - C: <65
+    """
     overall_score: Decimal = Field(..., ge=0, le=100, description="Overall match score")
     skill_score: Decimal = Field(..., ge=0, le=100, description="Skill match (40% weight)")
-    experience_score: Decimal = Field(..., ge=0, le=100, description="Experience match (25% weight)")
-    location_score: Decimal = Field(..., ge=0, le=100, description="Location match (15% weight)")
-    salary_score: Decimal = Field(..., ge=0, le=100, description="Salary match (10% weight)")
-    semantic_score: Decimal = Field(..., ge=0, le=100, description="Semantic similarity (10% weight)")
+    keyword_score: Decimal = Field(..., ge=0, le=100, description="Keyword match (25% weight)")
+    experience_score: Decimal = Field(..., ge=0, le=100, description="Experience match (20% weight)")
+    semantic_score: Decimal = Field(..., ge=0, le=100, description="Semantic similarity (15% weight)")
     matched_skills_count: int = Field(..., ge=0, description="Number of matched skills")
+    matched_keywords_count: int = Field(..., ge=0, description="Number of matched keywords")
     total_required_skills: int = Field(..., ge=0, description="Total required skills")
     skill_coverage_percent: Decimal = Field(..., ge=0, le=100, description="Skill coverage percentage")
-    match_grade: str = Field(..., description="Letter grade (A+ to D)")
+    match_grade: str = Field(..., description="Letter grade (A+ to C)")
     is_strong_match: bool = Field(..., description="Is score >= 80")
     recommendation: str = Field(..., description="Recommendation text")
 

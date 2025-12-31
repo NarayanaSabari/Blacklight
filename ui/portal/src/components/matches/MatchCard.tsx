@@ -17,6 +17,8 @@ import {
   Clock,
   Sparkles,
   Mail,
+  FileText,
+  Brain,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { JobMatch, MatchGrade } from '@/types';
@@ -39,37 +41,37 @@ const GRADE_CONFIG: Record<
     label: 'A+',
     colorClass: 'text-green-700',
     bgClass: 'bg-green-100 border-green-300',
-    description: 'Excellent Match',
+    description: 'Excellent Match (90%+)',
   },
   A: {
     label: 'A',
     colorClass: 'text-green-600',
     bgClass: 'bg-green-50 border-green-200',
-    description: 'Great Match',
+    description: 'Great Match (80-89%)',
+  },
+  'B+': {
+    label: 'B+',
+    colorClass: 'text-blue-600',
+    bgClass: 'bg-blue-100 border-blue-300',
+    description: 'Very Good Match (75-79%)',
   },
   B: {
     label: 'B',
-    colorClass: 'text-blue-600',
+    colorClass: 'text-blue-500',
     bgClass: 'bg-blue-50 border-blue-200',
-    description: 'Good Match',
+    description: 'Good Match (70-74%)',
+  },
+  'C+': {
+    label: 'C+',
+    colorClass: 'text-yellow-600',
+    bgClass: 'bg-yellow-100 border-yellow-300',
+    description: 'Fair Match (65-69%)',
   },
   C: {
     label: 'C',
-    colorClass: 'text-yellow-600',
+    colorClass: 'text-yellow-500',
     bgClass: 'bg-yellow-50 border-yellow-200',
-    description: 'Fair Match',
-  },
-  D: {
-    label: 'D',
-    colorClass: 'text-orange-600',
-    bgClass: 'bg-orange-50 border-orange-200',
-    description: 'Below Average',
-  },
-  F: {
-    label: 'F',
-    colorClass: 'text-red-600',
-    bgClass: 'bg-red-50 border-red-200',
-    description: 'Poor Match',
+    description: 'Minimum Match (<65%)',
   },
 };
 
@@ -112,13 +114,14 @@ export function MatchCard({
   if (!job) return null;
 
   // Calculate grade from match_score if match_grade not provided
+  // Unified Scoring Grades: A+ (90+), A (80-89), B+ (75-79), B (70-74), C+ (65-69), C (<65)
   const calculateGrade = (score: number): MatchGrade => {
-    if (score >= 95) return 'A+';
-    if (score >= 90) return 'A';
-    if (score >= 80) return 'B';
-    if (score >= 70) return 'C';
-    if (score >= 60) return 'D';
-    return 'F';
+    if (score >= 90) return 'A+';
+    if (score >= 80) return 'A';
+    if (score >= 75) return 'B+';
+    if (score >= 70) return 'B';
+    if (score >= 65) return 'C+';
+    return 'C';
   };
 
   const grade = (match.match_grade as MatchGrade) || calculateGrade(match.match_score);
@@ -194,13 +197,12 @@ export function MatchCard({
           </p>
         )}
 
-        {/* Score Breakdown */}
+        {/* Score Breakdown - Unified Scoring (Skills 40%, Keywords 25%, Experience 20%, Semantic 15%) */}
         <div className="space-y-2.5 pt-2">
-          <ScoreBar label="Skills" value={match.skill_match_score} icon={TrendingUp} />
-          <ScoreBar label="Experience" value={match.experience_match_score} icon={Briefcase} />
-          <ScoreBar label="Location" value={match.location_match_score} icon={MapPin} />
-          <ScoreBar label="Salary" value={match.salary_match_score} icon={DollarSign} />
-          <ScoreBar label="Semantic" value={match.semantic_similarity} icon={CheckCircle2} />
+          <ScoreBar label="Skills (40%)" value={match.skill_match_score} icon={TrendingUp} />
+          <ScoreBar label="Keywords (25%)" value={match.keyword_match_score ?? 0} icon={FileText} />
+          <ScoreBar label="Experience (20%)" value={match.experience_match_score} icon={Briefcase} />
+          <ScoreBar label="Semantic (15%)" value={match.semantic_similarity} icon={Brain} />
         </div>
 
         {/* Skills Match */}

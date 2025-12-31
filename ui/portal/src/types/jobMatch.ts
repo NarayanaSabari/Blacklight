@@ -44,13 +44,28 @@ export interface JobMatch {
   job_posting_id: number;
   match_score: number;
   match_grade?: string;
+  // Unified Scoring Components (weights: Skills 40%, Keywords 25%, Experience 20%, Semantic 15%)
   skill_match_score: number;
+  keyword_match_score: number;
   experience_match_score: number;
-  location_match_score: number;
-  salary_match_score: number;
   semantic_similarity: number;
+  // Skill matching details
   matched_skills: string[];
   missing_skills: string[];
+  // Keyword matching details
+  matched_keywords?: string[];
+  missing_keywords?: string[];
+  // AI Compatibility (on-demand, cached 24h)
+  ai_compatibility_score?: number;
+  ai_compatibility_details?: {
+    strengths?: string[];
+    gaps?: string[];
+    recommendations?: string[];
+    experience_analysis?: string;
+    culture_fit_indicators?: string[];
+  };
+  ai_scored_at?: string;
+  // Legacy/optional fields
   explanation?: string;
   match_reasons?: string[];
   recommendation_reason?: string;
@@ -121,7 +136,7 @@ export interface JobMatchFilters {
   platforms?: string[];
 }
 
-export type MatchGrade = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
+export type MatchGrade = 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C';
 
 export interface GradeBadgeConfig {
   label: MatchGrade;

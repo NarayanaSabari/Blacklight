@@ -1267,9 +1267,9 @@ export function CandidateDetailPage() {
                         <Badge
                           className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${match.match_grade === 'A+' || match.match_grade === 'A'
                             ? 'bg-green-500 text-white'
-                            : match.match_grade === 'B'
-                              ? 'bg-yellow-500 text-white'
-                              : 'bg-slate-500 text-white'
+                            : match.match_grade === 'B+' || match.match_grade === 'B'
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-yellow-500 text-white'
                             }`}
                         >
                           {match.match_grade}

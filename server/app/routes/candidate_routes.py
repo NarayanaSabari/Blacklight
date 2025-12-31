@@ -1266,8 +1266,9 @@ def get_candidate_job_matches(candidate_id: int):
                 'message': 'No jobs found for assigned roles'
             }), 200
         
-        # Initialize matching service
-        service = JobMatchingService(tenant_id=tenant_id)
+        # Initialize unified scoring service
+        from app.services.unified_scorer_service import UnifiedScorerService
+        service = UnifiedScorerService()
         
         # Calculate scores for all jobs (we need to score all to filter/sort properly)
         # Fetch jobs
@@ -1280,19 +1281,23 @@ def get_candidate_job_matches(candidate_id: int):
         # Calculate match scores
         scored_matches = []
         for job in jobs:
-            match_result = service.calculate_match_score(candidate, job)
-            overall_score = match_result.get('overall_score', 0)
-            
-            # Apply min_score filter
-            if overall_score >= min_score:
-                scored_matches.append({
-                    'job': job,
-                    'match_result': match_result
-                })
+            try:
+                match_result = service.calculate_score(candidate, job)
+                overall_score = match_result.overall_score
+                
+                # Apply min_score filter
+                if overall_score >= min_score:
+                    scored_matches.append({
+                        'job': job,
+                        'match_result': match_result
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to calculate score for job {job.id}: {e}")
+                continue
         
         # Sort matches
         if sort_by == 'match_score':
-            scored_matches.sort(key=lambda x: x['match_result']['overall_score'], reverse=True)
+            scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=True)
         elif sort_by == 'posted_date':
             scored_matches.sort(key=lambda x: x['job'].posted_date or datetime.min, reverse=True)
         
@@ -1322,15 +1327,16 @@ def get_candidate_job_matches(candidate_id: int):
                         'platform': m['job'].platform,
                         'posted_date': m['job'].posted_date.isoformat() if m['job'].posted_date else None
                     },
-                    'match_score': round(m['match_result']['overall_score'], 2),
-                    'grade': m['match_result']['match_grade'],
-                    'skill_match_score': round(m['match_result']['skill_match_score'], 2),
-                    'experience_match_score': round(m['match_result']['experience_match_score'], 2),
-                    'location_match_score': round(m['match_result']['location_match_score'], 2),
-                    'salary_match_score': round(m['match_result']['salary_match_score'], 2),
-                    'semantic_similarity': round(m['match_result']['semantic_similarity'], 2),
-                    'matched_skills': m['match_result']['matched_skills'],
-                    'missing_skills': m['match_result']['missing_skills']
+                    'match_score': round(m['match_result'].overall_score, 2),
+                    'match_grade': m['match_result'].grade,
+                    'skill_match_score': round(m['match_result'].skill_result.score, 2),
+                    'keyword_match_score': round(m['match_result'].keyword_result.score, 2),
+                    'experience_match_score': round(m['match_result'].experience_score, 2),
+                    'semantic_similarity': round(m['match_result'].semantic_score, 2),
+                    'matched_skills': m['match_result'].skill_result.matched_skills,
+                    'missing_skills': m['match_result'].skill_result.missing_skills,
+                    'matched_keywords': m['match_result'].keyword_result.matched_keywords,
+                    'missing_keywords': m['match_result'].keyword_result.missing_keywords
                 }
                 for m in paginated_matches
             ],
