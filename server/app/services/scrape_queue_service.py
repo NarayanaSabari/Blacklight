@@ -651,7 +651,6 @@ class ScrapeQueueService:
                     experience_min=parsed.get("experience_min"),
                     experience_max=parsed.get("experience_max"),
                     skills=parsed.get("skills", []),
-                    keywords=parsed.get("keywords", []),
                     job_type=parsed.get("job_type"),
                     is_remote=parsed.get("is_remote", False),
                     job_url=parsed.get("job_url", ""),

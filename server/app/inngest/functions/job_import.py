@@ -486,7 +486,7 @@ def import_jobs_batch_for_platform(
                 experience_min=exp_min,
                 experience_max=exp_max,
                 skills=normalized_skills,
-                keywords=job_import_service.generate_keywords(title, description, normalized_skills),
+                # NOTE: extracted_keywords is populated by extract_keywords step after import
                 job_type=truncate_str(job_type_raw, 255),
                 is_remote=is_remote,
                 job_url=job_url,

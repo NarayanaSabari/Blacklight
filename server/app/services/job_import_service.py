@@ -500,12 +500,8 @@ class JobImportService:
         enhanced_skills = self.extract_skills_from_description(description, normalized_skills)
         job_data['skills'] = enhanced_skills
         
-        # Generate keywords
-        job_data['keywords'] = self.generate_keywords(
-            job_data['title'],
-            description,
-            enhanced_skills
-        )
+        # NOTE: extracted_keywords is now populated by Inngest workflow after import
+        # The old 'keywords' column has been removed from JobPosting model
         
         # Detect remote work
         is_remote_flag = raw_job.get('isRemote')
@@ -595,7 +591,6 @@ class JobImportService:
                     'experience_min': stmt.excluded.experience_min,
                     'experience_max': stmt.excluded.experience_max,
                     'skills': stmt.excluded.skills,
-                    'keywords': stmt.excluded.keywords,
                     'job_url': stmt.excluded.job_url,
                     'apply_url': stmt.excluded.apply_url,
                     'status': stmt.excluded.status,
