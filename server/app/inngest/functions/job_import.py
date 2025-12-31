@@ -449,7 +449,8 @@ def import_jobs_batch_for_platform(
             )
             
             # Handle "N/A" values for URLs
-            job_url = job_data.get("jobUrl", job_data.get("job_url", ""))
+            # Check jobUrl, job_url, and source_url (scraper sends source_url)
+            job_url = job_data.get("jobUrl", job_data.get("job_url", job_data.get("source_url", "")))
             if job_url == "N/A":
                 job_url = ""
             
