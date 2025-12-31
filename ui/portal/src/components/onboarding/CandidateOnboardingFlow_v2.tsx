@@ -10,9 +10,11 @@
  */
 
 import { useState, useEffect } from 'react';
+import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { cn } from '@/lib/utils';
 import {
   Card,
   CardContent,
@@ -631,89 +633,135 @@ export function CandidateOnboardingFlow({
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      {/* Progress Header - Redesigned for clarity */}
-      <Card className="border-0 shadow-lg overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-4 md:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg md:text-xl font-semibold">Complete Your Profile</h2>
-              <p className="text-slate-300 text-sm">
-                Step {currentStep} of {steps.length}: {steps[currentStep - 1].title}
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl md:text-3xl font-bold">{Math.round(progress)}%</div>
-              <p className="text-slate-400 text-xs">Complete</p>
+    <div className="flex gap-6 max-w-7xl mx-auto">
+      {/* Side Navigation */}
+      <nav className="w-72 flex-shrink-0">
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden sticky top-4">
+          <div className="p-4 border-b bg-slate-50">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
+              Application Progress
+            </h2>
+            <div className="mt-2">
+              <div className="text-2xl font-bold text-slate-900">{Math.round(progress)}%</div>
+              <Progress value={progress} className="h-2 mt-2" />
             </div>
           </div>
-          <Progress value={progress} className="h-2 bg-slate-700" />
-        </div>
-
-        {/* Step indicators - horizontal scroll on mobile */}
-        <div className="p-4 md:p-6 bg-slate-50 overflow-x-auto">
-          <div className="flex justify-between min-w-[500px] md:min-w-0">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
+          <div className="p-2">
+            {steps.map((step) => {
               const isActive = step.number === currentStep;
               const isCompleted = step.number < currentStep;
-              const isLast = index === steps.length - 1;
-
+              const Icon = step.icon;
+              
               return (
-                <div key={step.number} className="flex items-center">
-                  <div className="flex flex-col items-center">
-                    {/* Step circle */}
-                    <div
-                      className={`
-                        flex h-12 w-12 items-center justify-center rounded-full border-2 transition-all duration-200
-                        ${isActive
-                          ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200'
-                          : isCompleted
-                            ? 'border-green-500 bg-green-500 text-white'
-                            : 'border-slate-300 bg-white text-slate-400'
-                        }
-                      `}
-                    >
-                      {isCompleted ? (
-                        <CheckCircle2 className="h-6 w-6" />
-                      ) : (
-                        <Icon className="h-5 w-5" />
-                      )}
-                    </div>
-                    {/* Step label */}
-                    <span
-                      className={`
-                        mt-2 text-xs font-medium text-center max-w-[80px]
-                        ${isActive
-                          ? 'text-blue-600'
-                          : isCompleted
-                            ? 'text-green-600'
-                            : 'text-slate-500'
-                        }
-                      `}
-                    >
-                      {step.title}
-                    </span>
-                  </div>
-                  {/* Connector line */}
-                  {!isLast && (
-                    <div
-                      className={`
-                        h-0.5 w-8 md:w-12 lg:w-16 mx-2
-                        ${step.number < currentStep ? 'bg-green-500' : 'bg-slate-300'}
-                      `}
-                    />
+                <button
+                  key={step.number}
+                  onClick={() => {
+                    // Allow navigation to completed steps or current step only
+                    if (step.number <= currentStep) {
+                      setCurrentStep(step.number);
+                    }
+                  }}
+                  disabled={step.number > currentStep}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all duration-150 group",
+                    isActive
+                      ? "bg-blue-50 text-blue-700"
+                      : isCompleted
+                        ? "text-slate-600 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed"
                   )}
-                </div>
+                >
+                  <div className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    isActive 
+                      ? "bg-blue-100" 
+                      : isCompleted
+                        ? "bg-green-100"
+                        : "bg-slate-100"
+                  )}>
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <Icon className={cn(
+                        "h-4 w-4",
+                        isActive ? "text-blue-600" : isCompleted ? "text-green-600" : "text-slate-400"
+                      )} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={cn(
+                      "font-medium text-sm",
+                      isActive ? "text-blue-700" : isCompleted ? "text-slate-900" : "text-slate-400"
+                    )}>
+                      {step.title}
+                    </div>
+                    <div className={cn(
+                      "text-xs",
+                      isActive ? "text-blue-600" : isCompleted ? "text-green-600" : "text-slate-400"
+                    )}>
+                      {isCompleted ? 'Completed' : isActive ? 'In Progress' : 'Pending'}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <ChevronRight className="h-4 w-4 text-blue-500" />
+                  )}
+                </button>
               );
             })}
           </div>
         </div>
-      </Card>
 
-      {/* Step Content */}
-      <Card className="border-0 shadow-lg">
-        <CardContent className="p-6 md:p-8">
+        {/* Help Card */}
+        <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+          <h3 className="font-semibold text-slate-900 mb-1">Need Help?</h3>
+          <p className="text-sm text-slate-600 mb-3">
+            Having trouble? Contact us for assistance.
+          </p>
+          <a 
+            href={`mailto:${invitation.email}`}
+            className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          >
+            Contact Support
+          </a>
+        </div>
+      </nav>
+
+      {/* Content Area */}
+      <div className="flex-1 min-w-0">
+        <Card className="border-0 shadow-lg">
+          <div className="p-4 border-b bg-slate-50">
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "p-2 rounded-lg",
+                currentStep === 1 ? "bg-blue-100" :
+                currentStep === 2 ? "bg-purple-100" :
+                currentStep === 3 ? "bg-green-100" :
+                currentStep === 4 ? "bg-amber-100" :
+                "bg-blue-100"
+              )}>
+                {React.createElement(steps[currentStep - 1].icon, {
+                  className: cn(
+                    "h-5 w-5",
+                    currentStep === 1 ? "text-blue-600" :
+                    currentStep === 2 ? "text-purple-600" :
+                    currentStep === 3 ? "text-green-600" :
+                    currentStep === 4 ? "text-amber-600" :
+                    "text-blue-600"
+                  )
+                })}
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {steps[currentStep - 1].title}
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Step {currentStep} of {steps.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <CardContent className="p-6 md:p-8">{/* Step Content */}
           {/* Step 1: Personal Info */}
           {currentStep === 1 && (
             <Form {...personalForm}>
@@ -1615,7 +1663,7 @@ export function CandidateOnboardingFlow({
             className="gap-2"
           >
             <ChevronLeft className="h-4 w-4" />
-            {currentStep > 1 ? steps[currentStep - 2].title : 'Back'}
+            Previous
           </Button>
 
           {currentStep < steps.length ? (
@@ -1631,7 +1679,7 @@ export function CandidateOnboardingFlow({
                 </>
               ) : (
                 <>
-                  {steps[currentStep].title}
+                  Next
                   <ChevronRight className="h-4 w-4" />
                 </>
               )}
@@ -1657,6 +1705,8 @@ export function CandidateOnboardingFlow({
           )}
         </CardFooter>
       </Card>
+    </div>
+  </div>
 
       {/* Confirmation Dialog - Improved styling */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>

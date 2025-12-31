@@ -15,8 +15,6 @@ import {
   XCircle,
   Clock,
   Mail,
-  FileText,
-  User,
   Loader2,
   Ban,
 } from 'lucide-react';
@@ -334,30 +332,14 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <div className="container mx-auto px-4 py-8 md:py-12">
-        {/* Welcome Header */}
-        <div className="max-w-4xl mx-auto mb-8 text-center">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">
+        {/* Welcome Header - Compact */}
+        <div className="max-w-4xl mx-auto mb-6 text-center">
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
             Welcome, {invitation.first_name || 'there'}!
           </h1>
-          <p className="text-lg text-slate-600 max-w-xl mx-auto">
-            Complete your profile to join our talent network. This takes about 10 minutes.
+          <p className="text-slate-600">
+            Complete your profile to join our talent network
           </p>
-
-          {/* Quick info badges */}
-          <div className="flex items-center justify-center gap-4 mt-6 flex-wrap">
-            <div className="flex items-center gap-1.5 text-sm text-slate-600">
-              <FileText className="h-4 w-4" />
-              <span>5 quick steps</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm text-slate-600">
-              <Clock className="h-4 w-4" />
-              <span>~10 minutes</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-sm text-slate-600">
-              <User className="h-4 w-4" />
-              <span>AI-assisted</span>
-            </div>
-          </div>
         </div>
 
         {/* Onboarding Flow */}
