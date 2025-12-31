@@ -799,8 +799,8 @@ export function CandidateDetailPage() {
               </>
             ) : !isReviewMode ? (
               <>
-                {/* Show Approve/Reject buttons for pending_review candidates */}
-                {candidate?.status === 'pending_review' && (
+                {/* For pending_review candidates: Show only Approve, Reject, Edit, Delete */}
+                {candidate?.status === 'pending_review' ? (
                   <>
                     <Button
                       variant="default"
@@ -825,71 +825,93 @@ export function CandidateDetailPage() {
                       <XCircle className="h-4 w-4 mr-2" />
                       Reject
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={enterEditMode}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
                   </>
-                )}
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => navigate(`/candidate/jobs/${id}`)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-                >
-                  <Target className="h-4 w-4 mr-2" />
-                  Matches
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={enterEditMode}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowAssignmentDialog(true)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  {currentAssignment ? 'Reassign' : 'Assign'}
-                </Button>
-                {(signedResumeUrl || candidate?.resume_file_key) && (
+                ) : (
+                  /* For approved/other candidates: Show full action set */
                   <>
                     <Button
-                      variant="outline"
+                      variant="default"
                       size="sm"
-                      onClick={handleDownloadResume}
+                      onClick={() => navigate(`/candidate/jobs/${id}`)}
                       className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
                     >
-                      <Download className="h-4 w-4 mr-2" />
-                      Resume
+                      <Target className="h-4 w-4 mr-2" />
+                      Matches
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleReparse}
-                      disabled={reparseMutation.isPending}
+                      onClick={enterEditMode}
                       className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
                     >
-                      {reparseMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
-                      Re-parse
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAssignmentDialog(true)}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      {currentAssignment ? 'Reassign' : 'Assign'}
+                    </Button>
+                    {(signedResumeUrl || candidate?.resume_file_key) && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadResume}
+                          className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Resume
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleReparse}
+                          disabled={reparseMutation.isPending}
+                          className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                        >
+                          {reparseMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                          )}
+                          Re-parse
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteDialog(true)}
+                      className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
                     </Button>
                   </>
                 )}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setShowDeleteDialog(true)}
-                  className="shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] border-2 border-black"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
               </>
             ) : null}
           </div>
