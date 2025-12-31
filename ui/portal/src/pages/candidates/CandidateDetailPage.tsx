@@ -147,11 +147,20 @@ export function CandidateDetailPage() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Fetch candidate data
-  const { data: candidate, isLoading, error } = useQuery({
+  const { data: candidateRaw, isLoading, error } = useQuery({
     queryKey: ['candidate', id],
     queryFn: () => candidateApi.getCandidate(Number(id)),
     enabled: !!id,
   });
+
+  // Merge candidate data with parsed_resume_data fallbacks
+  const candidate = candidateRaw ? {
+    ...candidateRaw,
+    // Use root level data, fallback to parsed_resume_data if empty/null
+    preferred_locations: (candidateRaw.preferred_locations && candidateRaw.preferred_locations.length > 0)
+      ? candidateRaw.preferred_locations
+      : (candidateRaw.parsed_resume_data as any)?.preferred_locations || [],
+  } : undefined;
 
   // Fetch candidate documents
   const { data: documentsResponse, isLoading: documentsLoading } = useQuery({
@@ -1495,7 +1504,7 @@ export function CandidateDetailPage() {
                 Preferred Locations
               </CardTitle>
               <CardDescription>
-                {candidate.preferred_locations?.length || 0} location{(candidate.preferred_locations?.length || 0) !== 1 ? 's' : ''}
+                {(candidate.preferred_locations?.length || 0)} location{(candidate.preferred_locations?.length || 0) !== 1 ? 's' : ''}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -1512,7 +1521,7 @@ export function CandidateDetailPage() {
                 </div>
               ) : candidate.preferred_locations && candidate.preferred_locations.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {candidate.preferred_locations.map((loc, index) => (
+                  {candidate.preferred_locations.map((loc: string, index: number) => (
                     <Badge
                       key={index}
                       className="bg-red-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-sm px-3 py-1.5"
