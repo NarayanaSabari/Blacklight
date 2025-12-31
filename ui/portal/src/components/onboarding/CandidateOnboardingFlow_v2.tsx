@@ -633,20 +633,21 @@ export function CandidateOnboardingFlow({
   }
 
   return (
-    <div className="flex gap-6 max-w-7xl mx-auto">
+    <div className="flex gap-8 max-w-[1400px] mx-auto">
       {/* Side Navigation */}
-      <nav className="w-72 flex-shrink-0">
+      <nav className="w-80 flex-shrink-0">
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden sticky top-4">
-          <div className="p-4 border-b bg-slate-50">
-            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
+          <div className="p-6 border-b bg-gradient-to-br from-slate-50 to-blue-50">
+            <h2 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">
               Application Progress
             </h2>
-            <div className="mt-2">
-              <div className="text-2xl font-bold text-slate-900">{Math.round(progress)}%</div>
-              <Progress value={progress} className="h-2 mt-2" />
+            <div className="flex items-end gap-3 mb-3">
+              <div className="text-4xl font-bold text-slate-900">{Math.round(progress)}%</div>
+              <div className="text-sm text-slate-500 pb-1">Complete</div>
             </div>
+            <Progress value={progress} className="h-2.5" />
           </div>
-          <div className="p-2">
+          <div className="p-3">
             {steps.map((step) => {
               const isActive = step.number === currentStep;
               const isCompleted = step.number < currentStep;
@@ -663,47 +664,59 @@ export function CandidateOnboardingFlow({
                   }}
                   disabled={step.number > currentStep}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all duration-150 group",
+                    "w-full flex items-center gap-3 px-4 py-4 rounded-lg text-left transition-all duration-200 group mb-2",
                     isActive
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-blue-600 text-white shadow-md"
                       : isCompleted
-                        ? "text-slate-600 hover:bg-slate-50"
-                        : "text-slate-400 cursor-not-allowed"
+                        ? "text-slate-700 hover:bg-slate-50"
+                        : "text-slate-400 cursor-not-allowed opacity-60"
                   )}
                 >
                   <div className={cn(
-                    "p-2 rounded-lg transition-colors",
+                    "p-2.5 rounded-lg transition-colors flex-shrink-0",
                     isActive 
-                      ? "bg-blue-100" 
+                      ? "bg-white/20" 
                       : isCompleted
                         ? "bg-green-100"
                         : "bg-slate-100"
                   )}>
                     {isCompleted ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
                     ) : (
                       <Icon className={cn(
-                        "h-4 w-4",
-                        isActive ? "text-blue-600" : isCompleted ? "text-green-600" : "text-slate-400"
+                        "h-5 w-5",
+                        isActive ? "text-white" : isCompleted ? "text-green-600" : "text-slate-400"
                       )} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className={cn(
-                      "font-medium text-sm",
-                      isActive ? "text-blue-700" : isCompleted ? "text-slate-900" : "text-slate-400"
+                      "font-semibold text-sm mb-0.5",
+                      isActive ? "text-white" : isCompleted ? "text-slate-900" : "text-slate-400"
                     )}>
                       {step.title}
                     </div>
                     <div className={cn(
-                      "text-xs",
-                      isActive ? "text-blue-600" : isCompleted ? "text-green-600" : "text-slate-400"
+                      "text-xs flex items-center gap-1.5",
+                      isActive ? "text-blue-100" : isCompleted ? "text-green-600" : "text-slate-400"
                     )}>
-                      {isCompleted ? 'Completed' : isActive ? 'In Progress' : 'Pending'}
+                      {isCompleted ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>Completed</span>
+                        </>
+                      ) : isActive ? (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                          <span>In Progress</span>
+                        </>
+                      ) : (
+                        <span>Pending</span>
+                      )}
                     </div>
                   </div>
                   {isActive && (
-                    <ChevronRight className="h-4 w-4 text-blue-500" />
+                    <ChevronRight className="h-5 w-5 text-white flex-shrink-0" />
                   )}
                 </button>
               );
@@ -712,27 +725,35 @@ export function CandidateOnboardingFlow({
         </div>
 
         {/* Help Card */}
-        <div className="mt-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-          <h3 className="font-semibold text-slate-900 mb-1">Need Help?</h3>
-          <p className="text-sm text-slate-600 mb-3">
-            Having trouble? Contact us for assistance.
-          </p>
-          <a 
-            href={`mailto:${invitation.email}`}
-            className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-          >
-            Contact Support
-          </a>
+        <div className="mt-6 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 flex-shrink-0">
+              <AlertCircle className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 mb-1">Need Help?</h3>
+              <p className="text-sm text-slate-600 mb-3">
+                Having trouble? Contact us for assistance.
+              </p>
+              <a 
+                href={`mailto:${invitation.email}`}
+                className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center gap-1"
+              >
+                Contact Support
+                <ChevronRight className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
         </div>
       </nav>
 
       {/* Content Area */}
       <div className="flex-1 min-w-0">
-        <Card className="border-0 shadow-lg">
-          <div className="p-4 border-b bg-slate-50">
-            <div className="flex items-center gap-3">
+        <Card className="border shadow-lg">
+          <div className="p-6 border-b bg-gradient-to-r from-slate-50 to-white">
+            <div className="flex items-center gap-4">
               <div className={cn(
-                "p-2 rounded-lg",
+                "p-3 rounded-xl shadow-sm",
                 currentStep === 1 ? "bg-blue-100" :
                 currentStep === 2 ? "bg-purple-100" :
                 currentStep === 3 ? "bg-green-100" :
@@ -741,7 +762,7 @@ export function CandidateOnboardingFlow({
               )}>
                 {React.createElement(steps[currentStep - 1].icon, {
                   className: cn(
-                    "h-5 w-5",
+                    "h-6 w-6",
                     currentStep === 1 ? "text-blue-600" :
                     currentStep === 2 ? "text-purple-600" :
                     currentStep === 3 ? "text-green-600" :
@@ -750,43 +771,45 @@ export function CandidateOnboardingFlow({
                   )
                 })}
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-slate-900">
                   {steps[currentStep - 1].title}
                 </h2>
-                <p className="text-sm text-slate-500">
-                  Step {currentStep} of {steps.length}
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Step {currentStep} of {steps.length} • {steps.length - currentStep} {steps.length - currentStep === 1 ? 'step' : 'steps'} remaining
                 </p>
               </div>
             </div>
           </div>
 
-          <CardContent className="p-6 md:p-8">{/* Step Content */}
+          <CardContent className="p-8">{/* Step Content */}
           {/* Step 1: Personal Info */}
           {currentStep === 1 && (
             <Form {...personalForm}>
-              <form className="space-y-8">
+              <form className="space-y-10">
                 {/* Section: Name */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-2 rounded-lg bg-blue-100">
+                <div className="space-y-6">
+                  <div className="flex items-start gap-3 pb-4 border-b">
+                    <div className="p-2.5 rounded-lg bg-blue-100 flex-shrink-0">
                       <User className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900">Basic Information</h3>
-                      <p className="text-sm text-slate-500">Your name and contact details</p>
+                      <h3 className="font-bold text-slate-900 text-lg">Basic Information</h3>
+                      <p className="text-sm text-slate-600 mt-0.5">Let's start with your name and contact details</p>
                     </div>
                   </div>
                   
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-6 md:grid-cols-2">
                     <FormField
                       control={personalForm.control}
                       name="first_name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First Name <span className="text-red-500">*</span></FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">
+                            First Name <span className="text-red-500">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="John" className="h-11" {...field} />
+                            <Input placeholder="John" className="h-12 text-base" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -797,9 +820,11 @@ export function CandidateOnboardingFlow({
                       name="last_name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last Name <span className="text-red-500">*</span></FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">
+                            Last Name <span className="text-red-500">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="Doe" className="h-11" {...field} />
+                            <Input placeholder="Doe" className="h-12 text-base" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -807,18 +832,20 @@ export function CandidateOnboardingFlow({
                     />
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-6 md:grid-cols-2">
                     <FormField
                       control={personalForm.control}
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email <span className="text-red-500">*</span></FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">
+                            Email <span className="text-red-500">*</span>
+                          </FormLabel>
                           <FormControl>
                             <Input 
                               type="email" 
                               placeholder="john@example.com" 
-                              className="h-11 bg-slate-50" 
+                              className="h-12 text-base bg-slate-50" 
                               {...field} 
                               disabled 
                             />
@@ -835,9 +862,11 @@ export function CandidateOnboardingFlow({
                       name="phone"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Phone Number <span className="text-red-500">*</span></FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">
+                            Phone Number <span className="text-red-500">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="+1 (555) 123-4567" className="h-11" {...field} />
+                            <Input placeholder="+1 (555) 123-4567" className="h-12 text-base" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -850,9 +879,9 @@ export function CandidateOnboardingFlow({
                     name="location"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Location</FormLabel>
+                        <FormLabel className="text-sm font-semibold text-slate-700">Location</FormLabel>
                         <FormControl>
-                          <Input placeholder="City, State or Country" className="h-11" {...field} />
+                          <Input placeholder="City, State or Country" className="h-12 text-base" {...field} />
                         </FormControl>
                         <FormDescription className="text-xs">
                           Where are you currently based?
@@ -864,28 +893,28 @@ export function CandidateOnboardingFlow({
                 </div>
 
                 {/* Section: Online Profiles */}
-                <div className="pt-6 border-t">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-2 rounded-lg bg-slate-100">
-                      <Paperclip className="h-5 w-5 text-slate-600" />
+                <div className="space-y-6">
+                  <div className="flex items-start gap-3 pb-4 border-b">
+                    <div className="p-2.5 rounded-lg bg-purple-100 flex-shrink-0">
+                      <Paperclip className="h-5 w-5 text-purple-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900">Online Profiles</h3>
-                      <p className="text-sm text-slate-500">Optional - help us learn more about you</p>
+                      <h3 className="font-bold text-slate-900 text-lg">Online Profiles</h3>
+                      <p className="text-sm text-slate-600 mt-0.5">Optional - Help us learn more about your professional presence</p>
                     </div>
                   </div>
                   
-                  <div className="space-y-4 bg-slate-50 rounded-lg p-4">
+                  <div className="space-y-5 bg-slate-50 rounded-xl p-6">
                     <FormField
                       control={personalForm.control}
                       name="linkedin_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-700">LinkedIn Profile</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">LinkedIn Profile</FormLabel>
                           <FormControl>
                             <Input 
                               placeholder="https://linkedin.com/in/your-profile" 
-                              className="h-11 bg-white" 
+                              className="h-12 text-base bg-white" 
                               {...field} 
                             />
                           </FormControl>
@@ -898,11 +927,11 @@ export function CandidateOnboardingFlow({
                       name="github_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-700">GitHub Profile</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">GitHub Profile</FormLabel>
                           <FormControl>
                             <Input 
                               placeholder="https://github.com/your-username" 
-                              className="h-11 bg-white" 
+                              className="h-12 text-base bg-white" 
                               {...field} 
                             />
                           </FormControl>
@@ -915,11 +944,11 @@ export function CandidateOnboardingFlow({
                       name="portfolio_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-700">Portfolio / Personal Website</FormLabel>
+                          <FormLabel className="text-sm font-semibold text-slate-700">Portfolio / Personal Website</FormLabel>
                           <FormControl>
                             <Input 
                               placeholder="https://your-portfolio.com" 
-                              className="h-11 bg-white" 
+                              className="h-12 text-base bg-white" 
                               {...field} 
                             />
                           </FormControl>
@@ -1657,10 +1686,10 @@ export function CandidateOnboardingFlow({
 
         <CardFooter className="flex justify-between border-t p-6 bg-slate-50">
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={handlePrevStep}
             disabled={currentStep === 1 || isSubmitting}
-            className="gap-2"
+            className="gap-2 h-11 px-6"
           >
             <ChevronLeft className="h-4 w-4" />
             Previous
@@ -1670,7 +1699,7 @@ export function CandidateOnboardingFlow({
             <Button 
               onClick={handleNextStep} 
               disabled={isSubmitting || (currentStep === 2 && isParsing)}
-              className="gap-2 bg-slate-900 hover:bg-slate-800"
+              className="gap-2 h-11 px-8 bg-blue-600 hover:bg-blue-700"
             >
               {currentStep === 2 && isParsing ? (
                 <>
@@ -1679,7 +1708,7 @@ export function CandidateOnboardingFlow({
                 </>
               ) : (
                 <>
-                  Next
+                  Next Step
                   <ChevronRight className="h-4 w-4" />
                 </>
               )}
@@ -1688,7 +1717,7 @@ export function CandidateOnboardingFlow({
             <Button 
               onClick={() => setShowConfirmDialog(true)} 
               disabled={isSubmitting}
-              className="gap-2 bg-green-600 hover:bg-green-700"
+              className="gap-2 h-11 px-8 bg-green-600 hover:bg-green-700"
             >
               {isSubmitting ? (
                 <>
