@@ -16,13 +16,11 @@ import {
   Sparkles,
   Edit,
   RefreshCw,
-  Download,
-  ExternalLink,
   AlertCircle,
   Check,
 } from 'lucide-react';
 import { candidateApi } from '@/lib/candidateApi';
-import type { Candidate, PolishedResumeData } from '@/types/candidate';
+import type { Candidate } from '@/types/candidate';
 import { PolishedResumeEditor } from './PolishedResumeEditor';
 import { ResumeViewer } from './ResumeViewer';
 import { toast } from 'sonner';
@@ -57,7 +55,7 @@ export function ResumeComparisonSection({
   // Regenerate mutation
   const regenerateMutation = useMutation({
     mutationFn: () => candidateApi.regeneratePolishedResume(candidate.id),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['polishedResume', candidate.id] });
       queryClient.invalidateQueries({ queryKey: ['candidate', candidate.id] });
       toast.success('Resume polished successfully');
