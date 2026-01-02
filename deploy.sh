@@ -201,6 +201,7 @@ recreate_nginx() {
 ssl_init() {
     DOMAIN=${2:-"blacklight.sivaganesh.in"}
     EMAIL=${3:-""}
+    INCLUDE_WWW=${4:-""}
     
     log_info "Initializing SSL certificates for $DOMAIN..."
     
@@ -222,12 +223,18 @@ ssl_init() {
         log_warn "No email provided. Using --register-unsafely-without-email"
     fi
     
+    # Build domain arguments
+    DOMAIN_ARGS="-d $DOMAIN"
+    if [ "$INCLUDE_WWW" = "--with-www" ]; then
+        DOMAIN_ARGS="-d $DOMAIN -d www.$DOMAIN"
+        log_info "Including www.$DOMAIN in certificate"
+    fi
+    
     log_info "Requesting certificate from Let's Encrypt..."
     docker compose -f $COMPOSE_FILE run --rm certbot certonly \
         --webroot \
         -w /var/www/certbot \
-        -d $DOMAIN \
-        -d www.$DOMAIN \
+        $DOMAIN_ARGS \
         $EMAIL_ARG \
         --agree-tos \
         --no-eff-email \
@@ -280,6 +287,7 @@ ssl_status() {
 ssl_test() {
     DOMAIN=${2:-"blacklight.sivaganesh.in"}
     EMAIL=${3:-""}
+    INCLUDE_WWW=${4:-""}
     
     log_info "Testing SSL certificate request (dry-run) for $DOMAIN..."
     
@@ -294,11 +302,17 @@ ssl_test() {
         EMAIL_ARG="--register-unsafely-without-email"
     fi
     
+    # Build domain arguments
+    DOMAIN_ARGS="-d $DOMAIN"
+    if [ "$INCLUDE_WWW" = "--with-www" ]; then
+        DOMAIN_ARGS="-d $DOMAIN -d www.$DOMAIN"
+        log_info "Including www.$DOMAIN in certificate"
+    fi
+    
     docker compose -f $COMPOSE_FILE run --rm certbot certonly \
         --webroot \
         -w /var/www/certbot \
-        -d $DOMAIN \
-        -d www.$DOMAIN \
+        $DOMAIN_ARGS \
         $EMAIL_ARG \
         --agree-tos \
         --no-eff-email \
