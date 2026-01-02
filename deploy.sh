@@ -4,15 +4,26 @@
 # =============================================================================
 # Usage: ./deploy.sh [command]
 # Commands:
-#   start     - Build and start all services
-#   stop      - Stop all services
-#   restart   - Restart all services
-#   logs      - View logs
-#   status    - Check service status
-#   migrate   - Run database migrations
-#   seed      - Seed the database
-#   shell     - Open shell in backend container
-#   clean     - Remove all containers and volumes (DESTRUCTIVE!)
+#   start              - Build and start all services
+#   stop               - Stop all services
+#   restart            - Restart all services
+#   logs [service]     - View logs (optionally for specific service)
+#   status             - Check service status
+#   init               - Initialize database (create tables)
+#   migrate            - Run database migrations
+#   seed               - Seed the database
+#   shell              - Open shell in backend container
+#   rebuild-frontend   - Rebuild frontend containers
+#   rebuild-backend    - Rebuild backend container
+#   rebuild            - Rebuild all containers
+#   recreate-nginx     - Recreate nginx (reload config)
+#   create-inngest-db  - Create inngest database
+#   sync-inngest       - Sync Inngest functions
+#   ssl-init           - Obtain SSL certificate from Let's Encrypt
+#   ssl-renew          - Renew SSL certificates
+#   ssl-status         - Check certificate status
+#   ssl-test           - Test certificate request (dry-run)
+#   clean              - Remove all containers and volumes (DESTRUCTIVE!)
 # =============================================================================
 
 set -e
@@ -183,6 +194,123 @@ recreate_nginx() {
     log_info "Nginx container recreated and config reloaded."
 }
 
+# =============================================================================
+# SSL Certificate Management
+# =============================================================================
+
+ssl_init() {
+    DOMAIN=${2:-"blacklight.sivaganesh.in"}
+    EMAIL=${3:-""}
+    
+    log_info "Initializing SSL certificates for $DOMAIN..."
+    
+    # Create certbot directories if they don't exist
+    mkdir -p certbot/www certbot/conf
+    
+    # Check if nginx is running
+    if ! docker compose -f $COMPOSE_FILE ps nginx 2>/dev/null | grep -q "Up"; then
+        log_error "Nginx container is not running. Start services first with './deploy.sh start'"
+        exit 1
+    fi
+    
+    # Build email argument
+    EMAIL_ARG=""
+    if [ -n "$EMAIL" ]; then
+        EMAIL_ARG="--email $EMAIL"
+    else
+        EMAIL_ARG="--register-unsafely-without-email"
+        log_warn "No email provided. Using --register-unsafely-without-email"
+    fi
+    
+    log_info "Requesting certificate from Let's Encrypt..."
+    docker compose -f $COMPOSE_FILE run --rm certbot certonly \
+        --webroot \
+        -w /var/www/certbot \
+        -d $DOMAIN \
+        -d www.$DOMAIN \
+        $EMAIL_ARG \
+        --agree-tos \
+        --no-eff-email \
+        --force-renewal
+    
+    if [ $? -eq 0 ]; then
+        log_info "SSL certificate obtained successfully!"
+        log_info ""
+        log_info "Next steps:"
+        log_info "1. Edit nginx/nginx.conf and uncomment the HTTPS server block"
+        log_info "2. Run: ./deploy.sh recreate-nginx"
+        log_info ""
+        log_info "To auto-renew certificates, add a cron job:"
+        log_info "  0 0 * * 0 cd $(pwd) && ./deploy.sh ssl-renew >> /var/log/certbot-renew.log 2>&1"
+    else
+        log_error "Failed to obtain SSL certificate!"
+        log_info "Make sure:"
+        log_info "  - Your domain points to this server's IP"
+        log_info "  - Port 80 is accessible from the internet"
+        log_info "  - Nginx is running and serving /.well-known/acme-challenge/"
+    fi
+}
+
+ssl_renew() {
+    log_info "Renewing SSL certificates..."
+    
+    docker compose -f $COMPOSE_FILE run --rm certbot renew
+    
+    if [ $? -eq 0 ]; then
+        log_info "Certificate renewal complete. Reloading nginx..."
+        docker compose -f $COMPOSE_FILE exec nginx nginx -s reload
+        log_info "Nginx reloaded with new certificates."
+    else
+        log_warn "Certificate renewal completed with warnings. Check output above."
+    fi
+}
+
+ssl_status() {
+    log_info "Checking SSL certificate status..."
+    
+    if [ ! -d "certbot/conf/live" ]; then
+        log_warn "No certificates found. Run './deploy.sh ssl-init <domain> [email]' first."
+        exit 0
+    fi
+    
+    # List all certificates
+    docker compose -f $COMPOSE_FILE run --rm certbot certificates
+}
+
+ssl_test() {
+    DOMAIN=${2:-"blacklight.sivaganesh.in"}
+    EMAIL=${3:-""}
+    
+    log_info "Testing SSL certificate request (dry-run) for $DOMAIN..."
+    
+    # Create certbot directories if they don't exist
+    mkdir -p certbot/www certbot/conf
+    
+    # Build email argument
+    EMAIL_ARG=""
+    if [ -n "$EMAIL" ]; then
+        EMAIL_ARG="--email $EMAIL"
+    else
+        EMAIL_ARG="--register-unsafely-without-email"
+    fi
+    
+    docker compose -f $COMPOSE_FILE run --rm certbot certonly \
+        --webroot \
+        -w /var/www/certbot \
+        -d $DOMAIN \
+        -d www.$DOMAIN \
+        $EMAIL_ARG \
+        --agree-tos \
+        --no-eff-email \
+        --dry-run
+    
+    if [ $? -eq 0 ]; then
+        log_info "Dry run successful! You can now run './deploy.sh ssl-init $DOMAIN $EMAIL' to obtain real certificates."
+    else
+        log_error "Dry run failed. Check the errors above."
+    fi
+}
+
 create_inngest_db() {
     log_info "Creating inngest database..."
     
@@ -276,6 +404,18 @@ case "$1" in
     recreate-nginx)
         recreate_nginx
         ;;
+    ssl-init)
+        ssl_init "$@"
+        ;;
+    ssl-renew)
+        ssl_renew
+        ;;
+    ssl-status)
+        ssl_status
+        ;;
+    ssl-test)
+        ssl_test "$@"
+        ;;
     *)
         echo "Blacklight Production Deployment Script"
         echo ""
@@ -299,6 +439,18 @@ case "$1" in
         echo "  recreate-nginx     Recreate nginx container (reload config)"
         echo "  clean              Remove all containers and volumes (DESTRUCTIVE!)"
         echo ""
-        echo "Services: db, redis, backend, portal, central"
+        echo "SSL Certificate Commands:"
+        echo "  ssl-init [domain] [email]   Obtain SSL certificate from Let's Encrypt"
+        echo "  ssl-renew                   Renew SSL certificates"
+        echo "  ssl-status                  Check certificate status"
+        echo "  ssl-test [domain] [email]   Test certificate request (dry-run)"
+        echo ""
+        echo "Services: db, redis, backend, portal, central, nginx, inngest"
+        echo ""
+        echo "Examples:"
+        echo "  ./deploy.sh start"
+        echo "  ./deploy.sh logs backend"
+        echo "  ./deploy.sh ssl-test blacklight.sivaganesh.in admin@example.com"
+        echo "  ./deploy.sh ssl-init blacklight.sivaganesh.in admin@example.com"
         ;;
 esac
