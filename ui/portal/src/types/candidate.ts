@@ -34,6 +34,16 @@ export interface WorkExperience {
   duration_months?: number;
 }
 
+export interface PolishedResumeData {
+  markdown_content: string;
+  polished_at: string;
+  polished_by: 'ai' | 'recruiter';
+  ai_model?: string;
+  version: number;
+  last_edited_at?: string | null;
+  last_edited_by_user_id?: number | null;
+}
+
 export interface Candidate {
   id: number;
   tenant_id: number;
@@ -85,6 +95,7 @@ export interface Candidate {
   education: Education[];
   work_experience: WorkExperience[];
   parsed_resume_data?: Record<string, unknown>;
+  polished_resume_data?: PolishedResumeData;
 
   // Metadata
   status: CandidateStatus;

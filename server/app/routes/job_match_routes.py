@@ -843,6 +843,155 @@ def get_match_stats():
         return error_response("Failed to fetch statistics", 500)
 
 
+@job_match_bp.route('/candidates/<int:candidate_id>/job/<int:job_id>', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_match_by_candidate_and_job(candidate_id: int, job_id: int):
+    """
+    Get match data for a specific candidate-job pair.
+    Calculates match score on-the-fly if no stored match exists.
+    
+    GET /api/job-matches/candidates/:candidate_id/job/:job_id
+    
+    Permissions: candidates.view
+    
+    Returns match data including score, grade, and skills analysis.
+    """
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.role_job_mapping import RoleJobMapping
+    
+    try:
+        tenant_id = g.tenant_id
+        
+        # Verify candidate exists and belongs to tenant
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            return error_response(f"Candidate {candidate_id} not found", 404)
+        
+        if candidate.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        # Verify job exists
+        job = db.session.get(JobPosting, job_id)
+        if not job:
+            return error_response(f"Job {job_id} not found", 404)
+        
+        # Check if job is active
+        if job.status != 'ACTIVE':
+            return error_response(f"Job {job_id} is not active", 400)
+        
+        # First check if there's a stored match
+        stored_match_query = select(CandidateJobMatch).where(
+            and_(
+                CandidateJobMatch.candidate_id == candidate_id,
+                CandidateJobMatch.job_posting_id == job_id
+            )
+        )
+        stored_match = db.session.execute(stored_match_query).scalar_one_or_none()
+        
+        if stored_match:
+            # Return stored match with job info
+            return jsonify({
+                'id': stored_match.id,
+                'candidate_id': candidate_id,
+                'job_posting_id': job_id,
+                'match_score': float(stored_match.match_score),
+                'match_grade': stored_match.match_grade,
+                'skill_match_score': float(stored_match.skill_match_score) if stored_match.skill_match_score else 0,
+                'experience_match_score': float(stored_match.experience_match_score) if stored_match.experience_match_score else 0,
+                'semantic_similarity': float(stored_match.semantic_similarity) if stored_match.semantic_similarity else 0,
+                'matched_skills': stored_match.matched_skills or [],
+                'missing_skills': stored_match.missing_skills or [],
+                'status': stored_match.status,
+                'is_recommended': stored_match.is_recommended,
+                'explanation': stored_match.recommendation_reason,
+                'created_at': stored_match.created_at.isoformat() if stored_match.created_at else None,
+                'job_posting': {
+                    'id': job.id,
+                    'title': job.title,
+                    'company': job.company,
+                    'location': job.location,
+                    'salary_range': job.salary_range,
+                    'salary_min': job.salary_min,
+                    'salary_max': job.salary_max,
+                    'job_type': job.job_type,
+                    'is_remote': job.is_remote,
+                    'skills': job.skills or [],
+                    'description': job.description[:500] if job.description else None,
+                    'job_url': job.job_url,
+                    'platform': job.platform,
+                    'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                    'status': job.status,
+                }
+            }), 200
+        
+        # No stored match - calculate on-the-fly
+        # First verify candidate has roles linked to this job
+        global_role_query = select(CandidateGlobalRole.global_role_id).where(
+            CandidateGlobalRole.candidate_id == candidate_id
+        )
+        global_role_ids = [row[0] for row in db.session.execute(global_role_query).all()]
+        
+        if global_role_ids:
+            # Check if job is mapped to candidate's roles
+            job_mapping_query = select(RoleJobMapping.job_posting_id).where(
+                and_(
+                    RoleJobMapping.global_role_id.in_(global_role_ids),
+                    RoleJobMapping.job_posting_id == job_id
+                )
+            )
+            job_mapped = db.session.execute(job_mapping_query).scalar_one_or_none()
+            
+            if not job_mapped:
+                return error_response(
+                    "This job is not matched to the candidate's preferred roles",
+                    400
+                )
+        
+        # Calculate score on-the-fly using unified scorer
+        service = UnifiedScorerService()
+        result = service.calculate_score(candidate, job)
+        
+        return jsonify({
+            'id': None,  # No stored match ID
+            'candidate_id': candidate_id,
+            'job_posting_id': job_id,
+            'match_score': round(result.overall_score, 2),
+            'match_grade': result.match_grade,
+            'skill_match_score': round(result.skill_score, 2),
+            'experience_match_score': round(result.experience_score, 2),
+            'semantic_similarity': round(result.semantic_score, 2),
+            'matched_skills': result.matched_skills,
+            'missing_skills': result.missing_skills,
+            'status': 'SUGGESTED',
+            'is_recommended': True,
+            'explanation': None,
+            'created_at': None,
+            'job_posting': {
+                'id': job.id,
+                'title': job.title,
+                'company': job.company,
+                'location': job.location,
+                'salary_range': job.salary_range,
+                'salary_min': job.salary_min,
+                'salary_max': job.salary_max,
+                'job_type': job.job_type,
+                'is_remote': job.is_remote,
+                'skills': job.skills or [],
+                'description': job.description[:500] if job.description else None,
+                'job_url': job.job_url,
+                'platform': job.platform,
+                'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                'status': job.status,
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching match for candidate {candidate_id}, job {job_id}: {str(e)}")
+        return error_response("Failed to fetch match data", 500)
+
+
 @job_match_bp.route('/<int:match_id>/ai-analysis', methods=['POST'])
 @require_portal_auth
 @with_tenant_context

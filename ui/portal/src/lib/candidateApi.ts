@@ -12,6 +12,7 @@ import type {
   CandidateFilters,
   UploadResumeResponse,
   CandidateStats,
+  PolishedResumeData,
 } from '@/types/candidate';
 
 export const candidateApi = {
@@ -176,6 +177,43 @@ export const candidateApi = {
     const url = ttl ? `/api/candidates/${id}/resume-url?ttl=${ttl}` : `/api/candidates/${id}/resume-url`;
     const resp = await apiRequest.get<{ signed_url: string }>(url);
     return resp.signed_url;
+  },
+
+  // ==================== Polished Resume APIs ====================
+
+  /**
+   * Get the polished resume data for a candidate
+   */
+  getPolishedResume: async (id: number): Promise<{
+    has_polished_resume: boolean;
+    polished_resume_data: PolishedResumeData | null;
+    candidate_id: number;
+  }> => {
+    return apiRequest.get(`/api/candidates/${id}/polished-resume`);
+  },
+
+  /**
+   * Update the polished resume markdown (recruiter edit)
+   */
+  updatePolishedResume: async (id: number, markdownContent: string): Promise<{
+    message: string;
+    polished_resume_data: PolishedResumeData;
+    candidate_id: number;
+  }> => {
+    return apiRequest.put(`/api/candidates/${id}/polished-resume`, {
+      markdown_content: markdownContent
+    });
+  },
+
+  /**
+   * Regenerate the polished resume using AI
+   */
+  regeneratePolishedResume: async (id: number): Promise<{
+    message: string;
+    polished_resume_data: PolishedResumeData;
+    candidate_id: number;
+  }> => {
+    return apiRequest.post(`/api/candidates/${id}/polished-resume/regenerate`);
   },
 };
 

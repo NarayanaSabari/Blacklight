@@ -142,6 +142,19 @@ class Candidate(BaseModel):
     # Full parsed resume data (raw output from parser)
     parsed_resume_data = db.Column(JSONB)
 
+    # AI-Polished Resume Data (formatted markdown with metadata)
+    # Structure:
+    # {
+    #     "markdown_content": "# John Doe\n\n## Professional Summary\n...",
+    #     "polished_at": "2026-01-02T10:30:00Z",
+    #     "polished_by": "ai",  // "ai" | "recruiter"
+    #     "ai_model": "gemini-2.5-flash",
+    #     "version": 1,
+    #     "last_edited_at": null,
+    #     "last_edited_by_user_id": null
+    # }
+    polished_resume_data = db.Column(JSONB)
+
     # AI-Suggested Roles (NEW)
     suggested_roles = db.Column(JSONB)  # AI-generated role suggestions
     # Example: {
@@ -239,6 +252,7 @@ class Candidate(BaseModel):
             "education": self.education,
             "work_experience": self.work_experience,
             "parsed_resume_data": self.parsed_resume_data,
+            "polished_resume_data": self.polished_resume_data,
             # Role preferences (NEW)
             "preferred_roles": self.preferred_roles if self.preferred_roles else [],
             "suggested_roles": self.suggested_roles,
@@ -315,3 +329,52 @@ class Candidate(BaseModel):
                 }
 
         return result
+
+    # Helper methods for polished resume data
+    @property
+    def polished_resume_markdown(self) -> str:
+        """Get the polished resume markdown content."""
+        if self.polished_resume_data:
+            return self.polished_resume_data.get("markdown_content", "")
+        return ""
+
+    @property
+    def has_polished_resume(self) -> bool:
+        """Check if candidate has a polished resume."""
+        return bool(
+            self.polished_resume_data
+            and self.polished_resume_data.get("markdown_content")
+        )
+
+    def set_polished_resume(
+        self,
+        markdown_content: str,
+        polished_by: str = "ai",
+        ai_model: str = None,
+        user_id: int = None,
+    ) -> None:
+        """
+        Set or update the polished resume data.
+
+        Args:
+            markdown_content: The polished markdown content
+            polished_by: Who polished it ("ai" or "recruiter")
+            ai_model: AI model used (if polished by AI)
+            user_id: User ID (if edited by recruiter)
+        """
+        current_version = 1
+        if self.polished_resume_data:
+            current_version = self.polished_resume_data.get("version", 0) + 1
+
+        now = datetime.utcnow().isoformat() + "Z"
+
+        self.polished_resume_data = {
+            "markdown_content": markdown_content,
+            "polished_at": now if polished_by == "ai" else self.polished_resume_data.get("polished_at") if self.polished_resume_data else now,
+            "polished_by": "ai" if polished_by == "ai" else self.polished_resume_data.get("polished_by", "ai") if self.polished_resume_data else polished_by,
+            "ai_model": ai_model or (self.polished_resume_data.get("ai_model") if self.polished_resume_data else None),
+            "version": current_version,
+            "last_edited_at": now if polished_by == "recruiter" else None,
+            "last_edited_by_user_id": user_id if polished_by == "recruiter" else None,
+        }
+

@@ -41,6 +41,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { jobPostingApi } from '@/lib/jobPostingApi';
+import { jobMatchApi } from '@/lib/jobMatchApi';
 import { submissionApi } from '@/lib/submissionApi';
 import { candidateApi } from '@/lib/candidateApi';
 import { SubmissionDialog } from '@/components/SubmissionDialog';
@@ -56,7 +57,7 @@ export function JobDetailPage() {
   const [isSubmissionDialogOpen, setIsSubmissionDialogOpen] = useState(false);
   
   // Get match data from navigation state if coming from matches page
-  const matchData = location.state?.match as JobMatch | undefined;
+  const matchDataFromState = location.state?.match as JobMatch | undefined;
   
   const jobIdNum = parseInt(jobId || '0', 10);
   const candidateIdNum = candidateId ? parseInt(candidateId, 10) : undefined;
@@ -74,6 +75,18 @@ export function JobDetailPage() {
     queryFn: () => jobPostingApi.getJobPosting(jobIdNum),
     enabled: !!jobIdNum,
   });
+
+  // Fetch match data from API if not passed via navigation state
+  // This enables the tailor button to show when directly visiting the page via URL
+  const { data: fetchedMatchData } = useQuery({
+    queryKey: ['jobMatch', candidateIdNum, jobIdNum],
+    queryFn: () => jobMatchApi.getMatchByCandidateAndJob(candidateIdNum!, jobIdNum),
+    enabled: !!candidateIdNum && !!jobIdNum && !matchDataFromState,
+    retry: false, // Don't retry if job is not matched to candidate's roles
+  });
+
+  // Use match data from navigation state if available, otherwise use fetched data
+  const matchData = matchDataFromState || fetchedMatchData;
 
   // Fetch candidate details if we have a candidateId
   const { data: candidate } = useQuery({
@@ -145,7 +158,10 @@ export function JobDetailPage() {
       return;
     }
     // Build the tailor page URL and open in new tab
-    const tailorPath = `/candidate/jobs/${candidateIdNum}/job/${jobIdNum}/tailor/${matchData.id}`;
+    // If matchData.id is null (on-the-fly match), use job ID as the match ID parameter
+    // The ResumeTailorPage will handle this case by using candidateId + jobId directly
+    const matchIdForUrl = matchData.id ?? `job-${jobIdNum}`;
+    const tailorPath = `/candidate/jobs/${candidateIdNum}/job/${jobIdNum}/tailor/${matchIdForUrl}`;
     const fullUrl = `${window.location.origin}${env.basePath}${tailorPath}`;
     window.open(fullUrl, '_blank');
   };

@@ -20,6 +20,8 @@ from app.schemas.candidate_schema import (
     UploadResumeResponseSchema,
     ReparseResumeResponseSchema,
     CandidateStatsSchema,
+    PolishedResumeResponseSchema,
+    PolishedResumeUpdateSchema,
 )
 from app.middleware.portal_auth import require_portal_auth, require_permission
 from app.middleware.tenant_context import with_tenant_context
@@ -1348,3 +1350,188 @@ def get_candidate_job_matches(candidate_id: int):
     except Exception as e:
         logger.error(f"Error fetching job matches for candidate {candidate_id}: {str(e)}")
         return error_response("Failed to fetch job matches", 500)
+
+
+# ==================== Polished Resume Endpoints ====================
+
+@candidate_bp.route('/<int:candidate_id>/polished-resume', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def get_polished_resume(candidate_id: int):
+    """
+    Get the polished resume data for a candidate.
+    
+    Returns the AI-polished markdown resume with metadata.
+    
+    Returns:
+        {
+            "has_polished_resume": true,
+            "polished_resume_data": {
+                "markdown_content": "# John Doe\n...",
+                "polished_at": "2026-01-02T10:30:00Z",
+                "polished_by": "ai",
+                "ai_model": "gemini-2.5-flash",
+                "version": 1,
+                "last_edited_at": null,
+                "last_edited_by_user_id": null
+            }
+        }
+    
+    Permissions: candidates.view
+    """
+    try:
+        tenant_id = g.tenant_id
+        
+        candidate = candidate_service.get_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            return error_response("Candidate not found", 404)
+        
+        return jsonify({
+            'has_polished_resume': candidate.has_polished_resume,
+            'polished_resume_data': candidate.polished_resume_data,
+            'candidate_id': candidate_id
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting polished resume for candidate {candidate_id}: {e}", exc_info=True)
+        return error_response(f"Failed to get polished resume: {str(e)}", 500)
+
+
+@candidate_bp.route('/<int:candidate_id>/polished-resume', methods=['PUT'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.edit')
+def update_polished_resume(candidate_id: int):
+    """
+    Update the polished resume markdown (recruiter edit).
+    
+    Allows recruiters to manually edit the AI-polished markdown.
+    
+    Request Body:
+        {
+            "markdown_content": "# Updated Resume\n..."
+        }
+    
+    Returns: Updated polished resume data
+    
+    Permissions: candidates.edit
+    """
+    try:
+        tenant_id = g.tenant_id
+        user_id = g.user_id
+        
+        # Validate request
+        data = request.get_json()
+        if not data or 'markdown_content' not in data:
+            return error_response("markdown_content is required", 400)
+        
+        markdown_content = data['markdown_content']
+        
+        if not markdown_content or not markdown_content.strip():
+            return error_response("markdown_content cannot be empty", 400)
+        
+        # Get candidate
+        from sqlalchemy import select
+        stmt = select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.tenant_id == tenant_id
+        )
+        candidate = db.session.scalar(stmt)
+        
+        if not candidate:
+            return error_response("Candidate not found", 404)
+        
+        # Update using the helper method
+        candidate.set_polished_resume(
+            markdown_content=markdown_content.strip(),
+            polished_by="recruiter",
+            user_id=user_id
+        )
+        
+        db.session.commit()
+        
+        logger.info(f"Polished resume updated for candidate {candidate_id} by user {user_id}")
+        
+        return jsonify({
+            'message': 'Polished resume updated successfully',
+            'polished_resume_data': candidate.polished_resume_data,
+            'candidate_id': candidate_id
+        }), 200
+        
+    except ValidationError as e:
+        return error_response(f"Validation error: {str(e)}", 400)
+    except Exception as e:
+        logger.error(f"Error updating polished resume for candidate {candidate_id}: {e}", exc_info=True)
+        return error_response(f"Failed to update polished resume: {str(e)}", 500)
+
+
+@candidate_bp.route('/<int:candidate_id>/polished-resume/regenerate', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.edit')
+def regenerate_polished_resume(candidate_id: int):
+    """
+    Regenerate the polished resume using AI.
+    
+    Re-runs the AI polishing on the parsed_resume_data to create a fresh
+    polished version. Useful if the parsed data was updated or the recruiter
+    wants to reset to the AI-generated version.
+    
+    Returns: Newly polished resume data
+    
+    Permissions: candidates.edit
+    """
+    try:
+        tenant_id = g.tenant_id
+        
+        # Get candidate
+        from sqlalchemy import select
+        stmt = select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.tenant_id == tenant_id
+        )
+        candidate = db.session.scalar(stmt)
+        
+        if not candidate:
+            return error_response("Candidate not found", 404)
+        
+        # Check if there's parsed data to polish
+        if not candidate.parsed_resume_data:
+            return error_response(
+                "No parsed resume data available. Please upload and parse a resume first.",
+                400
+            )
+        
+        # Get candidate name
+        candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
+        
+        # Run the polishing service
+        from app.services.resume_polishing_service import ResumePolishingService
+        
+        try:
+            service = ResumePolishingService()
+            polished_data = service.polish_resume(
+                parsed_data=candidate.parsed_resume_data,
+                candidate_name=candidate_name
+            )
+        except Exception as polish_error:
+            logger.error(f"AI polishing failed for candidate {candidate_id}: {polish_error}")
+            return error_response(f"AI polishing failed: {str(polish_error)}", 500)
+        
+        # Update candidate
+        candidate.polished_resume_data = polished_data
+        db.session.commit()
+        
+        logger.info(f"Polished resume regenerated for candidate {candidate_id}")
+        
+        return jsonify({
+            'message': 'Polished resume regenerated successfully',
+            'polished_resume_data': candidate.polished_resume_data,
+            'candidate_id': candidate_id
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error regenerating polished resume for candidate {candidate_id}: {e}", exc_info=True)
+        return error_response(f"Failed to regenerate polished resume: {str(e)}", 500)

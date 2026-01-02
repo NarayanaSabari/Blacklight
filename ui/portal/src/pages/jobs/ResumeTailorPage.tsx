@@ -350,7 +350,7 @@ function ProcessingSteps({ currentStep, progress }: { currentStep: number; progr
 // Main Page Component
 // ============================================================================
 export function ResumeTailorPage() {
-  const { candidateId, matchId } = useParams<{ candidateId: string; matchId: string }>();
+  const { candidateId, jobId, matchId } = useParams<{ candidateId: string; jobId: string; matchId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -364,18 +364,33 @@ export function ResumeTailorPage() {
   const [error, setError] = useState<string | null>(null);
   
   const candidateIdNum = parseInt(candidateId || '0', 10);
-  const matchIdNum = parseInt(matchId || '0', 10);
+  const jobIdNum = parseInt(jobId || '0', 10);
+  // Check if this is an on-the-fly match (matchId starts with "job-")
+  const isOnTheFlyMatch = matchId?.startsWith('job-') ?? false;
+  const matchIdNum = isOnTheFlyMatch ? 0 : parseInt(matchId || '0', 10);
   const existingTailorId = searchParams.get('tailorId');
 
-  // Fetch match data
-  const { data: matchData, isLoading: matchLoading } = useQuery({
+  // Fetch match data - for stored matches
+  const { data: storedMatchData, isLoading: matchLoading } = useQuery({
     queryKey: ['jobMatch', matchIdNum],
     queryFn: async () => {
       const matches = await jobMatchApi.getCandidateMatches(candidateIdNum, { page: 1, per_page: 100 });
       return matches.matches.find(m => m.id === matchIdNum);
     },
-    enabled: !!matchIdNum && !!candidateIdNum,
+    enabled: !!matchIdNum && !!candidateIdNum && !isOnTheFlyMatch,
   });
+
+  // Fetch match data for on-the-fly matches using candidateId + jobId
+  const { data: onTheFlyMatchData, isLoading: onTheFlyMatchLoading } = useQuery({
+    queryKey: ['jobMatchOnTheFly', candidateIdNum, jobIdNum],
+    queryFn: () => jobMatchApi.getMatchByCandidateAndJob(candidateIdNum, jobIdNum),
+    enabled: !!candidateIdNum && !!jobIdNum && isOnTheFlyMatch,
+    retry: false,
+  });
+
+  // Use the appropriate match data
+  const matchData = isOnTheFlyMatch ? onTheFlyMatchData : storedMatchData;
+  const isMatchLoading = isOnTheFlyMatch ? onTheFlyMatchLoading : matchLoading;
 
   // Fetch candidate data
   const { data: candidate } = useQuery({
@@ -399,9 +414,17 @@ export function ResumeTailorPage() {
     }
   }, [existingTailored, tailoredResume]);
 
-  // Tailor mutation
+  // Tailor mutation - uses different API based on whether it's a stored match or on-the-fly
   const tailorMutation = useMutation({
-    mutationFn: () => resumeTailorApi.tailorFromMatch(matchIdNum),
+    mutationFn: () => {
+      if (isOnTheFlyMatch) {
+        // For on-the-fly matches, use candidateId + jobId directly
+        return resumeTailorApi.tailorResume(candidateIdNum, jobIdNum);
+      } else {
+        // For stored matches, use the match ID
+        return resumeTailorApi.tailorFromMatch(matchIdNum);
+      }
+    },
     onSuccess: (data: TailoredResume | { tailored_resume: TailoredResume }) => {
       const result = 'tailored_resume' in data ? data.tailored_resume : data;
       setTailoredResume(result);
@@ -463,7 +486,7 @@ export function ResumeTailorPage() {
 
   const job = matchData?.job || matchData?.job_posting;
 
-  if (matchLoading || existingLoading) {
+  if (isMatchLoading || existingLoading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <Skeleton className="h-8 w-32 mb-6" />

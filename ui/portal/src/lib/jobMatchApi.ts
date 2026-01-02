@@ -51,6 +51,14 @@ export const jobMatchApi = {
   },
 
   /**
+   * Get match data for a specific candidate-job pair
+   * Calculates match score on-the-fly if no stored match exists
+   */
+  getMatchByCandidateAndJob: async (candidateId: number, jobId: number): Promise<JobMatch> => {
+    return apiRequest.get<JobMatch>(`/api/job-matches/candidates/${candidateId}/job/${jobId}`);
+  },
+
+  /**
    * Generate matches for a candidate
    */
   generateMatches: async (

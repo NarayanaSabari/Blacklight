@@ -4,7 +4,7 @@ Handles async resume parsing after upload
 """
 import logging
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import inngest
 from app.inngest import inngest_client
@@ -12,6 +12,7 @@ from app.inngest import inngest_client
 from app import db
 from app.models.candidate import Candidate
 from app.services.resume_parser import ResumeParserService
+from app.services.resume_polishing_service import ResumePolishingService
 from app.utils.text_extractor import TextExtractor  # FIXED: correct import path
 from app.services.file_storage import FileStorageService
 
@@ -114,10 +115,34 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
             lambda: _parse_with_ai(resume_text, local_path)
         )
         
-        # Step 4 & 5: Update candidate (direct - simple DB operations)
+        # Step 4: Update candidate with parsed data (direct - simple DB operations)
         if parsed_data:
             _update_candidate_with_parsed_data(candidate_id, parsed_data)
         
+        # Step 5: Polish resume - convert parsed data to formatted markdown
+        # This runs after parsing so we have data to polish
+        polished_data = None
+        if parsed_data:
+            try:
+                # Fetch fresh candidate for name
+                fresh_candidate = _fetch_candidate(candidate_id, tenant_id)
+                candidate_name = None
+                if fresh_candidate:
+                    candidate_name = fresh_candidate.full_name or f"{fresh_candidate.first_name} {fresh_candidate.last_name}".strip()
+                
+                polished_data = await ctx.step.run(
+                    "ai-polish-resume",
+                    lambda: _polish_resume(parsed_data, candidate_name)
+                )
+                
+                if polished_data:
+                    _update_candidate_with_polished_data(candidate_id, polished_data)
+                    logger.info(f"[PARSE-RESUME] Successfully polished resume for candidate {candidate_id}")
+            except Exception as polish_error:
+                # Log but don't fail - polishing is non-critical
+                logger.warning(f"[PARSE-RESUME] Resume polishing failed for candidate {candidate_id}: {polish_error}")
+        
+        # Step 6: Update status to pending_review
         _update_candidate_status(candidate_id, "pending_review", parsed_data)
         
         logger.info(f"[PARSE-RESUME] Successfully parsed resume for candidate {candidate_id}, status: pending_review")
@@ -125,7 +150,8 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
         return {
             "status": "success",
             "candidate_id": candidate_id,
-            "has_data": bool(parsed_data)
+            "has_data": bool(parsed_data),
+            "has_polished_data": bool(polished_data)
         }
     
     except Exception as e:
@@ -287,4 +313,51 @@ def _update_candidate_status(candidate_id: int, status: str, parsed_data: Dict[s
     candidate.status = status
     db.session.commit()
     logger.info(f"[PARSE-RESUME] Updated candidate {candidate_id} status to '{status}'")
+    return True
+
+
+def _polish_resume(parsed_data: Dict[str, Any], candidate_name: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Polish parsed resume data into formatted markdown.
+    
+    Args:
+        parsed_data: Raw parsed resume data from AI parser
+        candidate_name: Optional candidate name override
+        
+    Returns:
+        Polished resume data dict with markdown_content and metadata
+    """
+    try:
+        service = ResumePolishingService()
+        polished_data = service.polish_resume(parsed_data, candidate_name)
+        logger.info(f"[PARSE-RESUME] Resume polished successfully")
+        return polished_data
+    except Exception as e:
+        logger.error(f"[PARSE-RESUME] Resume polishing failed: {e}")
+        return {}
+
+
+def _update_candidate_with_polished_data(candidate_id: int, polished_data: Dict[str, Any]) -> bool:
+    """
+    Update candidate with polished resume data.
+    
+    Args:
+        candidate_id: Candidate ID
+        polished_data: Polished resume data from ResumePolishingService
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    from sqlalchemy import select
+    
+    stmt = select(Candidate).where(Candidate.id == candidate_id)
+    candidate = db.session.scalar(stmt)
+    
+    if not candidate:
+        logger.warning(f"[PARSE-RESUME] Candidate {candidate_id} not found for polished data update")
+        return False
+    
+    candidate.polished_resume_data = polished_data
+    db.session.commit()
+    logger.info(f"[PARSE-RESUME] Updated candidate {candidate_id} with polished resume data")
     return True

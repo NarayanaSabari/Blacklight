@@ -761,7 +761,20 @@ class ResumeTailorOrchestrator:
         return "\n".join(parts)
     
     def _get_resume_markdown(self, candidate: Candidate) -> str:
-        """Get resume as markdown format."""
+        """
+        Get resume as markdown format.
+        
+        Priority order:
+        1. Polished resume markdown (AI-formatted or recruiter-edited)
+        2. Parsed resume data converted to markdown
+        3. Basic candidate fields
+        """
+        # Priority 1: Use polished resume if available
+        if candidate.has_polished_resume:
+            logger.info(f"Using polished resume markdown for candidate {candidate.id}")
+            return candidate.polished_resume_markdown
+        
+        # Priority 2: Use parsed resume data
         if candidate.parsed_resume_data:
             # Ensure candidate contact info is in parsed data
             parsed_data = dict(candidate.parsed_resume_data)

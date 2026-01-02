@@ -192,6 +192,7 @@ class CandidateResponseSchema(BaseModel):
     education: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     work_experience: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     parsed_resume_data: Optional[Dict[str, Any]] = None
+    polished_resume_data: Optional[Dict[str, Any]] = None
     suggested_roles: Optional[Dict[str, Any]] = None
     
     # Metadata
@@ -290,3 +291,50 @@ class CandidateStatsSchema(BaseModel):
     recent_uploads: int  # Last 7 days
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==================== Polished Resume Schemas ====================
+
+class PolishedResumeDataSchema(BaseModel):
+    """Schema for polished resume data structure"""
+    
+    markdown_content: str = Field(..., description="The polished markdown content")
+    polished_at: Optional[str] = Field(None, description="ISO timestamp when polished")
+    polished_by: str = Field(default="ai", description="Who polished: 'ai' or 'recruiter'")
+    ai_model: Optional[str] = Field(None, description="AI model used for polishing")
+    version: int = Field(default=1, description="Version number")
+    last_edited_at: Optional[str] = Field(None, description="ISO timestamp of last edit")
+    last_edited_by_user_id: Optional[int] = Field(None, description="User ID who last edited")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolishedResumeResponseSchema(BaseModel):
+    """Schema for polished resume GET response"""
+    
+    candidate_id: int
+    has_polished_resume: bool
+    polished_resume_data: Optional[PolishedResumeDataSchema] = None
+    
+    # Metadata for display
+    candidate_name: Optional[str] = None
+    resume_file_key: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolishedResumeUpdateSchema(BaseModel):
+    """Schema for updating polished resume (recruiter edit)"""
+    
+    markdown_content: str = Field(..., min_length=1, description="Updated markdown content")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolishedResumeRegenerateSchema(BaseModel):
+    """Schema for regenerating polished resume"""
+    
+    force: bool = Field(default=False, description="Force regenerate even if exists")
+    
+    model_config = ConfigDict(from_attributes=True)
+

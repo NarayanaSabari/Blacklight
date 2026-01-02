@@ -94,6 +94,7 @@ import type { DocumentType } from '@/types/document';
 import { TagInput } from '@/components/ui/tag-input';
 import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
 import { EducationEditor } from '@/components/candidates/EducationEditor';
+import { ResumeComparisonSection } from '@/components/candidates/ResumeComparisonSection';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -1268,6 +1269,14 @@ export function CandidateDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Resume Comparison Section - Polished vs Original */}
+          {candidate && (candidate.resume_file_key || candidate.parsed_resume_data) && (
+            <ResumeComparisonSection
+              candidate={candidate}
+              resumeUrl={signedResumeUrl}
+            />
+          )}
         </div>
 
         {/* Right Column - Sidebar */}
