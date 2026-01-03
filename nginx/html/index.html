@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blacklight - HR Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e4e4e7;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            color: #a1a1aa;
+        }
+        
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .service-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s ease;
+            display: block;
+        }
+        
+        .service-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(96, 165, 250, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .service-card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #f4f4f5;
+        }
+        
+        .service-card p {
+            font-size: 0.9rem;
+            color: #a1a1aa;
+            line-height: 1.5;
+        }
+        
+        .service-card .path {
+            display: inline-block;
+            margin-top: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            background: rgba(96, 165, 250, 0.15);
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: monospace;
+            color: #60a5fa;
+        }
+        
+        .admin-section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .admin-section h3 {
+            font-size: 0.9rem;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .admin-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 1rem;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .admin-card:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(167, 139, 250, 0.5);
+        }
+        
+        .admin-card h4 {
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            color: #d4d4d8;
+        }
+        
+        .admin-card p {
+            font-size: 0.8rem;
+            color: #71717a;
+        }
+        
+        .admin-card .path {
+            display: inline-block;
+            margin-top: 0.5rem;
+            padding: 0.2rem 0.5rem;
+            background: rgba(167, 139, 250, 0.15);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: #a78bfa;
+        }
+        
+        .note {
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: #f59e0b;
+        }
+        
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.85rem;
+            color: #52525b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Blacklight</h1>
+            <p class="subtitle">Multi-Tenant HR & Recruiting Platform</p>
+        </header>
+        
+        <div class="services-grid">
+            <a href="/portal/" class="service-card">
+                <h2>HR Portal</h2>
+                <p>Access the recruiter and hiring manager portal. Manage candidates, jobs, and recruiting workflows.</p>
+                <span class="path">/portal/</span>
+            </a>
+            
+            <a href="/central/" class="service-card">
+                <h2>Central Dashboard</h2>
+                <p>PM Admin dashboard for managing tenants, users, and system-wide configurations.</p>
+                <span class="path">/central/</span>
+            </a>
+        </div>
+        
+        <div class="admin-section">
+            <h3>Administration & Monitoring</h3>
+            <div class="admin-grid">
+                <a href="/api/health" class="admin-card">
+                    <h4>API Health</h4>
+                    <p>Backend health check</p>
+                    <span class="path">/api/health</span>
+                </a>
+                
+                <a href="/portainer/" class="admin-card">
+                    <h4>Portainer</h4>
+                    <p>Docker container management</p>
+                    <span class="path">/portainer/</span>
+                    <p class="note">If issues, try <a href="https://blacklight.sivaganesh.in:9443" target="_blank" style="color: #60a5fa;">:9443</a></p>
+                </a>
+                
+                <a href="http://blacklight.sivaganesh.in:8288" class="admin-card" target="_blank">
+                    <h4>Inngest</h4>
+                    <p>Background job dashboard</p>
+                    <span class="path">:8288</span>
+                    <p class="note">Opens in new tab - direct port access required</p>
+                </a>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Blacklight Platform v1.0</p>
+        </footer>
+    </div>
+</body>
+</html>
