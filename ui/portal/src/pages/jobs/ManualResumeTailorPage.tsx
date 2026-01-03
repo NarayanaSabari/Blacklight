@@ -59,8 +59,15 @@ import {
 } from '@/components/ui/select';
 
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
-import { candidateApi } from '@/lib/candidateApi';
+import { apiRequest } from '@/lib/api-client';
 import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
+import type { CandidateInfo } from '@/types';
+
+// Extended candidate info with optional fields that may be returned
+interface CandidateWithDetails extends CandidateInfo {
+  current_title?: string;
+  skills?: string[];
+}
 
 // ============================================================================
 // Markdown Renderer Component (reused from ResumeTailorPage)
@@ -374,19 +381,30 @@ export function ManualResumeTailorPage() {
   const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch candidates list
+  // Fetch recruiter's assigned candidates (same pattern as TeamJobsPage)
   const { data: candidatesData, isLoading: candidatesLoading } = useQuery({
-    queryKey: ['candidates', candidateSearch],
-    queryFn: () => candidateApi.listCandidates({ 
-      search: candidateSearch || undefined,
-      per_page: 50,
-      status: 'onboarded'
-    }),
-    staleTime: 30000,
+    queryKey: ['my-own-candidates'],
+    queryFn: async () => {
+      return apiRequest.get<{ candidates: CandidateWithDetails[]; total: number }>(
+        '/api/candidates/assignments/my-candidates'
+      );
+    },
   });
 
-  const candidates = candidatesData?.candidates || [];
-  const selectedCandidate = candidates.find(c => c.id === selectedCandidateId);
+  const allCandidates = candidatesData?.candidates || [];
+  
+  // Filter candidates locally based on search
+  const candidates = useMemo(() => {
+    if (!candidateSearch.trim()) return allCandidates;
+    const search = candidateSearch.toLowerCase();
+    return allCandidates.filter(c => 
+      `${c.first_name} ${c.last_name}`.toLowerCase().includes(search) ||
+      c.email?.toLowerCase().includes(search) ||
+      c.current_title?.toLowerCase().includes(search)
+    );
+  }, [allCandidates, candidateSearch]);
+  
+  const selectedCandidate = allCandidates.find(c => c.id === selectedCandidateId);
 
   // Tailor mutation
   const tailorMutation = useMutation({
