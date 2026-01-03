@@ -462,7 +462,9 @@ export function TeamJobsPage() {
                 </Badge>
                 {job.sourced_by && (
                   <span className="text-xs text-muted-foreground truncate">
-                    via {job.sourced_by.first_name} {job.sourced_by.last_name}
+                    via {job.sourced_by.first_name || job.sourced_by.last_name 
+                      ? `${job.sourced_by.first_name || ''} ${job.sourced_by.last_name || ''}`.trim()
+                      : job.sourced_by.email}
                   </span>
                 )}
                 {!job.sourced_by && job.source_email_sender && (
