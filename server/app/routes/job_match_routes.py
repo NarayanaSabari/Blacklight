@@ -909,9 +909,6 @@ def get_match_by_candidate_and_job(candidate_id: int, job_id: int):
     
     Returns match data including score, grade, and skills analysis.
     """
-    from app.models.candidate_global_role import CandidateGlobalRole
-    from app.models.role_job_mapping import RoleJobMapping
-    
     try:
         tenant_id = g.tenant_id
         
@@ -978,27 +975,8 @@ def get_match_by_candidate_and_job(candidate_id: int, job_id: int):
             }), 200
         
         # No stored match - calculate on-the-fly
-        # First verify candidate has roles linked to this job
-        global_role_query = select(CandidateGlobalRole.global_role_id).where(
-            CandidateGlobalRole.candidate_id == candidate_id
-        )
-        global_role_ids = [row[0] for row in db.session.execute(global_role_query).all()]
-        
-        if global_role_ids:
-            # Check if job is mapped to candidate's roles
-            job_mapping_query = select(RoleJobMapping.job_posting_id).where(
-                and_(
-                    RoleJobMapping.global_role_id.in_(global_role_ids),
-                    RoleJobMapping.job_posting_id == job_id
-                )
-            )
-            job_mapped = db.session.execute(job_mapping_query).scalar_one_or_none()
-            
-            if not job_mapped:
-                return error_response(
-                    "This job is not matched to the candidate's preferred roles",
-                    400
-                )
+        # We allow calculating match scores for any candidate-job pair
+        # The frontend already filters which jobs are shown to the user
         
         # Calculate score on-the-fly using unified scorer
         service = UnifiedScorerService()
