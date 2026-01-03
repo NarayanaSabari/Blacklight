@@ -4,7 +4,7 @@ API endpoints for AI-powered job matching and recommendations.
 """
 import logging
 from flask import Blueprint, request, jsonify, g
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 
 from app import db
 from app.models.candidate import Candidate
@@ -433,10 +433,19 @@ def get_candidate_matches(candidate_id: int):
                 }
             }), 200
         
-        # Fetch ACTIVE jobs
+        # Fetch ACTIVE jobs with email job visibility rules:
+        # - Scraped jobs (is_email_sourced=False): visible to all tenants
+        # - Email jobs (is_email_sourced=True): only visible to source tenant
         job_query = select(JobPosting).where(
             JobPosting.id.in_(job_ids),
-            JobPosting.status == 'ACTIVE'
+            JobPosting.status == 'ACTIVE',
+            or_(
+                JobPosting.is_email_sourced == False,
+                and_(
+                    JobPosting.is_email_sourced == True,
+                    JobPosting.source_tenant_id == tenant_id
+                )
+            )
         )
         all_jobs = db.session.execute(job_query).scalars().all()
         

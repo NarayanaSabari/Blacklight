@@ -36,6 +36,17 @@ export interface JobPosting {
   source_email_subject?: string | null;
   source_email_sender?: string | null;
   source_email_date?: string | null;
+  // Populated sourced_by info (from API response)
+  sourced_by?: {
+    id: number;
+    name: string;
+    email: string;
+  } | null;
+  additional_source_users?: Array<{
+    user_id: number;
+    email_id: string;
+    received_at: string;
+  }>;
 }
 
 export interface JobMatch {

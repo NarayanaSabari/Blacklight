@@ -30,6 +30,8 @@ import {
   Sparkles,
   Mail,
   Send,
+  User,
+  Database,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -40,7 +42,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { jobPostingApi } from '@/lib/jobPostingApi';
+import { jobPostingApi, type JobPostingWithSource } from '@/lib/jobPostingApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { submissionApi } from '@/lib/submissionApi';
 import { candidateApi } from '@/lib/candidateApi';
@@ -62,8 +64,10 @@ export function JobDetailPage() {
   const jobIdNum = parseInt(jobId || '0', 10);
   const candidateIdNum = candidateId ? parseInt(candidateId, 10) : undefined;
   
-  // Determine if coming from email-jobs page
+  // Determine if coming from email-jobs page or all-jobs page
   const isFromEmailJobs = location.pathname.startsWith('/email-jobs/');
+  const isFromAllJobs = location.pathname.startsWith('/all-jobs') || 
+                        (location.state as any)?.from === 'all-jobs';
 
   // Fetch job details
   const {
@@ -74,7 +78,7 @@ export function JobDetailPage() {
     queryKey: ['jobPosting', jobIdNum],
     queryFn: () => jobPostingApi.getJobPosting(jobIdNum),
     enabled: !!jobIdNum,
-  });
+  }) as { data: JobPostingWithSource | undefined; isLoading: boolean; error: Error | null };
 
   // Fetch match data from API if not passed via navigation state
   // This enables the tailor button to show when directly visiting the page via URL
@@ -107,8 +111,10 @@ export function JobDetailPage() {
   const handleBack = () => {
     if (candidateIdNum) {
       navigate(`/candidate/jobs/${candidateIdNum}`);
+    } else if (isFromAllJobs) {
+      navigate('/all-jobs');
     } else if (isFromEmailJobs) {
-      navigate('/email-jobs');
+      navigate('/all-jobs?source=email');
     } else {
       navigate('/jobs');
     }
@@ -220,7 +226,7 @@ export function JobDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <Button variant="ghost" onClick={handleBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to {candidateIdNum ? 'Matches' : isFromEmailJobs ? 'Email Jobs' : 'Jobs'}
+          Back to {candidateIdNum ? 'Matches' : isFromAllJobs || isFromEmailJobs ? 'Jobs Browser' : 'Jobs'}
         </Button>
         <div className="flex gap-2">
           {(job as any)?.job_url && (
@@ -439,12 +445,22 @@ export function JobDetailPage() {
 
             <div>
               <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Globe className="h-4 w-4" />
+                {job?.is_email_sourced ? <Mail className="h-4 w-4" /> : <Database className="h-4 w-4" />}
                 Job Source
               </h3>
-              <p className="text-muted-foreground">
-                {(job as any)?.is_email_sourced ? 'Email Integration' : job.source}
-              </p>
+              <div className="flex items-center gap-2">
+                {job?.is_email_sourced ? (
+                  <Badge className="bg-purple-100 text-purple-700 border-purple-200">
+                    <Mail className="h-3 w-3 mr-1" />
+                    Email Integration
+                  </Badge>
+                ) : (
+                  <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                    <Globe className="h-3 w-3 mr-1" />
+                    {job?.platform || job?.source || 'Scraped'}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             {job.posted_date && (
@@ -461,36 +477,63 @@ export function JobDetailPage() {
           </div>
 
           {/* Email Source Info (for email-sourced jobs) */}
-          {(job as any)?.is_email_sourced && (
+          {job?.is_email_sourced && (
             <>
               <Separator />
-              <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-                <h3 className="font-semibold mb-4 flex items-center gap-2 text-blue-900">
+              <div className="bg-purple-50 rounded-lg p-6 border border-purple-200">
+                <h3 className="font-semibold mb-4 flex items-center gap-2 text-purple-900">
                   <Mail className="h-5 w-5" />
                   Email Source
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  {(job as any)?.source_email_subject && (
+                  {job?.sourced_by && (
                     <div>
-                      <p className="text-blue-700 font-medium">Subject</p>
-                      <p className="text-blue-900">{(job as any).source_email_subject}</p>
+                      <p className="text-purple-700 font-medium">Sourced By</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white font-semibold text-xs">
+                          {job.sourced_by.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-purple-900 font-medium">{job.sourced_by.name}</p>
+                          <p className="text-purple-600 text-xs">{job.sourced_by.email}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
-                  {(job as any)?.source_email_sender && (
+                  {job?.source_email_subject && (
                     <div>
-                      <p className="text-blue-700 font-medium">From</p>
-                      <p className="text-blue-900">{(job as any).source_email_sender}</p>
+                      <p className="text-purple-700 font-medium">Subject</p>
+                      <p className="text-purple-900">{job.source_email_subject}</p>
                     </div>
                   )}
-                  {(job as any)?.source_email_date && (
+                  {job?.source_email_sender && (
                     <div>
-                      <p className="text-blue-700 font-medium">Received</p>
-                      <p className="text-blue-900">
-                        {format(new Date((job as any).source_email_date), 'MMMM dd, yyyy h:mm a')}
+                      <p className="text-purple-700 font-medium">From</p>
+                      <p className="text-purple-900">{job.source_email_sender}</p>
+                    </div>
+                  )}
+                  {job?.source_email_date && (
+                    <div>
+                      <p className="text-purple-700 font-medium">Received</p>
+                      <p className="text-purple-900">
+                        {format(new Date(job.source_email_date), 'MMMM dd, yyyy h:mm a')}
                       </p>
                     </div>
                   )}
                 </div>
+                {job?.additional_source_users && job.additional_source_users.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-purple-200">
+                    <p className="text-purple-700 font-medium mb-2">Also received by:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {job.additional_source_users.map((user, idx) => (
+                        <Badge key={idx} variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
+                          <User className="h-3 w-3 mr-1" />
+                          User #{user.user_id}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

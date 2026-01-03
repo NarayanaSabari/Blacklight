@@ -16,7 +16,7 @@ import {
   Settings,
   Building2,
   FolderOpen,
-  Mail,
+  Database,
   Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -74,10 +74,10 @@ const navigation: NavItem[] = [
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {
-    id: 'email-jobs',
-    label: 'Email Jobs',
-    icon: Mail,
-    href: '/email-jobs',
+    id: 'all-jobs',
+    label: 'Jobs Browser',
+    icon: Database,
+    href: '/all-jobs',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {

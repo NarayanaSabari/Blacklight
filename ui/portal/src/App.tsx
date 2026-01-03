@@ -18,7 +18,7 @@ import {
   CandidateManagementPage,
   TeamJobsPage,
   JobDetailPage,
-  EmailJobsPage,
+  AllJobsPage,
   ResumeTailorPage,
   RolesPage,
   SettingsPage,
@@ -106,7 +106,10 @@ function App() {
                       <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                       {/* Legacy route - redirect to new jobs page */}
                       <Route path="/your-candidates" element={<Navigate to="/jobs" replace />} />
-                      <Route path="/email-jobs" element={<EmailJobsPage />} />
+                      {/* All Jobs Browser - unified view of scraped + email jobs */}
+                      <Route path="/all-jobs" element={<AllJobsPage />} />
+                      {/* Email jobs - redirect to all-jobs with email filter */}
+                      <Route path="/email-jobs" element={<Navigate to="/all-jobs?source=email" replace />} />
                       <Route path="/email-jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/submissions" element={<SubmissionsPage />} />
                       <Route path="/submissions/:id" element={<SubmissionDetailPage />} />

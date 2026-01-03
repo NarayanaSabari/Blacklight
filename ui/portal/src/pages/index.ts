@@ -19,6 +19,7 @@ export { CandidateManagementPage } from './candidates/CandidateManagementPage';
 export { TeamJobsPage } from './jobs/TeamJobsPage';
 export { JobDetailPage } from './jobs/JobDetailPage';
 export { EmailJobsPage } from './jobs/EmailJobsPage';
+export { AllJobsPage } from './jobs/AllJobsPage';
 export { ResumeTailorPage } from './jobs/ResumeTailorPage';
 
 // Settings & Admin
