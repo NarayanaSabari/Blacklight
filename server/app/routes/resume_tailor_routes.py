@@ -581,11 +581,23 @@ def export_tailored_resume(tailor_id: str):
                 from weasyprint import HTML, CSS
                 import markdown
                 
+                logger.info(f"Starting PDF generation for tailor_id={tailor_id}")
+                
+                # Validate content exists
+                content = tailored_resume.tailored_resume_content
+                if not content:
+                    logger.error(f"No tailored content for tailor_id={tailor_id}")
+                    return error_response("No tailored content available for PDF export", 400)
+                
+                logger.info(f"Content length: {len(content)} chars")
+                
                 # Convert markdown to HTML
                 html_content = markdown.markdown(
-                    tailored_resume.tailored_resume_content,
+                    content,
                     extensions=['tables', 'fenced_code']
                 )
+                
+                logger.info(f"HTML content generated, length: {len(html_content)} chars")
                 
                 # Wrap with basic styling - 1 inch margins on all sides
                 styled_html = f"""
@@ -656,7 +668,9 @@ def export_tailored_resume(tailor_id: str):
                 """
                 
                 # Generate PDF
+                logger.info(f"Starting WeasyPrint PDF generation for tailor_id={tailor_id}")
                 pdf_bytes = HTML(string=styled_html).write_pdf()
+                logger.info(f"PDF generated successfully, size: {len(pdf_bytes)} bytes")
                 
                 return Response(
                     pdf_bytes,
@@ -666,13 +680,14 @@ def export_tailored_resume(tailor_id: str):
                     }
                 )
                 
-            except ImportError:
+            except ImportError as import_err:
+                logger.error(f"WeasyPrint import failed: {import_err}")
                 return error_response(
                     "PDF export not available. Install weasyprint: pip install weasyprint markdown",
                     501
                 )
             except Exception as pdf_error:
-                logger.error(f"PDF generation failed: {pdf_error}")
+                logger.error(f"PDF generation failed for tailor_id={tailor_id}: {pdf_error}", exc_info=True)
                 return error_response(f"PDF generation failed: {str(pdf_error)}", 500)
         
         elif format_enum == ExportFormat.DOCX:
