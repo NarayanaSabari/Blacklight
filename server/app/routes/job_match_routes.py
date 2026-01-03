@@ -561,7 +561,7 @@ def get_candidate_matches(candidate_id: int):
                     }
             
             matches_response.append({
-                'id': job.id,  # Use job ID as match ID (for on-the-fly matches)
+                'id': None,  # No stored match ID for on-the-fly matches
                 'candidate_id': candidate_id,
                 'job_posting_id': job.id,
                 'match_score': round(result.overall_score, 2),

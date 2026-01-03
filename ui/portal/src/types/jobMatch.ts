@@ -51,7 +51,7 @@ export interface JobPosting {
 }
 
 export interface JobMatch {
-  id: number;
+  id: number | null;  // null for on-the-fly calculated matches
   candidate_id: number;
   job_posting_id: number;
   match_score: number;

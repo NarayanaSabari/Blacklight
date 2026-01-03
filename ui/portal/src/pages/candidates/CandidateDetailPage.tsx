@@ -1303,7 +1303,7 @@ export function CandidateDetailPage() {
               <CardContent className="space-y-3">
                 {matchesData.matches.slice(0, 3).map((match) => (
                   <div
-                    key={match.id}
+                    key={match.id ?? match.job_posting_id}
                     className="p-3 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] cursor-pointer transition-all"
                     onClick={() => navigate(`/candidate/jobs/${id}`)}
                   >

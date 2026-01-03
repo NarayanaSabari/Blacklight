@@ -400,7 +400,7 @@ export function TeamJobsPage() {
 
     return (
       <Card
-        key={match.id}
+        key={match.id ?? match.job_posting_id ?? job.id}
         className="cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 group"
         onClick={() => handleRowClick(match)}
       >
