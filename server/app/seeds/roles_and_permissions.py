@@ -204,8 +204,8 @@ def seed_roles_and_permissions():
     recruiter_role = created_roles.get("RECRUITER")
     if recruiter_role:
         recruiter_perms_names = [
-            # Assigned candidate permissions only
-            'candidates.view_assigned', 'candidates.edit', 'candidates.upload_resume',
+            # Candidate permissions - view needed for API access, actual data filtered by assignment
+            'candidates.view', 'candidates.view_assigned', 'candidates.edit', 'candidates.upload_resume',
             # Full job and interview access
             'jobs.view', 'jobs.create', 'jobs.edit', 'jobs.delete', 'jobs.publish', 'jobs.manage_applications',
             'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.delete', 'interviews.feedback',
