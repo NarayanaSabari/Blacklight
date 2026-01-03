@@ -376,7 +376,7 @@ export function AllJobsPage() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className="font-medium text-purple-700 truncate">
-                                  {job.sourced_by.name}
+                                  {job.sourced_by.first_name} {job.sourced_by.last_name}
                                 </span>
                               </TooltipTrigger>
                               <TooltipContent>

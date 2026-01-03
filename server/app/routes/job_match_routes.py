@@ -327,11 +327,13 @@ def get_candidate_matches(candidate_id: int):
     - sort_order: Sort order (asc, desc, default: desc)
     - platforms: Comma-separated list of platforms to filter by (e.g., "linkedin,glassdoor")
     - grades: Comma-separated list of grades to filter by (e.g., "A+,A,B")
+    - source: Filter by job source (all, email, scraped) - default: all
     
     Permissions: candidates.view
     """
     from app.models.candidate_global_role import CandidateGlobalRole
     from app.models.role_job_mapping import RoleJobMapping
+    from app.models.portal_user import PortalUser
     
     try:
         tenant_id = g.tenant_id
@@ -352,6 +354,11 @@ def get_candidate_matches(candidate_id: int):
         sort_order = request.args.get('sort_order', 'desc')
         platforms_param = request.args.get('platforms', '')
         grades_param = request.args.get('grades', '')
+        source_filter = request.args.get('source', 'all').lower()  # all, email, scraped
+        
+        # Validate source filter
+        if source_filter not in ('all', 'email', 'scraped'):
+            source_filter = 'all'
         
         # Parse platforms filter (comma-separated list)
         platforms_filter = [p.strip().lower() for p in platforms_param.split(',') if p.strip()] if platforms_param else []
@@ -458,8 +465,25 @@ def get_candidate_matches(candidate_id: int):
                 'total_pages': 0,
                 'matches': [],
                 'available_platforms': [],
+                'available_sources': [],
                 'message': 'No active jobs found for assigned roles.'
             }), 200
+        
+        # Collect available sources (email, scraped)
+        available_sources = []
+        has_email_jobs = any(job.is_email_sourced for job in all_jobs)
+        has_scraped_jobs = any(not job.is_email_sourced for job in all_jobs)
+        if has_scraped_jobs:
+            available_sources.append('scraped')
+        if has_email_jobs:
+            available_sources.append('email')
+        
+        # Apply source filter
+        if source_filter == 'email':
+            all_jobs = [job for job in all_jobs if job.is_email_sourced]
+        elif source_filter == 'scraped':
+            all_jobs = [job for job in all_jobs if not job.is_email_sourced]
+        # 'all' - no filtering needed
         
         # Collect all available platforms (before filtering)
         available_platforms = sorted(list(set(
@@ -523,6 +547,19 @@ def get_candidate_matches(candidate_id: int):
         for m in paginated_matches:
             job = m['job']
             result = m['match_result']
+            
+            # Get sourced_by user info for email jobs
+            sourced_by_info = None
+            if job.is_email_sourced and job.sourced_by_user_id:
+                sourced_by_user = db.session.get(PortalUser, job.sourced_by_user_id)
+                if sourced_by_user:
+                    sourced_by_info = {
+                        'id': sourced_by_user.id,
+                        'first_name': sourced_by_user.first_name,
+                        'last_name': sourced_by_user.last_name,
+                        'email': sourced_by_user.email,
+                    }
+            
             matches_response.append({
                 'id': job.id,  # Use job ID as match ID (for on-the-fly matches)
                 'candidate_id': candidate_id,
@@ -555,6 +592,10 @@ def get_candidate_matches(candidate_id: int):
                     'platform': job.platform,
                     'posted_date': job.posted_date.isoformat() if job.posted_date else None,
                     'status': job.status,
+                    # Email source info
+                    'is_email_sourced': job.is_email_sourced,
+                    'sourced_by': sourced_by_info,
+                    'source_email_sender': job.source_email_sender if job.is_email_sourced else None,
                 }
             })
         
@@ -565,7 +606,8 @@ def get_candidate_matches(candidate_id: int):
             'per_page': per_page,
             'total_pages': total_pages,
             'matches': matches_response,
-            'available_platforms': available_platforms
+            'available_platforms': available_platforms,
+            'available_sources': available_sources
         }), 200
         
     except Exception as e:

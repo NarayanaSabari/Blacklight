@@ -11,7 +11,8 @@ import type { JobPosting } from '@/types';
 export interface JobPostingWithSource extends JobPosting {
   sourced_by?: {
     id: number;
-    name: string;
+    first_name: string;
+    last_name: string;
     email: string;
   } | null;
   additional_source_users?: Array<{

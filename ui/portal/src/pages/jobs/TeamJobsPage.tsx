@@ -56,6 +56,7 @@ import {
   Home,
   ArrowLeft,
   UserCog,
+  Mail,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { jobMatchApi } from '@/lib/jobMatchApi';
@@ -136,6 +137,7 @@ export function TeamJobsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+  const [selectedSource, setSelectedSource] = useState<'all' | 'email' | 'scraped'>('all');
   const AVAILABLE_GRADES = ['A+', 'A', 'B+', 'B', 'C+', 'C'] as const;
 
   // Submission dialog state
@@ -206,7 +208,7 @@ export function TeamJobsPage() {
     isLoading: loadingMatches,
     error: matchesError 
   } = useQuery({
-    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize, selectedPlatforms, selectedGrades],
+    queryKey: ['jobMatches', selectedCandidateId, currentPage, pageSize, selectedPlatforms, selectedGrades, selectedSource],
     queryFn: async () => {
       if (!selectedCandidateId) return null;
       return jobMatchApi.getCandidateMatches(selectedCandidateId, { 
@@ -216,6 +218,7 @@ export function TeamJobsPage() {
         sort_order: 'desc',
         platforms: selectedPlatforms.length > 0 ? selectedPlatforms : undefined,
         grades: selectedGrades.length > 0 ? selectedGrades : undefined,
+        source: selectedSource,
       });
     },
     enabled: !!selectedCandidateId,
@@ -245,6 +248,7 @@ export function TeamJobsPage() {
   const totalMatches = matchesData?.total_matches || 0;
   const totalPages = matchesData?.total_pages || 0;
   const availablePlatforms = matchesData?.available_platforms || [];
+  const availableSources = matchesData?.available_sources || [];
 
   // Filter team members by search
   const filteredTeamMembers = currentTeamMembers.filter((member) =>
@@ -261,8 +265,8 @@ export function TeamJobsPage() {
   });
 
   // Check if any filters are active
-  const hasActiveFilters = selectedPlatforms.length > 0 || selectedGrades.length > 0;
-  const activeFilterCount = selectedPlatforms.length + selectedGrades.length;
+  const hasActiveFilters = selectedPlatforms.length > 0 || selectedGrades.length > 0 || selectedSource !== 'all';
+  const activeFilterCount = selectedPlatforms.length + selectedGrades.length + (selectedSource !== 'all' ? 1 : 0);
 
   // ============ EFFECTS ============
 
@@ -346,6 +350,7 @@ export function TeamJobsPage() {
   const clearAllFilters = () => {
     setSelectedPlatforms([]);
     setSelectedGrades([]);
+    setSelectedSource('all');
     setCurrentPage(1);
   };
 
@@ -447,6 +452,24 @@ export function TeamJobsPage() {
               <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="truncate">{job.platform}</span>
+              </div>
+            )}
+            {job.is_email_sourced && (
+              <div className="flex items-center gap-2 col-span-2">
+                <Mail className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                <Badge className="bg-purple-100 text-purple-700 text-xs px-1.5 py-0">
+                  Email Job
+                </Badge>
+                {job.sourced_by && (
+                  <span className="text-xs text-muted-foreground truncate">
+                    via {job.sourced_by.first_name} {job.sourced_by.last_name}
+                  </span>
+                )}
+                {!job.sourced_by && job.source_email_sender && (
+                  <span className="text-xs text-muted-foreground truncate">
+                    from {job.source_email_sender}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -915,7 +938,7 @@ export function TeamJobsPage() {
 
                           {/* Platform Filter */}
                           {availablePlatforms.length > 0 && (
-                            <div className="p-3">
+                            <div className="p-3 border-b">
                               <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                                 Platform
                               </h5>
@@ -935,6 +958,46 @@ export function TeamJobsPage() {
                                     </label>
                                   </div>
                                 ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Source Filter */}
+                          {availableSources.length > 1 && (
+                            <div className="p-3">
+                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                                Source
+                              </h5>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { value: 'all', label: 'All' },
+                                  { value: 'scraped', label: 'Scraped' },
+                                  { value: 'email', label: 'Email' },
+                                ].map((source) => {
+                                  const isSelected = selectedSource === source.value;
+                                  return (
+                                    <button
+                                      key={source.value}
+                                      onClick={() => {
+                                        setSelectedSource(source.value as 'all' | 'email' | 'scraped');
+                                        setCurrentPage(1);
+                                      }}
+                                      className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors flex items-center gap-1.5 ${
+                                        isSelected
+                                          ? source.value === 'email'
+                                            ? 'bg-purple-100 text-purple-700 border-purple-300'
+                                            : source.value === 'scraped'
+                                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                                            : 'bg-slate-100 text-slate-700 border-slate-300'
+                                          : 'bg-background hover:bg-muted border-border'
+                                      }`}
+                                    >
+                                      {source.value === 'email' && <Mail className="h-3 w-3" />}
+                                      {source.value === 'scraped' && <Globe className="h-3 w-3" />}
+                                      {source.label}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}

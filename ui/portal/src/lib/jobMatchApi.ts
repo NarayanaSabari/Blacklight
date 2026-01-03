@@ -36,6 +36,9 @@ export const jobMatchApi = {
     if (filters.grades && filters.grades.length > 0) {
       params.append('grades', filters.grades.join(','));
     }
+    if (filters.source && filters.source !== 'all') {
+      params.append('source', filters.source);
+    }
     
     const queryString = params.toString();
     const url = `/api/job-matches/candidates/${candidateId}${queryString ? '?' + queryString : ''}`;

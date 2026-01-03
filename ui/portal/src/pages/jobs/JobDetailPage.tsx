@@ -491,10 +491,10 @@ export function JobDetailPage() {
                       <p className="text-purple-700 font-medium">Sourced By</p>
                       <div className="flex items-center gap-2 mt-1">
                         <div className="h-6 w-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center text-white font-semibold text-xs">
-                          {job.sourced_by.name.charAt(0).toUpperCase()}
+                          {job.sourced_by.first_name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-purple-900 font-medium">{job.sourced_by.name}</p>
+                          <p className="text-purple-900 font-medium">{job.sourced_by.first_name} {job.sourced_by.last_name}</p>
                           <p className="text-purple-600 text-xs">{job.sourced_by.email}</p>
                         </div>
                       </div>

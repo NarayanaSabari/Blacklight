@@ -39,7 +39,8 @@ export interface JobPosting {
   // Populated sourced_by info (from API response)
   sourced_by?: {
     id: number;
-    name: string;
+    first_name: string;
+    last_name: string;
     email: string;
   } | null;
   additional_source_users?: Array<{
@@ -105,8 +106,9 @@ export interface JobMatchListResponse {
   per_page?: number;
   total_pages?: number;
   pages?: number;  // Legacy alias for total_pages
-  // Platform filter
+  // Filter options
   available_platforms?: string[];
+  available_sources?: string[];  // ['scraped', 'email']
 }
 
 export interface JobMatchStats {
@@ -146,6 +148,7 @@ export interface JobMatchFilters {
   sort_by?: 'match_score' | 'match_date';
   sort_order?: 'asc' | 'desc';
   platforms?: string[];
+  source?: 'all' | 'email' | 'scraped';  // Filter by job source
 }
 
 export type MatchGrade = 'A+' | 'A' | 'B+' | 'B' | 'C+' | 'C';
