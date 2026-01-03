@@ -20,6 +20,7 @@ import {
   JobDetailPage,
   AllJobsPage,
   ResumeTailorPage,
+  ManualResumeTailorPage,
   RolesPage,
   SettingsPage,
   DocumentsPage,
@@ -97,6 +98,8 @@ function App() {
                       <Route path="/candidate/jobs/:candidateId" element={<TeamJobsPage />} />
                       <Route path="/candidate/jobs/:candidateId/job/:jobId" element={<JobDetailPage />} />
                       <Route path="/candidate/jobs/:candidateId/job/:jobId/tailor/:matchId" element={<ResumeTailorPage />} />
+                      {/* Manual Resume Tailor - tailor with pasted job description */}
+                      <Route path="/resume-tailor" element={<ManualResumeTailorPage />} />
                       {/* General job routes - redirects to team jobs page */}
                       <Route path="/jobs/:jobId" element={<JobDetailPage />} />
                       <Route path="/jobs" element={<TeamJobsPage />} />

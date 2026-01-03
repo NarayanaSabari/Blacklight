@@ -64,6 +64,29 @@ class TailorResumeFromMatchRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 
+class TailorManualResumeRequest(BaseModel):
+    """Schema for tailoring resume with a manually provided job description (no job posting record)"""
+    candidate_id: int = Field(..., gt=0, description="ID of the candidate whose resume to tailor")
+    job_title: str = Field(..., min_length=1, max_length=200, description="Title of the job")
+    job_company: Optional[str] = Field(None, max_length=200, description="Company name (optional)")
+    job_description: str = Field(..., min_length=50, max_length=50000, description="Full job description text")
+    job_location: Optional[str] = Field(None, max_length=200, description="Job location (optional)")
+    target_score: Optional[int] = Field(
+        default=80,
+        ge=50,
+        le=100,
+        description="Target match score to achieve (50-100)"
+    )
+    max_iterations: Optional[int] = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Maximum number of improvement iterations (1-5)"
+    )
+    
+    model_config = ConfigDict(extra='forbid')
+
+
 # ============================================================================
 # Improvement Detail Schemas
 # ============================================================================

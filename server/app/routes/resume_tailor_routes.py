@@ -15,6 +15,7 @@ from app.services.resume_tailor import ResumeTailorOrchestrator
 from app.schemas.tailored_resume_schema import (
     TailorResumeRequest,
     TailorResumeFromMatchRequest,
+    TailorManualResumeRequest,
     TailoredResumeResponse,
     TailoredResumeDetailResponse,
     TailoredResumeListResponse,
@@ -164,6 +165,74 @@ def tailor_from_match():
     except Exception as e:
         logger.error(f"Resume tailoring from match failed: {e}")
         return error_response("Failed to tailor resume", 500)
+
+
+@resume_tailor_bp.route('/tailor-manual', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def tailor_manual():
+    """
+    Start resume tailoring with a manually provided job description.
+    
+    This endpoint allows tailoring a resume without a job posting record.
+    Recruiters can paste a job description directly.
+    
+    POST /api/resume-tailor/tailor-manual
+    
+    Request body:
+    {
+        "candidate_id": 123,
+        "job_title": "Senior Software Engineer",
+        "job_company": "Acme Corp",            // Optional
+        "job_description": "We are looking for...",  // Required, min 50 chars
+        "job_location": "New York, NY",        // Optional
+        "target_score": 80,                    // Optional, default 80
+        "max_iterations": 3                     // Optional, default 1
+    }
+    
+    Returns:
+        TailoredResumeResponse with results
+    
+    Permissions: candidates.view
+    """
+    try:
+        tenant_id = g.tenant_id
+        
+        # Validate request
+        try:
+            data = TailorManualResumeRequest.model_validate(request.get_json() or {})
+        except ValidationError as e:
+            return error_response("Validation error", 400, {"errors": e.errors()})
+        
+        # Verify candidate exists and belongs to tenant
+        candidate = db.session.get(Candidate, data.candidate_id)
+        if not candidate:
+            return error_response(f"Candidate {data.candidate_id} not found", 404)
+        if candidate.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        # Start tailoring with manual job description
+        orchestrator = ResumeTailorOrchestrator()
+        
+        tailored_resume = orchestrator.tailor_manual(
+            candidate_id=data.candidate_id,
+            job_title=data.job_title,
+            job_description=data.job_description,
+            tenant_id=tenant_id,
+            job_company=data.job_company,
+            job_location=data.job_location,
+            target_score=data.target_score or 80,
+            max_iterations=data.max_iterations or 1
+        )
+        
+        return jsonify(tailored_resume.to_dict()), 201
+        
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception as e:
+        logger.error(f"Manual resume tailoring failed: {e}")
+        return error_response("Failed to tailor resume", 500, {"error": str(e)})
 
 
 @resume_tailor_bp.route('/tailor-stream', methods=['POST'])

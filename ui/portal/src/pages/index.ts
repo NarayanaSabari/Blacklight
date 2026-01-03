@@ -21,6 +21,7 @@ export { JobDetailPage } from './jobs/JobDetailPage';
 export { EmailJobsPage } from './jobs/EmailJobsPage';
 export { AllJobsPage } from './jobs/AllJobsPage';
 export { ResumeTailorPage } from './jobs/ResumeTailorPage';
+export { ManualResumeTailorPage } from './jobs/ManualResumeTailorPage';
 
 // Settings & Admin
 export { UsersPage } from './settings/UsersPage';

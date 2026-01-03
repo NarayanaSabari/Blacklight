@@ -18,6 +18,7 @@ import {
   FolderOpen,
   Database,
   Send,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -78,6 +79,13 @@ const navigation: NavItem[] = [
     label: 'Jobs Browser',
     icon: Database,
     href: '/all-jobs',
+    roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
+  },
+  {
+    id: 'resume-tailor',
+    label: 'Resume Tailor',
+    icon: Sparkles,
+    href: '/resume-tailor',
     roles: ['TENANT_ADMIN', 'RECRUITER', 'MANAGER', 'TEAM_LEAD'],
   },
   {

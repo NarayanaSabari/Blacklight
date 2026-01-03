@@ -1,0 +1,986 @@
+/**
+ * Manual Resume Tailor Page
+ * 
+ * Allows recruiters to tailor a candidate's resume using a manually
+ * pasted job description (no job posting record required).
+ */
+
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import {
+  ArrowLeft,
+  Sparkles,
+  FileText,
+  CheckCircle2,
+  XCircle,
+  Plus,
+  TrendingUp,
+  Download,
+  FileType,
+  Eye,
+  Code,
+  Loader2,
+  RefreshCw,
+  Briefcase,
+  Building2,
+  MapPin,
+  Zap,
+  ArrowRight,
+  User,
+  Search,
+  ClipboardPaste,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+import { resumeTailorApi } from '@/lib/resumeTailorApi';
+import { candidateApi } from '@/lib/candidateApi';
+import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
+
+// ============================================================================
+// Markdown Renderer Component (reused from ResumeTailorPage)
+// ============================================================================
+function MarkdownRenderer({ content, className = '' }: { content: string; className?: string }) {
+  const renderedContent = useMemo(() => {
+    if (!content) return null;
+    
+    const lines = content.split('\n');
+    const elements: React.ReactElement[] = [];
+    let inCodeBlock = false;
+    let codeBlockContent: string[] = [];
+    let listItems: string[] = [];
+    let listType: 'ul' | 'ol' | null = null;
+    
+    const flushList = () => {
+      if (listItems.length > 0 && listType) {
+        const ListTag = listType;
+        elements.push(
+          <ListTag key={`list-${elements.length}`} className={listType === 'ul' ? 'list-disc ml-6 my-2 space-y-1' : 'list-decimal ml-6 my-2 space-y-1'}>
+            {listItems.map((item, i) => (
+              <li key={i} className="text-sm text-gray-700">{processInlineMarkdown(item)}</li>
+            ))}
+          </ListTag>
+        );
+        listItems = [];
+        listType = null;
+      }
+    };
+    
+    const processInlineMarkdown = (text: string): React.ReactNode => {
+      const parts: React.ReactNode[] = [];
+      let remaining = text;
+      let key = 0;
+      
+      while (remaining.length > 0) {
+        const boldMatch = remaining.match(/^(.*?)(\*\*|__)(.+?)\2(.*)$/s);
+        if (boldMatch) {
+          if (boldMatch[1]) parts.push(boldMatch[1]);
+          parts.push(<strong key={key++} className="font-semibold">{boldMatch[3]}</strong>);
+          remaining = boldMatch[4];
+          continue;
+        }
+        
+        const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)$/s);
+        if (codeMatch) {
+          if (codeMatch[1]) parts.push(codeMatch[1]);
+          parts.push(
+            <code key={key++} className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-pink-600">
+              {codeMatch[2]}
+            </code>
+          );
+          remaining = codeMatch[3];
+          continue;
+        }
+        
+        parts.push(remaining);
+        break;
+      }
+      
+      return parts.length === 1 ? parts[0] : <>{parts}</>;
+    };
+    
+    lines.forEach((line, index) => {
+      if (line.startsWith('```')) {
+        if (inCodeBlock) {
+          elements.push(
+            <pre key={`code-${index}`} className="bg-gray-900 text-gray-100 p-3 rounded-lg my-2 overflow-x-auto text-sm font-mono">
+              {codeBlockContent.join('\n')}
+            </pre>
+          );
+          codeBlockContent = [];
+          inCodeBlock = false;
+        } else {
+          flushList();
+          inCodeBlock = true;
+        }
+        return;
+      }
+      
+      if (inCodeBlock) {
+        codeBlockContent.push(line);
+        return;
+      }
+      
+      if (!line.trim()) {
+        flushList();
+        elements.push(<div key={`empty-${index}`} className="h-2" />);
+        return;
+      }
+      
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headerMatch) {
+        flushList();
+        const level = headerMatch[1].length;
+        const text = headerMatch[2];
+        const headerClasses: Record<number, string> = {
+          1: 'text-2xl font-bold text-gray-900 mt-4 mb-2 border-b pb-2',
+          2: 'text-xl font-bold text-gray-800 mt-3 mb-2',
+          3: 'text-lg font-semibold text-gray-800 mt-2 mb-1',
+          4: 'text-base font-semibold text-gray-700 mt-2 mb-1',
+          5: 'text-sm font-semibold text-gray-700 mt-1 mb-1',
+          6: 'text-sm font-medium text-gray-600 mt-1 mb-1',
+        };
+        elements.push(
+          <div key={`h-${index}`} className={headerClasses[level]}>
+            {processInlineMarkdown(text)}
+          </div>
+        );
+        return;
+      }
+      
+      if (line.match(/^(-{3,}|\*{3,}|_{3,})$/)) {
+        flushList();
+        elements.push(<Separator key={`hr-${index}`} className="my-3" />);
+        return;
+      }
+      
+      const ulMatch = line.match(/^(\s*)[-*+]\s+(.+)$/);
+      if (ulMatch) {
+        if (listType !== 'ul') {
+          flushList();
+          listType = 'ul';
+        }
+        listItems.push(ulMatch[2]);
+        return;
+      }
+      
+      const olMatch = line.match(/^(\s*)\d+\.\s+(.+)$/);
+      if (olMatch) {
+        if (listType !== 'ol') {
+          flushList();
+          listType = 'ol';
+        }
+        listItems.push(olMatch[2]);
+        return;
+      }
+      
+      if (line.startsWith('>')) {
+        flushList();
+        const quoteText = line.replace(/^>\s*/, '');
+        elements.push(
+          <blockquote key={`quote-${index}`} className="border-l-4 border-gray-300 pl-4 py-1 my-2 text-gray-600 italic">
+            {processInlineMarkdown(quoteText)}
+          </blockquote>
+        );
+        return;
+      }
+      
+      flushList();
+      elements.push(
+        <p key={`p-${index}`} className="text-sm text-gray-700 my-1 leading-relaxed">
+          {processInlineMarkdown(line)}
+        </p>
+      );
+    });
+    
+    flushList();
+    return elements;
+  }, [content]);
+  
+  return <div className={`prose prose-sm max-w-none ${className}`}>{renderedContent}</div>;
+}
+
+// ============================================================================
+// Diff View Component (reused from ResumeTailorPage)
+// ============================================================================
+function DiffView({ original, tailored }: { original: string; tailored: string }) {
+  const diffLines = useMemo(() => {
+    const originalLines = original?.split('\n') || [];
+    const tailoredLines = tailored?.split('\n') || [];
+    const result: Array<{ type: 'same' | 'added' | 'removed' | 'changed'; original?: string; tailored?: string }> = [];
+    const maxLen = Math.max(originalLines.length, tailoredLines.length);
+    
+    for (let i = 0; i < maxLen; i++) {
+      const origLine = originalLines[i];
+      const tailLine = tailoredLines[i];
+      
+      if (origLine === tailLine) {
+        result.push({ type: 'same', original: origLine });
+      } else if (origLine === undefined) {
+        result.push({ type: 'added', tailored: tailLine });
+      } else if (tailLine === undefined) {
+        result.push({ type: 'removed', original: origLine });
+      } else {
+        result.push({ type: 'changed', original: origLine, tailored: tailLine });
+      }
+    }
+    return result;
+  }, [original, tailored]);
+  
+  return (
+    <div className="font-mono text-sm">
+      {diffLines.map((line, idx) => {
+        if (line.type === 'same') {
+          return (
+            <div key={idx} className="px-3 py-0.5 text-gray-600 hover:bg-gray-50">
+              <span className="select-none text-gray-400 mr-3">{' '}</span>
+              {line.original}
+            </div>
+          );
+        }
+        if (line.type === 'removed') {
+          return (
+            <div key={idx} className="px-3 py-0.5 bg-red-50 text-red-800 border-l-4 border-red-400">
+              <span className="select-none text-red-400 mr-3">-</span>
+              {line.original}
+            </div>
+          );
+        }
+        if (line.type === 'added') {
+          return (
+            <div key={idx} className="px-3 py-0.5 bg-green-50 text-green-800 border-l-4 border-green-400">
+              <span className="select-none text-green-400 mr-3">+</span>
+              {line.tailored}
+            </div>
+          );
+        }
+        return (
+          <div key={idx}>
+            <div className="px-3 py-0.5 bg-red-50 text-red-800 border-l-4 border-red-400">
+              <span className="select-none text-red-400 mr-3">-</span>
+              {line.original}
+            </div>
+            <div className="px-3 py-0.5 bg-green-50 text-green-800 border-l-4 border-green-400">
+              <span className="select-none text-green-400 mr-3">+</span>
+              {line.tailored}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================================
+// Processing Steps Component
+// ============================================================================
+const TAILOR_STEPS = [
+  { id: 'analyzing', label: 'Analyzing Job Requirements', icon: Briefcase },
+  { id: 'evaluating', label: 'Evaluating Resume', icon: FileText },
+  { id: 'generating', label: 'AI Generating Improvements', icon: Sparkles },
+  { id: 'applying', label: 'Applying Enhancements', icon: Zap },
+  { id: 'scoring', label: 'Calculating New Score', icon: TrendingUp },
+  { id: 'complete', label: 'Complete!', icon: CheckCircle2 },
+];
+
+function ProcessingSteps({ currentStep, progress }: { currentStep: number; progress: number }) {
+  return (
+    <div className="space-y-4">
+      {TAILOR_STEPS.map((step, idx) => {
+        const Icon = step.icon;
+        const isActive = idx === currentStep;
+        const isComplete = idx < currentStep;
+        
+        return (
+          <div key={step.id} className={`flex items-center gap-4 p-3 rounded-lg transition-all ${
+            isActive ? 'bg-primary/10 border border-primary/30' : 
+            isComplete ? 'bg-green-50' : 'bg-gray-50'
+          }`}>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+              isActive ? 'bg-primary text-white' :
+              isComplete ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
+            }`}>
+              {isActive ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : isComplete ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : (
+                <Icon className="h-5 w-5" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p className={`font-medium ${
+                isActive ? 'text-primary' :
+                isComplete ? 'text-green-700' : 'text-gray-500'
+              }`}>
+                {step.label}
+              </p>
+              {isActive && (
+                <Progress value={progress} className="h-1.5 mt-2" />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================================
+// Main Page Component
+// ============================================================================
+export function ManualResumeTailorPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  
+  // Form state
+  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobCompany, setJobCompany] = useState('');
+  const [jobLocation, setJobLocation] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [candidateSearch, setCandidateSearch] = useState('');
+  
+  // Processing state
+  const [phase, setPhase] = useState<'input' | 'processing' | 'complete' | 'error'>('input');
+  const [currentStep, setCurrentStep] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [viewMode, setViewMode] = useState<'rendered' | 'raw' | 'diff'>('diff');
+  const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch candidates list
+  const { data: candidatesData, isLoading: candidatesLoading } = useQuery({
+    queryKey: ['candidates', candidateSearch],
+    queryFn: () => candidateApi.listCandidates({ 
+      search: candidateSearch || undefined,
+      per_page: 50,
+      status: 'onboarded'
+    }),
+    staleTime: 30000,
+  });
+
+  const candidates = candidatesData?.candidates || [];
+  const selectedCandidate = candidates.find(c => c.id === selectedCandidateId);
+
+  // Tailor mutation
+  const tailorMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedCandidateId) throw new Error('Please select a candidate');
+      if (!jobTitle.trim()) throw new Error('Please enter a job title');
+      if (!jobDescription.trim() || jobDescription.length < 50) {
+        throw new Error('Please enter a job description (at least 50 characters)');
+      }
+      
+      return resumeTailorApi.tailorManual({
+        candidateId: selectedCandidateId,
+        jobTitle: jobTitle.trim(),
+        jobDescription: jobDescription.trim(),
+        jobCompany: jobCompany.trim() || undefined,
+        jobLocation: jobLocation.trim() || undefined,
+        targetScore: 80,
+        maxIterations: 1,
+      });
+    },
+    onSuccess: (data) => {
+      const result = 'tailored_resume' in data ? data.tailored_resume : data;
+      setTailoredResume(result as TailoredResume);
+      setPhase('complete');
+      setCurrentStep(5);
+      setProgress(100);
+      queryClient.invalidateQueries({ queryKey: ['candidates'] });
+      toast.success('Resume tailored successfully!');
+    },
+    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
+      setError(err?.response?.data?.message || err.message || 'Failed to tailor resume');
+      setPhase('error');
+      toast.error('Tailoring failed');
+    },
+  });
+
+  // Export mutation
+  const exportMutation = useMutation({
+    mutationFn: ({ format }: { format: ExportFormat }) => 
+      resumeTailorApi.downloadResume(tailoredResume!.tailor_id, format),
+    onSuccess: (_, { format }) => {
+      toast.success(`Downloaded as ${format.toUpperCase()}`);
+    },
+    onError: () => {
+      toast.error('Export failed');
+    },
+  });
+
+  // Start tailoring process
+  const startTailoring = () => {
+    // Validate inputs
+    if (!selectedCandidateId) {
+      toast.error('Please select a candidate');
+      return;
+    }
+    if (!jobTitle.trim()) {
+      toast.error('Please enter a job title');
+      return;
+    }
+    if (!jobDescription.trim() || jobDescription.length < 50) {
+      toast.error('Please enter a job description (at least 50 characters)');
+      return;
+    }
+    
+    setPhase('processing');
+    setError(null);
+    setCurrentStep(0);
+    setProgress(0);
+    
+    // Simulate step progress
+    const stepDurations = [3000, 4000, 8000, 3000, 5000];
+    let totalTime = 0;
+    
+    stepDurations.forEach((duration, idx) => {
+      setTimeout(() => {
+        setCurrentStep(idx);
+        const stepProgress = setInterval(() => {
+          setProgress(prev => Math.min(prev + 5, 100));
+        }, duration / 20);
+        
+        setTimeout(() => clearInterval(stepProgress), duration);
+      }, totalTime);
+      totalTime += duration;
+    });
+    
+    tailorMutation.mutate();
+  };
+
+  const resetForm = () => {
+    setPhase('input');
+    setTailoredResume(null);
+    setError(null);
+    setCurrentStep(0);
+    setProgress(0);
+  };
+
+  const handleBack = () => {
+    navigate('/jobs');
+  };
+
+  // Validation checks
+  const isFormValid = selectedCandidateId && jobTitle.trim() && jobDescription.trim().length >= 50;
+
+  return (
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={handleBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <ClipboardPaste className="h-6 w-6 text-primary" />
+              Manual Resume Tailor
+            </h1>
+            <p className="text-muted-foreground">
+              Tailor a resume using a pasted job description
+            </p>
+          </div>
+        </div>
+        
+        {phase === 'complete' && tailoredResume && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'pdf' })}>
+                <FileText className="h-4 w-4 mr-2" />
+                Download PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'docx' })}>
+                <FileType className="h-4 w-4 mr-2" />
+                Download Word
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'markdown' })}>
+                <Code className="h-4 w-4 mr-2" />
+                Download Markdown
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Panel - Form & Controls */}
+        <div className="space-y-6">
+          {/* Input Phase - Candidate & Job Form */}
+          {phase === 'input' && (
+            <>
+              {/* Candidate Selection */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Select Candidate
+                  </CardTitle>
+                  <CardDescription>
+                    Choose a candidate whose resume you want to tailor
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search candidates..."
+                      value={candidateSearch}
+                      onChange={(e) => setCandidateSearch(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
+                  <Select
+                    value={selectedCandidateId?.toString() || ''}
+                    onValueChange={(v) => setSelectedCandidateId(parseInt(v, 10))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={candidatesLoading ? "Loading..." : "Select a candidate"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidates.map((candidate) => (
+                        <SelectItem key={candidate.id} value={candidate.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {candidate.first_name} {candidate.last_name}
+                            </span>
+                            {candidate.current_title && (
+                              <span className="text-muted-foreground text-xs">
+                                - {candidate.current_title}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                      {candidates.length === 0 && !candidatesLoading && (
+                        <SelectItem value="none" disabled>
+                          No candidates found
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {selectedCandidate && (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-primary font-semibold">
+                            {selectedCandidate.first_name?.[0]}{selectedCandidate.last_name?.[0]}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {selectedCandidate.first_name} {selectedCandidate.last_name}
+                          </p>
+                          {selectedCandidate.current_title && (
+                            <p className="text-sm text-muted-foreground">{selectedCandidate.current_title}</p>
+                          )}
+                        </div>
+                      </div>
+                      {selectedCandidate.skills && selectedCandidate.skills.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {selectedCandidate.skills.slice(0, 5).map((skill, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {skill}
+                            </Badge>
+                          ))}
+                          {selectedCandidate.skills.length > 5 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{selectedCandidate.skills.length - 5}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Job Description Input */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Briefcase className="h-5 w-5" />
+                    Job Details
+                  </CardTitle>
+                  <CardDescription>
+                    Paste the job description you want to tailor the resume for
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="jobTitle">Job Title *</Label>
+                    <Input
+                      id="jobTitle"
+                      placeholder="e.g., Senior Software Engineer"
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="jobCompany">Company</Label>
+                      <Input
+                        id="jobCompany"
+                        placeholder="e.g., Acme Corp"
+                        value={jobCompany}
+                        onChange={(e) => setJobCompany(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="jobLocation">Location</Label>
+                      <Input
+                        id="jobLocation"
+                        placeholder="e.g., New York, NY"
+                        value={jobLocation}
+                        onChange={(e) => setJobLocation(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="jobDescription">
+                      Job Description *
+                      <span className="text-muted-foreground text-xs ml-2">
+                        (min. 50 characters)
+                      </span>
+                    </Label>
+                    <Textarea
+                      id="jobDescription"
+                      placeholder="Paste the full job description here..."
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      className="min-h-[200px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {jobDescription.length} / 50+ characters
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Start Button */}
+              <Card>
+                <CardContent className="pt-6">
+                  <Button 
+                    onClick={startTailoring} 
+                    className="w-full" 
+                    size="lg"
+                    disabled={!isFormValid}
+                  >
+                    <Sparkles className="h-5 w-5 mr-2" />
+                    Start Tailoring
+                  </Button>
+                  {!isFormValid && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Please fill in all required fields
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Processing Phase */}
+          {phase === 'processing' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Tailoring in Progress
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProcessingSteps currentStep={currentStep} progress={progress} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Complete Phase */}
+          {phase === 'complete' && tailoredResume && (
+            <>
+              {/* Job Card */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">{jobTitle}</CardTitle>
+                  <CardDescription className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    {jobCompany || 'Company not specified'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {jobLocation && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4" />
+                      {jobLocation}
+                    </div>
+                  )}
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Before Tailoring</span>
+                    <Badge variant="outline" className="text-lg font-bold">
+                      {Math.round(tailoredResume.original_match_score)}%
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">After Tailoring</span>
+                    <Badge className="bg-green-600 text-lg font-bold">
+                      {Math.round(tailoredResume.tailored_match_score)}%
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Success Card */}
+              <Card className="border-green-200 bg-green-50/50">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2 text-green-700">
+                    <CheckCircle2 className="h-5 w-5" />
+                    Tailoring Complete
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-2xl font-bold">{Math.round(tailoredResume.original_match_score)}%</p>
+                      <p className="text-xs text-muted-foreground">Original</p>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-600">{Math.round(tailoredResume.tailored_match_score)}%</p>
+                      <p className="text-xs text-muted-foreground">Tailored</p>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <Badge className="bg-green-600 text-lg px-4 py-1">
+                      +{Math.round(tailoredResume.score_improvement)}% Improvement
+                    </Badge>
+                  </div>
+                  <Separator />
+                  <Button variant="outline" className="w-full" onClick={resetForm}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Tailor Another Resume
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Skills Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Skills Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {tailoredResume.matched_skills && tailoredResume.matched_skills.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-green-700 mb-2 flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Matched ({tailoredResume.matched_skills.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {tailoredResume.matched_skills.slice(0, 6).map((skill, i) => (
+                          <Badge key={i} variant="secondary" className="bg-green-100 text-green-700">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {tailoredResume.added_skills && tailoredResume.added_skills.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-blue-700 mb-2 flex items-center gap-1">
+                        <Plus className="h-4 w-4" />
+                        Highlighted ({tailoredResume.added_skills.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {tailoredResume.added_skills.map((skill, i) => (
+                          <Badge key={i} variant="secondary" className="bg-blue-100 text-blue-700">
+                            + {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {tailoredResume.missing_skills && tailoredResume.missing_skills.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-orange-700 mb-2 flex items-center gap-1">
+                        <XCircle className="h-4 w-4" />
+                        To Develop ({tailoredResume.missing_skills.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {tailoredResume.missing_skills.slice(0, 6).map((skill, i) => (
+                          <Badge key={i} variant="outline" className="text-orange-600">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Error Phase */}
+          {phase === 'error' && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>Tailoring Failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+              <Button variant="outline" size="sm" className="mt-3" onClick={resetForm}>
+                Try Again
+              </Button>
+            </Alert>
+          )}
+        </div>
+
+        {/* Right Panel - Resume Preview/Comparison */}
+        <div className="lg:col-span-2">
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">
+                  {phase === 'complete' ? 'Resume Comparison' : 'Preview'}
+                </CardTitle>
+                {phase === 'complete' && (
+                  <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as typeof viewMode)}>
+                    <ToggleGroupItem value="diff" title="Diff View">
+                      <FileText className="h-4 w-4" />
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="rendered" title="Rendered">
+                      <Eye className="h-4 w-4" />
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="raw" title="Raw">
+                      <Code className="h-4 w-4" />
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {phase === 'input' && (
+                <div className="h-[600px] flex items-center justify-center border-2 border-dashed rounded-lg bg-gray-50">
+                  <div className="text-center space-y-4">
+                    <ClipboardPaste className="h-16 w-16 text-muted-foreground mx-auto" />
+                    <div>
+                      <p className="text-lg font-medium">Ready to Tailor</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Select a candidate and paste a job description to begin
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {phase === 'processing' && (
+                <div className="h-[600px] flex items-center justify-center border-2 border-dashed rounded-lg bg-gray-50">
+                  <div className="text-center space-y-4">
+                    <Loader2 className="h-16 w-16 text-primary mx-auto animate-spin" />
+                    <div>
+                      <p className="text-lg font-medium">AI is Optimizing Your Resume</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        This may take up to 2 minutes...
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {phase === 'error' && (
+                <div className="h-[600px] flex items-center justify-center border-2 border-dashed border-red-200 rounded-lg bg-red-50">
+                  <div className="text-center space-y-4">
+                    <XCircle className="h-16 w-16 text-red-500 mx-auto" />
+                    <div>
+                      <p className="text-lg font-medium text-red-700">Tailoring Failed</p>
+                      <p className="text-sm text-red-600 mt-1">{error}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {phase === 'complete' && tailoredResume && (
+                <>
+                  {viewMode === 'diff' ? (
+                    <ScrollArea className="h-[600px] rounded-lg border">
+                      <DiffView 
+                        original={tailoredResume.original_resume_content || ''} 
+                        tailored={tailoredResume.tailored_resume_content || ''} 
+                      />
+                    </ScrollArea>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 h-[600px]">
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-muted-foreground">Original</p>
+                        <ScrollArea className="h-[560px] rounded-lg border p-4 bg-gray-50">
+                          {viewMode === 'rendered' ? (
+                            <MarkdownRenderer content={tailoredResume.original_resume_content || ''} />
+                          ) : (
+                            <pre className="text-xs whitespace-pre-wrap font-mono">
+                              {tailoredResume.original_resume_content}
+                            </pre>
+                          )}
+                        </ScrollArea>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-green-600">Tailored</p>
+                        <ScrollArea className="h-[560px] rounded-lg border p-4 bg-green-50/50">
+                          {viewMode === 'rendered' ? (
+                            <MarkdownRenderer content={tailoredResume.tailored_resume_content || ''} />
+                          ) : (
+                            <pre className="text-xs whitespace-pre-wrap font-mono">
+                              {tailoredResume.tailored_resume_content}
+                            </pre>
+                          )}
+                        </ScrollArea>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

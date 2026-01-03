@@ -699,6 +699,234 @@ class ResumeTailorOrchestrator:
             max_iterations=max_iterations
         )
     
+    def tailor_manual(
+        self,
+        candidate_id: int,
+        job_title: str,
+        job_description: str,
+        tenant_id: int,
+        job_company: Optional[str] = None,
+        job_location: Optional[str] = None,
+        target_score: int = 80,
+        max_iterations: int = 3
+    ) -> TailoredResume:
+        """
+        Tailor resume using a manually provided job description (no job posting record).
+        
+        This is useful when recruiters want to tailor a resume for a job that isn't
+        in the system yet - they can just paste the job description directly.
+        
+        Args:
+            candidate_id: ID of the candidate
+            job_title: Title of the job
+            job_description: Full job description text
+            tenant_id: Tenant ID for multi-tenancy
+            job_company: Company name (optional)
+            job_location: Job location (optional)
+            target_score: Target match score to achieve (50-100)
+            max_iterations: Maximum improvement iterations (1-5)
+            
+        Returns:
+            TailoredResume model with results
+        """
+        try:
+            # Get candidate data
+            candidate = db.session.get(Candidate, candidate_id)
+            
+            if not candidate:
+                raise ValueError(f"Candidate {candidate_id} not found")
+            
+            # Extract resume text and markdown
+            resume_text = self._get_resume_text(candidate)
+            resume_markdown = self._get_resume_markdown(candidate)
+            
+            # Create initial record (no job_posting_id since this is manual)
+            tailored_resume = TailoredResume(
+                candidate_id=candidate_id,
+                job_posting_id=None,  # No job posting for manual tailoring
+                tenant_id=tenant_id,
+                original_resume_content=resume_markdown,
+                job_title=job_title,
+                job_company=job_company or "Not Specified",
+                job_description_snippet=job_description[:500],
+                ai_provider='gemini',
+                ai_model=settings.gemini_model,
+                options={
+                    'target_score': target_score / 100.0,
+                    'max_iterations': max_iterations,
+                    'manual_job_description': True,
+                    'job_location': job_location
+                }
+            )
+            db.session.add(tailored_resume)
+            db.session.commit()
+            
+            # Start processing
+            tailored_resume.start_processing()
+            db.session.commit()
+            
+            # Extract job data from manual description
+            job_data = self.keyword_extractor.extract_job_data(
+                job_title=job_title,
+                job_description=job_description,
+                company_name=job_company or ""
+            )
+            
+            # Store job keywords
+            tailored_resume.job_keywords = job_data.keywords.technical_keywords[:20]
+            tailored_resume.update_progress('analyzing_resume', 15)
+            db.session.commit()
+            
+            # Calculate initial score using the manual job description
+            initial_score = self.scorer.calculate_match_score(
+                resume_text=resume_text,
+                job_title=job_title,
+                job_description=job_description,
+                resume_skills=candidate.skills
+            )
+            initial_score_decimal = initial_score.overall_score / 100.0
+            matched_skills = initial_score.matched_skills
+            missing_skills = initial_score.missing_skills
+            
+            # Update with initial analysis (scores are 0-1 in model)
+            tailored_resume.original_match_score = Decimal(str(round(initial_score_decimal, 4)))
+            tailored_resume.original_resume_keywords = matched_skills[:20]
+            tailored_resume.matched_skills = matched_skills
+            tailored_resume.missing_skills = missing_skills
+            tailored_resume.update_progress('calculating_initial_score', 25)
+            db.session.commit()
+            
+            target_score_decimal = target_score / 100.0
+            
+            # Check if improvement is needed
+            if initial_score_decimal >= target_score_decimal:
+                logger.info(f"Score {initial_score_decimal:.2%} already meets target {target_score_decimal:.2%}")
+                tailored_resume.complete(
+                    tailored_content=resume_markdown,
+                    tailored_html=None,
+                    tailored_score=initial_score_decimal,
+                    improvements=[],
+                    skill_comparison=self._build_skill_comparison(initial_score),
+                    iterations=0
+                )
+                db.session.commit()
+                return tailored_resume
+            
+            # Iterative improvement - track best version
+            current_markdown = resume_markdown
+            current_score = initial_score_decimal
+            best_markdown = resume_markdown
+            best_score = initial_score_decimal
+            iterations_used = 0
+            all_improvements = []
+            
+            for iteration in range(1, max_iterations + 1):
+                iterations_used = iteration
+                progress = 25 + int((iteration / max_iterations) * 50)
+                tailored_resume.update_progress(f'iteration_{iteration}', progress)
+                db.session.commit()
+                
+                logger.info(f"Improvement iteration {iteration}/{max_iterations}, current score: {current_score:.2%}")
+                
+                # Generate improvements
+                improved = self.improver.improve_resume(
+                    original_resume_markdown=current_markdown,
+                    job_title=job_title,
+                    job_description=job_description,
+                    job_data=job_data,
+                    missing_skills=initial_score.missing_skills,
+                    target_keywords=job_data.keywords.technical_keywords[:15]
+                )
+                
+                candidate_markdown = improved.content
+                
+                # Build improvement records
+                for change in improved.summary_of_changes:
+                    all_improvements.append({
+                        'section': 'general',
+                        'type': 'llm_improvement',
+                        'description': change,
+                        'iteration': iteration
+                    })
+                
+                # Recalculate score
+                new_score_result = self.scorer.calculate_match_score(
+                    resume_text=candidate_markdown,
+                    job_title=job_title,
+                    job_description=job_description,
+                    resume_skills=None
+                )
+                new_score = new_score_result.overall_score / 100.0
+                
+                logger.info(f"Score after iteration {iteration}: {new_score:.2%}")
+                
+                # Only keep this version if it's better than our best
+                if new_score > best_score:
+                    best_score = new_score
+                    best_markdown = candidate_markdown
+                    current_markdown = candidate_markdown
+                    current_score = new_score
+                    logger.info(f"New best score: {best_score:.2%}")
+                else:
+                    logger.info(f"Score {new_score:.2%} not better than best {best_score:.2%}, keeping previous version")
+                
+                # Check if target reached
+                if best_score >= target_score_decimal:
+                    logger.info(f"Target score {target_score_decimal:.2%} reached!")
+                    break
+            
+            # Use the best version we found
+            final_markdown = best_markdown
+            final_score = best_score
+            
+            # Identify added skills
+            added_skills = self._identify_added_skills(
+                original_markdown=resume_markdown,
+                improved_markdown=final_markdown,
+                job_keywords=job_data.keywords.technical_keywords
+            )
+            tailored_resume.added_skills = added_skills
+            
+            # Extract keywords from tailored content
+            tailored_resume.tailored_resume_keywords = self._extract_keywords_from_text(
+                final_markdown, 
+                job_data.keywords.technical_keywords
+            )
+            
+            # Build skill comparison
+            skill_comparison = self._build_skill_comparison(initial_score)
+            
+            # Complete the tailoring
+            tailored_resume.complete(
+                tailored_content=final_markdown,
+                tailored_html=None,
+                tailored_score=final_score,
+                improvements=all_improvements,
+                skill_comparison=skill_comparison,
+                iterations=iterations_used
+            )
+            db.session.commit()
+            
+            logger.info(
+                f"Manual resume tailoring completed. Score: {initial_score_decimal:.2%} -> {final_score:.2%} "
+                f"in {iterations_used} iterations, {tailored_resume.processing_duration_seconds}s"
+            )
+            
+            return tailored_resume
+            
+        except Exception as e:
+            logger.error(f"Manual resume tailoring failed: {e}")
+            
+            # Update record with failure if it exists
+            if 'tailored_resume' in locals() and tailored_resume.id:
+                try:
+                    tailored_resume.fail(str(e))
+                    db.session.commit()
+                except Exception as db_error:
+                    logger.error(f"Failed to update error status: {db_error}")
+            
+            raise
+    
     def get_tailored_resume(self, tailor_id: str) -> Optional[TailoredResume]:
         """Get a tailored resume by its UUID."""
         stmt = select(TailoredResume).where(TailoredResume.tailor_id == tailor_id)

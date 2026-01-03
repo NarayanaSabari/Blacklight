@@ -71,6 +71,33 @@ export const resumeTailorApi = {
   },
 
   /**
+   * Tailor a resume using a manually provided job description (no job posting record)
+   */
+  tailorManual: async (params: {
+    candidateId: number;
+    jobTitle: string;
+    jobDescription: string;
+    jobCompany?: string;
+    jobLocation?: string;
+    targetScore?: number;
+    maxIterations?: number;
+  }): Promise<TailorResumeResponse> => {
+    const response = await aiClient.post<TailorResumeResponse>(
+      `${BASE_URL}/tailor-manual`,
+      {
+        candidate_id: params.candidateId,
+        job_title: params.jobTitle,
+        job_description: params.jobDescription,
+        job_company: params.jobCompany,
+        job_location: params.jobLocation,
+        target_score: params.targetScore ?? 80,
+        max_iterations: params.maxIterations ?? 1,
+      }
+    );
+    return response.data;
+  },
+
+  /**
    * Get a specific tailored resume by tailor_id (UUID)
    */
   getTailoredResume: async (tailorId: string): Promise<TailoredResume> => {
