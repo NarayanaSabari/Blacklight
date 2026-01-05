@@ -167,6 +167,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import email_jobs_routes
     from app.routes import dashboard_routes
     from app.routes import submission_routes
+    from app.routes import scraper_credential_routes
     
     # Legacy API routes (health check, etc.)
     app.register_blueprint(api.bp)
@@ -237,6 +238,9 @@ def register_blueprints(app: Flask) -> None:
     
     # Submission Tracking routes (ATS - candidate submissions to jobs)
     app.register_blueprint(submission_routes.submission_bp)
+    
+    # Scraper Credential routes (credential management for scrapers)
+    app.register_blueprint(scraper_credential_routes.scraper_credentials_bp)
 
 
 def register_inngest(app: Flask) -> None:

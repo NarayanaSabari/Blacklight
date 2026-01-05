@@ -580,6 +580,7 @@ def export_tailored_resume(tailor_id: str):
             try:
                 from weasyprint import HTML, CSS
                 import markdown
+                import re
                 
                 logger.info(f"Starting PDF generation for tailor_id={tailor_id}")
                 
@@ -591,10 +592,102 @@ def export_tailored_resume(tailor_id: str):
                 
                 logger.info(f"Content length: {len(content)} chars")
                 
+                # ============================================================
+                # CLEANUP: Fix common AI output issues
+                # ============================================================
+                
+                # Remove duplicate sections (AI sometimes outputs same section twice)
+                # Find all section headers and keep only the last occurrence of each
+                section_pattern = r'^(#{1,3})\s+(.+?)$'
+                lines = content.split('\n')
+                seen_sections = {}
+                section_ranges = []
+                current_section_start = None
+                current_section_header = None
+                
+                for i, line in enumerate(lines):
+                    match = re.match(section_pattern, line.strip())
+                    if match:
+                        # Save previous section range
+                        if current_section_header is not None:
+                            section_ranges.append((current_section_start, i - 1, current_section_header))
+                        current_section_start = i
+                        current_section_header = match.group(2).strip().lower()
+                
+                # Don't forget the last section
+                if current_section_header is not None:
+                    section_ranges.append((current_section_start, len(lines) - 1, current_section_header))
+                
+                # Keep only the last occurrence of each section (which tends to be properly formatted)
+                section_last_occurrence = {}
+                for start, end, header in section_ranges:
+                    # Normalize header for comparison (e.g., "Experience" and "## Experience" should match)
+                    normalized_header = header.replace('#', '').strip().lower()
+                    section_last_occurrence[normalized_header] = (start, end)
+                
+                # Build cleaned content by keeping only non-duplicate sections
+                if section_ranges and len(section_ranges) > len(section_last_occurrence):
+                    # There are duplicates - keep only last occurrences
+                    lines_to_keep = set()
+                    for header, (start, end) in section_last_occurrence.items():
+                        for i in range(start, end + 1):
+                            lines_to_keep.add(i)
+                    
+                    # Also keep any lines before the first section (name, contact info)
+                    if section_ranges:
+                        first_section_start = section_ranges[0][0]
+                        for i in range(first_section_start):
+                            lines_to_keep.add(i)
+                    
+                    # Rebuild content
+                    cleaned_lines = [lines[i] for i in sorted(lines_to_keep)]
+                    content = '\n'.join(cleaned_lines)
+                    logger.info(f"Removed duplicate sections, new length: {len(content)} chars")
+                
+                # ============================================================
+                # FIX FORMATTING: Ensure proper line breaks for markdown
+                # ============================================================
+                
+                # 1. Ensure bullet points are on their own lines
+                content = re.sub(r'([^\n])(\s*[-*]\s+)', r'\1\n\2', content)
+                # 2. Ensure headers are on their own lines
+                content = re.sub(r'([^\n])(#{1,3}\s+)', r'\1\n\n\2', content)
+                # 3. Ensure there's a newline after headers before content
+                content = re.sub(r'(#{1,3}\s+[^\n]+)(\n)([^#\n\-*])', r'\1\n\n\3', content)
+                # 4. Fix inline bullet points that should be list items (e.g., "text - item - item")
+                # Split lines that have multiple " - " patterns indicating inline bullets
+                lines = content.split('\n')
+                processed_lines = []
+                for line in lines:
+                    # Skip if already a proper bullet or header
+                    if line.strip().startswith('-') or line.strip().startswith('*') or line.strip().startswith('#'):
+                        processed_lines.append(line)
+                    # Check for inline bullets pattern: " - " appearing multiple times
+                    elif line.count(' - ') >= 2 and not line.strip().startswith('*'):
+                        # This looks like inline bullet points, split them
+                        # But first check if it's a header line like "Title | Company"
+                        if ' | ' not in line:
+                            parts = re.split(r'\s+-\s+', line)
+                            if len(parts) > 1:
+                                # First part might be a header/intro, rest are bullets
+                                if parts[0].strip():
+                                    processed_lines.append(parts[0].strip())
+                                for part in parts[1:]:
+                                    if part.strip():
+                                        processed_lines.append(f"- {part.strip()}")
+                            else:
+                                processed_lines.append(line)
+                        else:
+                            processed_lines.append(line)
+                    else:
+                        processed_lines.append(line)
+                
+                content = '\n'.join(processed_lines)
+                
                 # Convert markdown to HTML
                 html_content = markdown.markdown(
                     content,
-                    extensions=['tables', 'fenced_code']
+                    extensions=['tables', 'fenced_code', 'nl2br']
                 )
                 
                 logger.info(f"HTML content generated, length: {len(html_content)} chars")

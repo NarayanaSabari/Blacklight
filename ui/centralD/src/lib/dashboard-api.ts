@@ -1521,3 +1521,237 @@ export const sessionJobLogsApi = {
     };
   },
 };
+
+// ============================================================================
+// SCRAPER CREDENTIALS API
+// ============================================================================
+
+export type CredentialPlatform = 'linkedin' | 'glassdoor' | 'techfetch';
+export type CredentialStatus = 'available' | 'in_use' | 'failed' | 'disabled' | 'cooldown';
+
+export interface ScraperCredential {
+  id: number;
+  platform: CredentialPlatform;
+  name: string;
+  email: string | null;
+  status: CredentialStatus;
+  notes: string | null;
+  failureCount: number;
+  successCount: number;
+  lastFailureAt: string | null;
+  lastFailureMessage: string | null;
+  lastSuccessAt: string | null;
+  assignedToSessionId: string | null;
+  assignedAt: string | null;
+  cooldownUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Only included when include_credentials=true
+  password?: string;
+  jsonCredentials?: Record<string, unknown>;
+}
+
+export interface CredentialStats {
+  platform: string;
+  total: number;
+  available: number;
+  inUse: number;
+  failed: number;
+  disabled: number;
+  cooldown: number;
+  totalSuccesses: number;
+  totalFailures: number;
+}
+
+export interface AllCredentialStats {
+  linkedin: CredentialStats;
+  glassdoor: CredentialStats;
+  techfetch: CredentialStats;
+}
+
+// Helper function to map API response to camelCase
+function mapCredential(data: Record<string, unknown>): ScraperCredential {
+  return {
+    id: data.id as number,
+    platform: data.platform as CredentialPlatform,
+    name: data.name as string,
+    email: data.email as string | null,
+    status: data.status as CredentialStatus,
+    notes: data.notes as string | null,
+    failureCount: data.failure_count as number,
+    successCount: data.success_count as number,
+    lastFailureAt: data.last_failure_at as string | null,
+    lastFailureMessage: data.last_failure_message as string | null,
+    lastSuccessAt: data.last_success_at as string | null,
+    assignedToSessionId: data.assigned_to_session_id as string | null,
+    assignedAt: data.assigned_at as string | null,
+    cooldownUntil: data.cooldown_until as string | null,
+    createdAt: data.created_at as string,
+    updatedAt: data.updated_at as string,
+    password: data.password as string | undefined,
+    jsonCredentials: data.json_credentials as Record<string, unknown> | undefined,
+  };
+}
+
+function mapStats(data: Record<string, unknown>): CredentialStats {
+  return {
+    platform: data.platform as string,
+    total: data.total as number,
+    available: data.available as number,
+    inUse: data.in_use as number,
+    failed: data.failed as number,
+    disabled: data.disabled as number,
+    cooldown: data.cooldown as number,
+    totalSuccesses: data.total_successes as number,
+    totalFailures: data.total_failures as number,
+  };
+}
+
+export const scraperCredentialsApi = {
+  /**
+   * Get all credentials with optional filters
+   */
+  getAll: async (params?: { platform?: string; status?: string }): Promise<{
+    credentials: ScraperCredential[];
+    total: number;
+  }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.platform) queryParams.set('platform', params.platform);
+    if (params?.status) queryParams.set('status', params.status);
+
+    const response = await apiClient.get(
+      `/api/scraper-credentials/?${queryParams.toString()}`
+    );
+
+    return {
+      credentials: (response.data.credentials as Record<string, unknown>[]).map(mapCredential),
+      total: response.data.total,
+    };
+  },
+
+  /**
+   * Get stats for all platforms
+   */
+  getAllStats: async (): Promise<AllCredentialStats> => {
+    const response = await apiClient.get('/api/scraper-credentials/stats');
+
+    return {
+      linkedin: mapStats(response.data.linkedin),
+      glassdoor: mapStats(response.data.glassdoor),
+      techfetch: mapStats(response.data.techfetch),
+    };
+  },
+
+  /**
+   * Get credentials for a specific platform
+   */
+  getByPlatform: async (
+    platform: CredentialPlatform,
+    status?: string
+  ): Promise<{
+    platform: string;
+    credentials: ScraperCredential[];
+    stats: CredentialStats;
+  }> => {
+    const queryParams = new URLSearchParams();
+    if (status) queryParams.set('status', status);
+
+    const response = await apiClient.get(
+      `/api/scraper-credentials/platforms/${platform}?${queryParams.toString()}`
+    );
+
+    return {
+      platform: response.data.platform,
+      credentials: (response.data.credentials as Record<string, unknown>[]).map(mapCredential),
+      stats: mapStats(response.data.stats),
+    };
+  },
+
+  /**
+   * Get a single credential by ID
+   */
+  getById: async (
+    id: number,
+    includeCredentials = false
+  ): Promise<ScraperCredential> => {
+    const response = await apiClient.get(
+      `/api/scraper-credentials/${id}?include_credentials=${includeCredentials}`
+    );
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Create a new email/password credential (LinkedIn, Techfetch)
+   */
+  createEmailCredential: async (data: {
+    platform: 'linkedin' | 'techfetch';
+    name: string;
+    email: string;
+    password: string;
+    notes?: string;
+  }): Promise<ScraperCredential> => {
+    const response = await apiClient.post('/api/scraper-credentials/', data);
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Create a new JSON credential (Glassdoor)
+   */
+  createJsonCredential: async (data: {
+    platform: 'glassdoor';
+    name: string;
+    json_credentials: Record<string, unknown>;
+    notes?: string;
+  }): Promise<ScraperCredential> => {
+    const response = await apiClient.post('/api/scraper-credentials/', data);
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Update a credential
+   */
+  update: async (
+    id: number,
+    data: {
+      name?: string;
+      email?: string;
+      password?: string;
+      json_credentials?: Record<string, unknown>;
+      notes?: string;
+    }
+  ): Promise<ScraperCredential> => {
+    const response = await apiClient.put(`/api/scraper-credentials/${id}`, data);
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Delete a credential
+   */
+  delete: async (id: number): Promise<void> => {
+    await apiClient.delete(`/api/scraper-credentials/${id}`);
+  },
+
+  /**
+   * Enable a credential (make available)
+   */
+  enable: async (id: number): Promise<ScraperCredential> => {
+    const response = await apiClient.post(`/api/scraper-credentials/${id}/enable`);
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Disable a credential
+   */
+  disable: async (id: number): Promise<ScraperCredential> => {
+    const response = await apiClient.post(`/api/scraper-credentials/${id}/disable`);
+    return mapCredential(response.data.credential);
+  },
+
+  /**
+   * Reset a failed credential
+   */
+  reset: async (id: number): Promise<ScraperCredential> => {
+    const response = await apiClient.post(`/api/scraper-credentials/${id}/reset`);
+    return mapCredential(response.data.credential);
+  },
+};

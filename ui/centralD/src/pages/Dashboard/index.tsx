@@ -1,112 +1,20 @@
 /**
- * Dashboard Page
- * Main dashboard for PM_ADMIN to monitor job matching system
- * Features 6 tabs: Overview, Scraper Monitoring, API Keys, Jobs Overview, Scraper Queue, Platforms
+ * Dashboard Module Exports
+ * Exports dashboard layout and all sub-route page components
  */
 
-import { 
-  StatsCards, 
-  ScraperMonitoring, 
-  RoleQueueTable, 
-  ApiKeysManager,
-  JobsPreview,
-  PlatformManager,
-  UnifiedRoleQueue
-} from './components';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  LayoutDashboard, 
-  Activity, 
-  Key, 
-  Briefcase, 
-  Tags,
-  Globe
-} from "lucide-react";
+// Layout
+export { DashboardLayout } from './DashboardLayout';
 
-export function DashboardPage() {
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Job matching system monitoring and management
-        </p>
-      </div>
+// Pages
+export { 
+  OverviewPage, 
+  ScraperPage, 
+  ApiKeysPage, 
+  JobsOverviewPage, 
+  QueuePage, 
+  PlatformsPage 
+} from './pages';
 
-      {/* Stats Cards - Always visible */}
-      <StatsCards />
-
-      {/* Tabbed Content */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="inline-flex h-11 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full max-w-full overflow-x-auto">
-          <TabsTrigger value="overview" className="flex items-center gap-2 px-4">
-            <LayoutDashboard className="h-4 w-4" />
-            <span>Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="scraper" className="flex items-center gap-2 px-4">
-            <Activity className="h-4 w-4" />
-            <span>Scraper Monitoring</span>
-          </TabsTrigger>
-          <TabsTrigger value="api-keys" className="flex items-center gap-2 px-4">
-            <Key className="h-4 w-4" />
-            <span>API Keys</span>
-          </TabsTrigger>
-          <TabsTrigger value="jobs" className="flex items-center gap-2 px-4">
-            <Briefcase className="h-4 w-4" />
-            <span>Jobs Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="scraper-queue" className="flex items-center gap-2 px-4">
-            <Tags className="h-4 w-4" />
-            <span>Scraper Queue</span>
-          </TabsTrigger>
-          <TabsTrigger value="platforms" className="flex items-center gap-2 px-4">
-            <Globe className="h-4 w-4" />
-            <span>Platforms</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Tab 1: Overview - Combined view */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ScraperMonitoring />
-            <ApiKeysManager />
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <JobsPreview />
-            <RoleQueueTable />
-          </div>
-        </TabsContent>
-
-        {/* Tab 2: Scraper Monitoring */}
-        <TabsContent value="scraper" className="space-y-6">
-          <ScraperMonitoring />
-        </TabsContent>
-
-        {/* Tab 3: API Keys Management */}
-        <TabsContent value="api-keys" className="space-y-6">
-          <ApiKeysManager />
-        </TabsContent>
-
-        {/* Tab 4: Jobs Overview */}
-        <TabsContent value="jobs" className="space-y-6">
-          <JobsPreview />
-        </TabsContent>
-
-        {/* Tab 5: Unified Scraper Queue (Roles + Locations) */}
-        <TabsContent value="scraper-queue" className="space-y-6">
-          <RoleQueueTable />
-          {/* Unified Role Queue with expandable locations */}
-          <UnifiedRoleQueue />
-        </TabsContent>
-
-        {/* Tab 6: Platform Manager */}
-        <TabsContent value="platforms" className="space-y-6">
-          <PlatformManager />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
-
-export default DashboardPage;
+// Legacy export for backwards compatibility (can be removed once App.tsx is updated)
+export { DashboardLayout as DashboardPage } from './DashboardLayout';

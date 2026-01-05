@@ -10,7 +10,15 @@ import { PMAdminAuthProvider } from '@/contexts/PMAdminAuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
-import { DashboardPage } from '@/pages/Dashboard';
+import { 
+  DashboardLayout, 
+  OverviewPage, 
+  ScraperPage, 
+  ApiKeysPage, 
+  JobsOverviewPage, 
+  QueuePage, 
+  PlatformsPage 
+} from '@/pages/Dashboard';
 import { TenantsPage } from '@/pages/TenantsPage';
 import { CreateTenantPage } from '@/pages/CreateTenantPage';
 import { TenantDetailPage } from '@/pages/TenantDetailPage';
@@ -19,6 +27,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { JobsPage } from '@/pages/JobsPage';
 import { SessionDetailPage } from '@/pages/SessionDetailPage';
+import { CredentialsPage } from '@/pages/CredentialsPage';
 import { env } from '@/lib/env';
 
 // Create React Query client
@@ -45,7 +54,16 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
+                
+                {/* Dashboard with nested sub-routes */}
+                <Route path="/dashboard" element={<DashboardLayout />}>
+                  <Route index element={<OverviewPage />} />
+                  <Route path="scraper" element={<ScraperPage />} />
+                  <Route path="api-keys" element={<ApiKeysPage />} />
+                  <Route path="jobs" element={<JobsOverviewPage />} />
+                  <Route path="queue" element={<QueuePage />} />
+                  <Route path="platforms" element={<PlatformsPage />} />
+                </Route>
                 <Route path="/tenants" element={<TenantsPage />} />
                 <Route path="/tenants/new" element={<CreateTenantPage />} />
                 <Route path="/tenants/:slug" element={<TenantDetailPage />} />
@@ -53,6 +71,7 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admins" element={<AdminsPage />} />
                 <Route path="/jobs" element={<JobsPage />} />
+                <Route path="/credentials" element={<CredentialsPage />} />
                 <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
               </Route>
             </Route>
