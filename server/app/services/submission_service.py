@@ -163,6 +163,133 @@ class SubmissionService:
         
         return submission
     
+    def create_external_submission(
+        self,
+        user_id: int,
+        candidate_id: int,
+        external_job_title: str,
+        external_job_company: str,
+        external_job_location: Optional[str] = None,
+        external_job_url: Optional[str] = None,
+        external_job_description: Optional[str] = None,
+        vendor_company: Optional[str] = None,
+        vendor_contact_name: Optional[str] = None,
+        vendor_contact_email: Optional[str] = None,
+        vendor_contact_phone: Optional[str] = None,
+        client_company: Optional[str] = None,
+        bill_rate: Optional[float] = None,
+        pay_rate: Optional[float] = None,
+        rate_type: str = 'HOURLY',
+        currency: str = 'USD',
+        submission_notes: Optional[str] = None,
+        priority: str = 'MEDIUM',
+        is_hot: bool = False,
+        follow_up_date: Optional[datetime] = None
+    ) -> Submission:
+        """
+        Create a submission for an external job (not in the job_postings table).
+        
+        This allows recruiters to track submissions to jobs they found outside
+        the portal (LinkedIn, Dice, company websites, etc.).
+        
+        Args:
+            user_id: ID of user creating the submission
+            candidate_id: ID of candidate being submitted
+            external_job_title: Job title
+            external_job_company: Company name
+            external_job_location: Job location
+            external_job_url: URL to the original job posting
+            external_job_description: Brief description or notes
+            vendor_company: Vendor/staffing agency name
+            vendor_contact_name: Vendor contact name
+            vendor_contact_email: Vendor contact email
+            vendor_contact_phone: Vendor contact phone
+            client_company: End client company name
+            bill_rate: Bill rate ($/hr)
+            pay_rate: Pay rate ($/hr)
+            rate_type: HOURLY, DAILY, WEEKLY, MONTHLY, ANNUAL
+            currency: Currency code (USD)
+            submission_notes: Notes about the submission
+            priority: HIGH, MEDIUM, LOW
+            is_hot: Whether this is a hot/urgent submission
+            follow_up_date: When to follow up
+            
+        Returns:
+            Created Submission instance
+            
+        Raises:
+            ValueError: If candidate not found or required fields missing
+        """
+        # Validate required fields
+        if not external_job_title or not external_job_title.strip():
+            raise ValueError("Job title is required for external submissions")
+        if not external_job_company or not external_job_company.strip():
+            raise ValueError("Company name is required for external submissions")
+        
+        # Validate candidate exists and belongs to tenant
+        candidate = db.session.get(Candidate, candidate_id)
+        if not candidate:
+            raise ValueError(f"Candidate {candidate_id} not found")
+        if candidate.tenant_id != self.tenant_id:
+            raise ValueError(f"Candidate {candidate_id} does not belong to this tenant")
+        
+        # Create submission with external job data
+        submission = Submission(
+            candidate_id=candidate_id,
+            job_posting_id=None,  # No internal job posting
+            is_external_job=True,
+            external_job_title=external_job_title.strip(),
+            external_job_company=external_job_company.strip(),
+            external_job_location=external_job_location.strip() if external_job_location else None,
+            external_job_url=external_job_url.strip() if external_job_url else None,
+            external_job_description=external_job_description,
+            submitted_by_user_id=user_id,
+            tenant_id=self.tenant_id,
+            status=SubmissionStatus.SUBMITTED,
+            status_changed_at=datetime.utcnow(),
+            status_changed_by_id=user_id,
+            vendor_company=vendor_company,
+            vendor_contact_name=vendor_contact_name,
+            vendor_contact_email=vendor_contact_email,
+            vendor_contact_phone=vendor_contact_phone,
+            client_company=client_company,
+            bill_rate=Decimal(str(bill_rate)) if bill_rate else None,
+            pay_rate=Decimal(str(pay_rate)) if pay_rate else None,
+            rate_type=rate_type,
+            currency=currency,
+            submission_notes=submission_notes,
+            priority=priority,
+            is_hot=is_hot,
+            follow_up_date=follow_up_date,
+            submitted_at=datetime.utcnow(),
+        )
+        
+        db.session.add(submission)
+        db.session.flush()  # Get submission ID for activity
+        
+        # Create initial activity
+        activity = SubmissionActivity(
+            submission_id=submission.id,
+            created_by_id=user_id,
+            activity_type=ActivityType.CREATED,
+            content=f"Submission created for {candidate.first_name} {candidate.last_name} to {external_job_title} at {external_job_company} (external job)",
+            activity_metadata={
+                'candidate_name': f"{candidate.first_name} {candidate.last_name}",
+                'job_title': external_job_title,
+                'company': external_job_company,
+                'is_external_job': True,
+                'vendor_company': vendor_company,
+                'job_url': external_job_url,
+            }
+        )
+        db.session.add(activity)
+        
+        db.session.commit()
+        
+        logger.info(f"Created external submission {submission.id} for candidate {candidate_id} to {external_job_title} at {external_job_company}")
+        
+        return submission
+    
     def get_submission(
         self,
         submission_id: int,

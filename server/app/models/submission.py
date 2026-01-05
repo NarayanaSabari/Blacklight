@@ -69,12 +69,22 @@ class Submission(db.Model):
         nullable=False, 
         index=True
     )
+    # job_posting_id is nullable to support external/manual job submissions
     job_posting_id = db.Column(
         Integer, 
         ForeignKey('job_postings.id', ondelete='CASCADE'), 
-        nullable=False, 
+        nullable=True,  # Nullable for external jobs
         index=True
     )
+    
+    # External Job Fields (for jobs not in the portal)
+    # These are used when job_posting_id is NULL
+    is_external_job = db.Column(Boolean, default=False, nullable=False)
+    external_job_title = db.Column(String(255))
+    external_job_company = db.Column(String(255))
+    external_job_location = db.Column(String(255))
+    external_job_url = db.Column(String(1000))  # URL to the original job posting
+    external_job_description = db.Column(Text)  # Brief description or notes about the job
     submitted_by_user_id = db.Column(
         Integer, 
         ForeignKey('portal_users.id', ondelete='SET NULL'), 
@@ -177,11 +187,15 @@ class Submission(db.Model):
     # Indexes
     __table_args__ = (
         # Unique constraint: one submission per candidate per job per tenant
-        Index('idx_submission_unique', 'candidate_id', 'job_posting_id', 'tenant_id', unique=True),
+        # Note: This only applies to internal jobs (job_posting_id NOT NULL)
+        # External jobs are not constrained by this index
+        Index('idx_submission_unique', 'candidate_id', 'job_posting_id', 'tenant_id', unique=True, postgresql_where=db.text('job_posting_id IS NOT NULL')),
         # Common query patterns
         Index('idx_submission_tenant_status', 'tenant_id', 'status'),
         Index('idx_submission_submitted_at', 'submitted_at', postgresql_ops={'submitted_at': 'DESC'}),
         Index('idx_submission_submitted_by', 'submitted_by_user_id', 'status'),
+        # External job queries
+        Index('idx_submission_external', 'tenant_id', 'is_external_job'),
     )
     
     def __repr__(self):
@@ -202,6 +216,14 @@ class Submission(db.Model):
             'job_posting_id': self.job_posting_id,
             'submitted_by_user_id': self.submitted_by_user_id,
             'tenant_id': self.tenant_id,
+            
+            # External Job Info
+            'is_external_job': self.is_external_job,
+            'external_job_title': self.external_job_title,
+            'external_job_company': self.external_job_company,
+            'external_job_location': self.external_job_location,
+            'external_job_url': self.external_job_url,
+            'external_job_description': self.external_job_description,
             
             # Status
             'status': self.status,
@@ -270,17 +292,30 @@ class Submission(db.Model):
                 'location': self.candidate.location,
             }
         
-        if include_job and self.job_posting:
-            result['job'] = {
-                'id': self.job_posting.id,
-                'title': self.job_posting.title,
-                'company': self.job_posting.company,
-                'location': self.job_posting.location,
-                'job_type': self.job_posting.job_type,
-                'is_remote': self.job_posting.is_remote,
-                'platform': self.job_posting.platform,
-                'job_url': self.job_posting.job_url,
-            }
+        if include_job:
+            if self.job_posting:
+                result['job'] = {
+                    'id': self.job_posting.id,
+                    'title': self.job_posting.title,
+                    'company': self.job_posting.company,
+                    'location': self.job_posting.location,
+                    'job_type': self.job_posting.job_type,
+                    'is_remote': self.job_posting.is_remote,
+                    'platform': self.job_posting.platform,
+                    'job_url': self.job_posting.job_url,
+                }
+            elif self.is_external_job:
+                # Return external job info when job_posting is null
+                result['job'] = {
+                    'id': None,
+                    'title': self.external_job_title,
+                    'company': self.external_job_company,
+                    'location': self.external_job_location,
+                    'job_type': None,
+                    'is_remote': None,
+                    'platform': 'external',
+                    'job_url': self.external_job_url,
+                }
         
         if include_submitted_by and self.submitted_by:
             result['submitted_by'] = {

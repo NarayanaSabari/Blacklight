@@ -106,13 +106,13 @@ export interface SubmissionCandidate {
 }
 
 export interface SubmissionJob {
-  id: number;
+  id?: number | null; // Null for external jobs
   title: string;
   company: string;
   location?: string;
   job_type?: string;
   is_remote?: boolean;
-  platform?: string;
+  platform?: string; // 'external' for external jobs
   job_url?: string;
 }
 
@@ -143,9 +143,17 @@ export interface SubmissionActivity {
 export interface Submission {
   id: number;
   candidate_id: number;
-  job_posting_id: number;
+  job_posting_id?: number | null; // Nullable for external jobs
   submitted_by_user_id?: number;
   tenant_id: number;
+
+  // External Job Info
+  is_external_job?: boolean;
+  external_job_title?: string;
+  external_job_company?: string;
+  external_job_location?: string;
+  external_job_url?: string;
+  external_job_description?: string;
 
   // Status
   status: SubmissionStatus;
@@ -233,6 +241,39 @@ export interface SubmissionCreateInput {
   submission_notes?: string;
   cover_letter?: string;
   tailored_resume_id?: number;
+
+  // Priority
+  priority?: PriorityLevel;
+  is_hot?: boolean;
+  follow_up_date?: string;
+}
+
+export interface ExternalSubmissionCreateInput {
+  // Required
+  candidate_id: number;
+
+  // External job info (required)
+  external_job_title: string;
+  external_job_company: string;
+  external_job_location?: string;
+  external_job_url?: string;
+  external_job_description?: string;
+
+  // Vendor/Client info
+  vendor_company?: string;
+  vendor_contact_name?: string;
+  vendor_contact_email?: string;
+  vendor_contact_phone?: string;
+  client_company?: string;
+
+  // Rate information
+  bill_rate?: number;
+  pay_rate?: number;
+  rate_type?: RateType;
+  currency?: string;
+
+  // Submission details
+  submission_notes?: string;
 
   // Priority
   priority?: PriorityLevel;

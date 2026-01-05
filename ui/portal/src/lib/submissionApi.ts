@@ -8,6 +8,7 @@ import type {
   Submission,
   SubmissionListResponse,
   SubmissionCreateInput,
+  ExternalSubmissionCreateInput,
   SubmissionUpdateInput,
   SubmissionStatusUpdateInput,
   SubmissionInterviewScheduleInput,
@@ -67,6 +68,14 @@ export const submissionApi = {
    */
   createSubmission: async (data: SubmissionCreateInput): Promise<Submission> => {
     return apiRequest.post<Submission>('/api/submissions', data);
+  },
+
+  /**
+   * Create a submission to an external job (not in portal)
+   * Use this when the job is from LinkedIn, Dice, company websites, etc.
+   */
+  createExternalSubmission: async (data: ExternalSubmissionCreateInput): Promise<Submission> => {
+    return apiRequest.post<Submission>('/api/submissions/external', data);
   },
 
   /**

@@ -80,6 +80,57 @@ class SubmissionCreateSchema(BaseModel):
         return v
 
 
+class ExternalSubmissionCreateSchema(BaseModel):
+    """Schema for creating a submission to an external job (not in portal)."""
+    
+    # Required fields
+    candidate_id: int = Field(..., description="ID of the candidate being submitted")
+    
+    # External job info (required for external submissions)
+    external_job_title: str = Field(..., min_length=1, max_length=255, description="Job title")
+    external_job_company: str = Field(..., min_length=1, max_length=255, description="Company name")
+    external_job_location: Optional[str] = Field(None, max_length=255)
+    external_job_url: Optional[str] = Field(None, max_length=1000, description="URL to the original job posting")
+    external_job_description: Optional[str] = Field(None, description="Brief description or notes about the job")
+    
+    # Vendor/Client info (important for bench recruiters)
+    vendor_company: Optional[str] = Field(None, max_length=255)
+    vendor_contact_name: Optional[str] = Field(None, max_length=255)
+    vendor_contact_email: Optional[EmailStr] = None
+    vendor_contact_phone: Optional[str] = Field(None, max_length=50)
+    client_company: Optional[str] = Field(None, max_length=255)
+    
+    # Rate information
+    bill_rate: Optional[float] = Field(None, ge=0, description="Bill rate ($/hr)")
+    pay_rate: Optional[float] = Field(None, ge=0, description="Pay rate ($/hr)")
+    rate_type: Optional[str] = Field(default='HOURLY', max_length=20)
+    currency: Optional[str] = Field(default='USD', max_length=10)
+    
+    # Submission details
+    submission_notes: Optional[str] = None
+    
+    # Priority
+    priority: Optional[str] = Field(default='MEDIUM', max_length=20)
+    is_hot: Optional[bool] = Field(default=False)
+    follow_up_date: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('rate_type')
+    @classmethod
+    def validate_rate_type(cls, v: Optional[str]) -> Optional[str]:
+        if v and v not in RATE_TYPES:
+            raise ValueError(f"Rate type must be one of: {', '.join(RATE_TYPES)}")
+        return v
+    
+    @field_validator('priority')
+    @classmethod
+    def validate_priority(cls, v: Optional[str]) -> Optional[str]:
+        if v and v not in PRIORITY_LEVELS:
+            raise ValueError(f"Priority must be one of: {', '.join(PRIORITY_LEVELS)}")
+        return v
+
+
 class SubmissionUpdateSchema(BaseModel):
     """Schema for updating an existing submission."""
     
@@ -247,13 +298,13 @@ class SubmissionCandidateResponse(BaseModel):
 
 class SubmissionJobResponse(BaseModel):
     """Nested job info in submission response."""
-    id: int
+    id: Optional[int] = None  # None for external jobs
     title: str
     company: str
     location: Optional[str] = None
     job_type: Optional[str] = None
     is_remote: Optional[bool] = None
-    platform: Optional[str] = None
+    platform: Optional[str] = None  # 'external' for external jobs
     job_url: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
@@ -289,9 +340,17 @@ class SubmissionResponse(BaseModel):
     """Response schema for a submission."""
     id: int
     candidate_id: int
-    job_posting_id: int
+    job_posting_id: Optional[int] = None  # Nullable for external jobs
     submitted_by_user_id: Optional[int] = None
     tenant_id: int
+    
+    # External job info
+    is_external_job: bool = False
+    external_job_title: Optional[str] = None
+    external_job_company: Optional[str] = None
+    external_job_location: Optional[str] = None
+    external_job_url: Optional[str] = None
+    external_job_description: Optional[str] = None
     
     # Status
     status: str

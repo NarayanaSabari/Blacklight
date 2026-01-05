@@ -11,6 +11,7 @@ from app import db
 from app.services.submission_service import SubmissionService
 from app.schemas.submission_schema import (
     SubmissionCreateSchema,
+    ExternalSubmissionCreateSchema,
     SubmissionUpdateSchema,
     SubmissionStatusUpdateSchema,
     SubmissionInterviewScheduleSchema,
@@ -107,6 +108,74 @@ def create_submission():
     except Exception as e:
         logger.error(f"Error creating submission: {e}", exc_info=True)
         return error_response(f"Failed to create submission: {str(e)}", 500)
+
+
+@submission_bp.route('/external', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('submissions.create')
+def create_external_submission():
+    """
+    Create a new submission to an external job (not in portal).
+    
+    This allows recruiters to track submissions to jobs they found
+    outside the portal (LinkedIn, Dice, company websites, etc.).
+    
+    Request Body: ExternalSubmissionCreateSchema
+    Returns: SubmissionResponse
+    """
+    try:
+        # Validate request body
+        data = ExternalSubmissionCreateSchema.model_validate(request.get_json())
+        
+        # Create external submission
+        service = get_service()
+        submission = service.create_external_submission(
+            user_id=g.user_id,
+            candidate_id=data.candidate_id,
+            external_job_title=data.external_job_title,
+            external_job_company=data.external_job_company,
+            external_job_location=data.external_job_location,
+            external_job_url=data.external_job_url,
+            external_job_description=data.external_job_description,
+            vendor_company=data.vendor_company,
+            vendor_contact_name=data.vendor_contact_name,
+            vendor_contact_email=data.vendor_contact_email,
+            vendor_contact_phone=data.vendor_contact_phone,
+            client_company=data.client_company,
+            bill_rate=data.bill_rate,
+            pay_rate=data.pay_rate,
+            rate_type=data.rate_type or 'HOURLY',
+            currency=data.currency or 'USD',
+            submission_notes=data.submission_notes,
+            priority=data.priority or 'MEDIUM',
+            is_hot=data.is_hot or False,
+            follow_up_date=data.follow_up_date,
+        )
+        
+        # Return response with related data
+        response_data = submission.to_dict(
+            include_candidate=True,
+            include_job=True,
+            include_submitted_by=True
+        )
+        
+        logger.info(f"Created external submission {submission.id} by user {g.user_id}")
+        
+        return jsonify(response_data), 201
+    
+    except ValidationError as e:
+        logger.warning(f"Validation error creating external submission: {e}")
+        return error_response("Validation error", 400, e.errors())
+    
+    except ValueError as e:
+        # Business logic errors (not found, etc.)
+        logger.warning(f"Business error creating external submission: {e}")
+        return error_response(str(e), 400)
+    
+    except Exception as e:
+        logger.error(f"Error creating external submission: {e}", exc_info=True)
+        return error_response(f"Failed to create external submission: {str(e)}", 500)
 
 
 @submission_bp.route('/<int:submission_id>', methods=['GET'])

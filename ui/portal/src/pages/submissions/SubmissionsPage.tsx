@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ManualSubmissionDialog } from '@/components/ManualSubmissionDialog';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,8 @@ import {
   CheckCircle2,
   XCircle,
   PauseCircle,
+  Plus,
+  ExternalLink,
 } from 'lucide-react';
 import { submissionApi } from '@/lib/submissionApi';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -95,6 +98,9 @@ const STATUS_ICONS: Record<SubmissionStatus, React.ReactNode> = {
 export function SubmissionsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Manual submission dialog state
+  const [manualSubmissionOpen, setManualSubmissionOpen] = useState(false);
 
   // Filter state from URL params
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,8 +177,12 @@ export function SubmissionsPage() {
     const searchLower = searchQuery.toLowerCase();
     const candidateName =
       `${submission.candidate?.first_name || ''} ${submission.candidate?.last_name || ''}`.toLowerCase();
-    const jobTitle = submission.job?.title?.toLowerCase() || '';
-    const company = submission.job?.company?.toLowerCase() || '';
+    const jobTitle = submission.is_external_job 
+      ? submission.external_job_title?.toLowerCase() || ''
+      : submission.job?.title?.toLowerCase() || '';
+    const company = submission.is_external_job
+      ? submission.external_job_company?.toLowerCase() || ''
+      : submission.job?.company?.toLowerCase() || '';
     const vendor = submission.vendor_company?.toLowerCase() || '';
     return (
       candidateName.includes(searchLower) ||
@@ -308,6 +318,12 @@ export function SubmissionsPage() {
 
               {/* Filters */}
               <div className="flex flex-wrap gap-2">
+                {/* Add Submission Button */}
+                <Button onClick={() => setManualSubmissionOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Submission
+                </Button>
+
                 {/* Status Filter */}
                 <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
                   <SelectTrigger className="w-[160px]">
@@ -428,15 +444,30 @@ export function SubmissionsPage() {
                           {/* Job */}
                           <TableCell>
                             <div className="flex items-start gap-2">
-                              <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              {submission.is_external_job ? (
+                                <ExternalLink className="h-4 w-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                              ) : (
+                                <Briefcase className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              )}
                               <div className="min-w-0">
-                                <p className="font-medium text-sm truncate">
-                                  {submission.job?.title}
-                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-medium text-sm truncate">
+                                    {submission.is_external_job 
+                                      ? submission.external_job_title 
+                                      : submission.job?.title}
+                                  </p>
+                                  {submission.is_external_job && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-200">
+                                      External
+                                    </Badge>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                   <Building2 className="h-3 w-3" />
                                   <span className="truncate">
-                                    {submission.job?.company}
+                                    {submission.is_external_job 
+                                      ? submission.external_job_company 
+                                      : submission.job?.company}
                                   </span>
                                 </div>
                               </div>
@@ -645,6 +676,12 @@ export function SubmissionsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Manual Submission Dialog */}
+        <ManualSubmissionDialog
+          open={manualSubmissionOpen}
+          onOpenChange={setManualSubmissionOpen}
+        />
       </div>
     </TooltipProvider>
   );
