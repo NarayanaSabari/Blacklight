@@ -349,3 +349,79 @@ def update_candidate_counts_step() -> int:
     logger.info(f"[INNGEST] Updated candidate counts for {len(roles)} roles")
     return len(roles)
 
+
+# ============================================================================
+# SCRAPER CREDENTIALS SCHEDULED TASKS
+# ============================================================================
+
+@inngest_client.create_function(
+    fn_id="cleanup-stale-scraper-credentials",
+    trigger=inngest.TriggerCron(cron="*/10 * * * *"),  # Every 10 minutes
+    name="Cleanup Stale Scraper Credentials"
+)
+async def cleanup_stale_credentials_workflow(ctx) -> dict:
+    """
+    Cleanup scraper credentials stuck in 'in_use' state.
+    Runs every 10 minutes.
+    
+    Credentials assigned for more than 60 minutes are released
+    to prevent being stuck if a scraper crashes.
+    """
+    logger.info("[INNGEST] Running stale scraper credentials cleanup")
+    
+    # Step 1: Cleanup stale assignments
+    stale_count = await ctx.step.run(
+        "cleanup-stale-credentials",
+        cleanup_stale_credentials_step
+    )
+    
+    logger.info(f"[INNGEST] Released {stale_count} stale credentials")
+    
+    return {
+        "credentials_released": stale_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@inngest_client.create_function(
+    fn_id="clear-expired-credential-cooldowns",
+    trigger=inngest.TriggerCron(cron="*/5 * * * *"),  # Every 5 minutes
+    name="Clear Expired Credential Cooldowns"
+)
+async def clear_credential_cooldowns_workflow(ctx) -> dict:
+    """
+    Clear cooldown status for credentials whose cooldown has expired.
+    Runs every 5 minutes.
+    
+    Credentials in 'cooldown' status with expired cooldown_until
+    are moved back to 'available'.
+    """
+    logger.info("[INNGEST] Running credential cooldown expiry check")
+    
+    # Step 1: Clear expired cooldowns
+    cleared_count = await ctx.step.run(
+        "clear-expired-cooldowns",
+        clear_expired_cooldowns_step
+    )
+    
+    logger.info(f"[INNGEST] Cleared cooldown for {cleared_count} credentials")
+    
+    return {
+        "cooldowns_cleared": cleared_count,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+# Step Functions for Scraper Credentials Tasks
+
+def cleanup_stale_credentials_step() -> int:
+    """Release credentials stuck in 'in_use' state for too long"""
+    from app.services.scraper_credential_service import ScraperCredentialService
+    return ScraperCredentialService.cleanup_stale_assignments(timeout_minutes=60)
+
+
+def clear_expired_cooldowns_step() -> int:
+    """Clear expired cooldown status from credentials"""
+    from app.services.scraper_credential_service import ScraperCredentialService
+    return ScraperCredentialService.clear_expired_cooldowns()
+

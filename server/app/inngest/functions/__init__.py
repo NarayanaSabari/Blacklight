@@ -15,7 +15,9 @@ from .scheduled_tasks import (
     generate_daily_stats_workflow,
     cleanup_stale_sessions_workflow,
     reset_completed_roles_workflow,
-    update_role_candidate_counts_workflow
+    update_role_candidate_counts_workflow,
+    cleanup_stale_credentials_workflow,
+    clear_credential_cooldowns_workflow
 )
 from .job_matching_tasks import (
     nightly_match_refresh_workflow,
@@ -55,6 +57,8 @@ INNGEST_FUNCTIONS = [
     cleanup_stale_sessions_workflow,
     reset_completed_roles_workflow,
     update_role_candidate_counts_workflow,
+    cleanup_stale_credentials_workflow,
+    clear_credential_cooldowns_workflow,
     
     # Job Matching Tasks
     nightly_match_refresh_workflow,

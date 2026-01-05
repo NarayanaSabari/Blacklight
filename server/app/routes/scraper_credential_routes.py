@@ -1,13 +1,13 @@
 """
 Scraper Credential Routes
 
-Two sets of endpoints:
-1. PM_ADMIN Dashboard API (for CentralD UI) - CRUD operations
-2. Scraper API (for external scrapers) - Get credentials, report failures
+Two sets of endpoints with different authentication:
 
-Authentication:
-- PM_ADMIN endpoints: JWT token via @require_pm_admin
-- Scraper endpoints: X-Scraper-API-Key header via @require_scraper_auth
+1. PM_ADMIN Dashboard API (for CentralD UI) - CRUD operations
+   - Authentication: JWT token via @require_pm_admin
+   
+2. Scraper API (for external scrapers) - Get credentials, report failures
+   - Authentication: X-Scraper-API-Key header via @require_scraper_auth
 """
 import logging
 from functools import wraps
@@ -56,6 +56,7 @@ def require_scraper_auth(f):
 
 # ============================================================================
 # PM_ADMIN DASHBOARD ENDPOINTS (CentralD UI)
+# Authentication: JWT token via @require_pm_admin
 # ============================================================================
 
 @scraper_credentials_bp.route('/', methods=['GET'])
@@ -319,6 +320,7 @@ def reset_credential(credential_id: int):
 
 # ============================================================================
 # SCRAPER API ENDPOINTS (for external scrapers)
+# Authentication: X-Scraper-API-Key header via @require_scraper_auth
 # ============================================================================
 
 @scraper_credentials_bp.route('/queue/<platform>/next', methods=['GET'])
