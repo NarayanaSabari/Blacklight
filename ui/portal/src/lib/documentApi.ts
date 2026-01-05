@@ -13,6 +13,7 @@ import type {
   DocumentFilters,
   DocumentUploadRequest,
   DocumentVerifyRequest,
+  StorageBrowseResponse,
 } from '@/types/document';
 
 export const documentApi = {
@@ -96,6 +97,27 @@ export const documentApi = {
    */
   getStats: async (): Promise<DocumentStats> => {
     return apiRequest.get<DocumentStats>('/api/documents/stats');
+  },
+
+  /**
+   * Browse storage files and folders
+   */
+  browseStorage: async (path: string = '', recursive: boolean = false): Promise<StorageBrowseResponse> => {
+    const params = new URLSearchParams();
+    if (path) params.append('path', path);
+    if (recursive) params.append('recursive', 'true');
+    
+    const queryString = params.toString();
+    const url = queryString ? `/api/documents/storage/browse?${queryString}` : '/api/documents/storage/browse';
+    
+    return apiRequest.get<StorageBrowseResponse>(url);
+  },
+
+  /**
+   * Download a file from storage by path
+   */
+  downloadStorageFile: async (path: string): Promise<Blob> => {
+    return apiRequest.getBlob(`/api/documents/storage/download?path=${encodeURIComponent(path)}`);
   },
 };
 

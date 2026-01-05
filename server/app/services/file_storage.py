@@ -690,6 +690,192 @@ class FileStorageService:
         # Build new key using candidate path
         return f"tenants/{tenant_id}/candidates/{candidate_id}/{document_type}/{filename}"
 
+    def list_files(
+        self,
+        tenant_id: int,
+        prefix: Optional[str] = None,
+        delimiter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        List all files and folders in storage for a tenant.
+        
+        Args:
+            tenant_id: Tenant ID for isolation
+            prefix: Optional path prefix to filter (relative to tenant folder)
+            delimiter: Optional delimiter for folder-like listing (use '/' for folder view)
+        
+        Returns:
+            Dictionary with listing result:
+            {
+                "success": bool,
+                "files": List[Dict] - list of file objects,
+                "prefixes": List[str] - list of "folder" prefixes (when using delimiter),
+                "total_count": int,
+                "total_size_bytes": int,
+                "error": Optional[str]
+            }
+        """
+        try:
+            # Build the full prefix for this tenant
+            base_prefix = f"tenants/{tenant_id}/"
+            if prefix:
+                # Ensure prefix doesn't have leading slash and ends with /
+                clean_prefix = prefix.strip('/')
+                if clean_prefix:
+                    base_prefix = f"tenants/{tenant_id}/{clean_prefix}/"
+            
+            if self.storage_backend == 'gcs':
+                return self._list_files_gcs(base_prefix, delimiter)
+            else:
+                return self._list_files_local(base_prefix, delimiter)
+        
+        except Exception as e:
+            logger.error(f"File listing failed: {e}")
+            return {"success": False, "error": f"Listing failed: {str(e)}", "files": [], "prefixes": []}
+
+    def _list_files_gcs(self, prefix: str, delimiter: Optional[str] = None) -> Dict[str, Any]:
+        """List files from GCS bucket"""
+        try:
+            files = []
+            prefixes = []
+            total_size = 0
+            
+            # List blobs with optional delimiter for folder-like behavior
+            blobs = self.gcs_client.list_blobs(
+                self.bucket_name,
+                prefix=prefix,
+                delimiter=delimiter
+            )
+            
+            # Process blobs (files)
+            for blob in blobs:
+                # Skip the prefix itself if it's a "folder"
+                if blob.name == prefix or blob.name.endswith('/'):
+                    continue
+                
+                file_info = {
+                    "name": blob.name.split('/')[-1],  # Just the filename
+                    "full_path": blob.name,  # Full GCS path
+                    "relative_path": blob.name.replace(f"tenants/", ""),  # Path without tenants/ prefix
+                    "size": blob.size or 0,
+                    "content_type": blob.content_type or "application/octet-stream",
+                    "created_at": blob.time_created.isoformat() if blob.time_created else None,
+                    "updated_at": blob.updated.isoformat() if blob.updated else None,
+                    "is_file": True,
+                    "storage_backend": "gcs"
+                }
+                files.append(file_info)
+                total_size += blob.size or 0
+            
+            # Process prefixes (folders) - only available when using delimiter
+            if delimiter and hasattr(blobs, 'prefixes'):
+                for p in blobs.prefixes:
+                    folder_name = p.rstrip('/').split('/')[-1]
+                    prefixes.append({
+                        "name": folder_name,
+                        "full_path": p,
+                        "relative_path": p.replace(f"tenants/", "").rstrip('/'),
+                        "is_file": False
+                    })
+            
+            return {
+                "success": True,
+                "files": files,
+                "prefixes": prefixes,
+                "total_count": len(files),
+                "total_size_bytes": total_size,
+                "error": None
+            }
+        
+        except Exception as e:
+            logger.error(f"GCS listing failed: {e}")
+            return {"success": False, "error": f"GCS listing failed: {str(e)}", "files": [], "prefixes": []}
+
+    def _list_files_local(self, prefix: str, delimiter: Optional[str] = None) -> Dict[str, Any]:
+        """List files from local filesystem"""
+        try:
+            files = []
+            prefixes = []
+            total_size = 0
+            
+            base_path = self.local_path / prefix.rstrip('/')
+            
+            if not base_path.exists():
+                return {
+                    "success": True,
+                    "files": [],
+                    "prefixes": [],
+                    "total_count": 0,
+                    "total_size_bytes": 0,
+                    "error": None
+                }
+            
+            if delimiter == '/':
+                # Folder-like listing - only immediate children
+                for item in base_path.iterdir():
+                    relative_path = str(item.relative_to(self.local_path))
+                    
+                    if item.is_file():
+                        stat = item.stat()
+                        file_info = {
+                            "name": item.name,
+                            "full_path": relative_path,
+                            "relative_path": relative_path.replace("tenants/", ""),
+                            "size": stat.st_size,
+                            "content_type": self.EXTENSION_TO_MIME.get(
+                                item.suffix.lstrip('.').lower(), 
+                                "application/octet-stream"
+                            ),
+                            "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                            "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                            "is_file": True,
+                            "storage_backend": "local"
+                        }
+                        files.append(file_info)
+                        total_size += stat.st_size
+                    elif item.is_dir():
+                        prefixes.append({
+                            "name": item.name,
+                            "full_path": relative_path + '/',
+                            "relative_path": relative_path.replace("tenants/", ""),
+                            "is_file": False
+                        })
+            else:
+                # Recursive listing - all files
+                for item in base_path.rglob('*'):
+                    if item.is_file():
+                        relative_path = str(item.relative_to(self.local_path))
+                        stat = item.stat()
+                        file_info = {
+                            "name": item.name,
+                            "full_path": relative_path,
+                            "relative_path": relative_path.replace("tenants/", ""),
+                            "size": stat.st_size,
+                            "content_type": self.EXTENSION_TO_MIME.get(
+                                item.suffix.lstrip('.').lower(), 
+                                "application/octet-stream"
+                            ),
+                            "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                            "updated_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                            "is_file": True,
+                            "storage_backend": "local"
+                        }
+                        files.append(file_info)
+                        total_size += stat.st_size
+            
+            return {
+                "success": True,
+                "files": files,
+                "prefixes": prefixes,
+                "total_count": len(files),
+                "total_size_bytes": total_size,
+                "error": None
+            }
+        
+        except Exception as e:
+            logger.error(f"Local listing failed: {e}")
+            return {"success": False, "error": f"Local listing failed: {str(e)}", "files": [], "prefixes": []}
+
 
 # Legacy support for existing resume upload functionality
 # LegacyResumeStorageService removed in Phase 3 cleanup. Use FileStorageService as the single storage abstraction.

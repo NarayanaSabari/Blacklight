@@ -79,6 +79,9 @@ export type {
   DocumentUploadProgress,
   DocumentType,
   StorageBackend,
+  StorageFile,
+  StorageFolder,
+  StorageBrowseResponse,
 } from './document';
 
 export {

@@ -169,3 +169,33 @@ export const ALLOWED_FILE_TYPES = [
 ];
 
 export const ALLOWED_FILE_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
+
+// Storage browser types
+export interface StorageFile {
+  name: string;
+  full_path: string;
+  relative_path: string;
+  size: number;
+  content_type: string;
+  created_at: string | null;
+  updated_at: string | null;
+  is_file: true;
+  storage_backend: StorageBackend;
+}
+
+export interface StorageFolder {
+  name: string;
+  full_path: string;
+  relative_path: string;
+  is_file: false;
+}
+
+export interface StorageBrowseResponse {
+  success: boolean;
+  path: string;
+  storage_backend: StorageBackend;
+  files: StorageFile[];
+  folders: StorageFolder[];
+  total_count: number;
+  total_size_bytes: number;
+}

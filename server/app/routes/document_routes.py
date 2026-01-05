@@ -454,3 +454,143 @@ def get_document_stats():
             message=f"Failed to get stats: {str(e)}",
             status=500
         ).model_dump()), 500
+
+
+@document_bp.route('/storage/browse', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('reports.view')
+def browse_storage():
+    """
+    Browse files and folders in storage for this tenant.
+    Shows the actual file structure in GCS/local storage.
+    
+    Query params:
+        - path: Folder path to browse (relative to tenant folder, default: root)
+        - recursive: If true, list all files recursively (default: false)
+    
+    Returns:
+        200: List of files and folders
+        500: Server error
+    """
+    try:
+        from app.services.file_storage import FileStorageService
+        
+        # Get tenant from auth context
+        tenant_id = request.portal_user["tenant_id"]
+        
+        # Parse query params
+        path = request.args.get('path', '')
+        recursive = request.args.get('recursive', 'false').lower() == 'true'
+        
+        # Initialize storage service
+        storage = FileStorageService()
+        
+        # Use delimiter for folder-like browsing (non-recursive)
+        delimiter = None if recursive else '/'
+        
+        # List files
+        result = storage.list_files(
+            tenant_id=tenant_id,
+            prefix=path,
+            delimiter=delimiter
+        )
+        
+        if not result.get('success'):
+            return jsonify(ErrorResponse(
+                error="Storage Error",
+                message=result.get('error', 'Failed to list files'),
+                status=500
+            ).model_dump()), 500
+        
+        return jsonify({
+            "success": True,
+            "path": path or "/",
+            "storage_backend": storage.storage_backend,
+            "files": result.get('files', []),
+            "folders": result.get('prefixes', []),
+            "total_count": result.get('total_count', 0),
+            "total_size_bytes": result.get('total_size_bytes', 0)
+        }), 200
+        
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error="Server Error",
+            message=f"Failed to browse storage: {str(e)}",
+            status=500
+        ).model_dump()), 500
+
+
+@document_bp.route('/storage/download', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def download_storage_file():
+    """
+    Download a file directly from storage by its path.
+    
+    Query params:
+        - path: Full file path (relative to tenant folder)
+    
+    Returns:
+        200: File content
+        400: Missing path
+        404: File not found
+        500: Server error
+    """
+    try:
+        from app.services.file_storage import FileStorageService
+        
+        # Get tenant from auth context
+        tenant_id = request.portal_user["tenant_id"]
+        
+        # Get file path
+        file_path = request.args.get('path', '')
+        if not file_path:
+            return jsonify(ErrorResponse(
+                error="Bad Request",
+                message="path parameter is required",
+                status=400
+            ).model_dump()), 400
+        
+        # Build full file key with tenant prefix
+        file_key = f"tenants/{tenant_id}/{file_path.lstrip('/')}"
+        
+        # Initialize storage service
+        storage = FileStorageService()
+        
+        # Check if file exists
+        if not storage.file_exists(file_key):
+            return jsonify(ErrorResponse(
+                error="Not Found",
+                message="File not found",
+                status=404
+            ).model_dump()), 404
+        
+        # Download file
+        content, content_type, error = storage.download_file(file_key)
+        
+        if error:
+            return jsonify(ErrorResponse(
+                error="Download Failed",
+                message=error,
+                status=500
+            ).model_dump()), 500
+        
+        # Extract filename from path
+        filename = file_path.rsplit('/', 1)[-1]
+        
+        # Return file
+        return send_file(
+            BytesIO(content),
+            mimetype=content_type,
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            error="Server Error",
+            message=f"Failed to download file: {str(e)}",
+            status=500
+        ).model_dump()), 500
