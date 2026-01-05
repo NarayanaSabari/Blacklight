@@ -715,7 +715,7 @@ export function ManualResumeTailorPage() {
 
               {/* Start Button */}
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="">
                   <Button 
                     onClick={startTailoring} 
                     className="w-full" 
