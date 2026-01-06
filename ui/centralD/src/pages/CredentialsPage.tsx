@@ -476,13 +476,13 @@ function CredentialTable({ platform, credentials, onRefresh }: CredentialTablePr
                             Disable
                           </DropdownMenuItem>
                         )}
-                        {(cred.status === "failed" || cred.status === "cooldown") && (
+                        {(cred.status === "failed" || cred.status === "cooldown" || cred.status === "in_use") && (
                           <DropdownMenuItem
                             onClick={() => resetMutation.mutate(cred.id)}
                             disabled={resetMutation.isPending}
                           >
                             <RotateCcw className="h-4 w-4 mr-2" />
-                            Reset to Available
+                            {cred.status === "in_use" ? "Force Release" : "Reset to Available"}
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
