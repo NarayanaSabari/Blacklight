@@ -155,6 +155,41 @@ def clean_data(app: Flask, confirm: bool = False) -> None:
     print("\nPreserving: job_postings, global_roles, scraper_*, subscription_plans, pm_admin_users")
     print()
     
+    def safe_delete(table_name: str, display_name: str) -> None:
+        """Safely delete from a table, handling missing tables gracefully."""
+        try:
+            result = db.session.execute(text(f"DELETE FROM {table_name}"))
+            count = result.rowcount
+            db.session.commit()
+            print(f"  ✅ {display_name}: {count} rows deleted")
+        except Exception as e:
+            db.session.rollback()
+            error_msg = str(e)
+            if "UndefinedTable" in error_msg or "does not exist" in error_msg.lower():
+                print(f"  ⏭️  {display_name}: table not found (skipped)")
+            else:
+                print(f"  ⚠️  {display_name}: {error_msg[:60]}")
+    
+    def safe_update(query: str, display_name: str) -> None:
+        """Safely run an update query, handling missing columns gracefully."""
+        try:
+            result = db.session.execute(text(query))
+            count = result.rowcount
+            db.session.commit()
+            if count > 0:
+                print(f"  ✅ {display_name}: {count} rows updated")
+            else:
+                print(f"  ⏭️  {display_name}: no rows to update")
+        except Exception as e:
+            db.session.rollback()
+            error_msg = str(e)
+            if "UndefinedColumn" in error_msg or "does not exist" in error_msg.lower():
+                print(f"  ⏭️  {display_name}: column not found (skipped)")
+            elif "UndefinedTable" in error_msg:
+                print(f"  ⏭️  {display_name}: table not found (skipped)")
+            else:
+                print(f"  ⚠️  {display_name}: {error_msg[:60]}")
+    
     with app.app_context():
         # Phase 1: Delete candidate-dependent data (most dependent first)
         print("Phase 1: Cleaning candidate-related data...")
@@ -176,14 +211,7 @@ def clean_data(app: Flask, confirm: bool = False) -> None:
         ]
         
         for table_name, display_name in candidate_tables:
-            try:
-                result = db.session.execute(text(f"DELETE FROM {table_name}"))
-                count = result.rowcount
-                db.session.commit()
-                print(f"  ✅ {display_name}: {count} rows deleted")
-            except Exception as e:
-                db.session.rollback()
-                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+            safe_delete(table_name, display_name)
         
         # Phase 2: Delete tenant/user-related data
         print("\nPhase 2: Cleaning tenant/user-related data...")
@@ -199,36 +227,22 @@ def clean_data(app: Flask, confirm: bool = False) -> None:
         ]
         
         for table_name, display_name in tenant_tables:
-            try:
-                result = db.session.execute(text(f"DELETE FROM {table_name}"))
-                count = result.rowcount
-                db.session.commit()
-                print(f"  ✅ {display_name}: {count} rows deleted")
-            except Exception as e:
-                db.session.rollback()
-                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+            safe_delete(table_name, display_name)
         
         # Phase 3: Clean up orphaned job references (set FK to NULL where allowed)
         print("\nPhase 3: Cleaning orphaned references in preserved tables...")
         
         cleanup_queries = [
-            # Job postings may have tenant_id references - set to NULL for scraped jobs
-            ("UPDATE job_postings SET created_by_user_id = NULL WHERE created_by_user_id IS NOT NULL", 
+            # Job postings sourced via email - clear user references
+            ("UPDATE job_postings SET sourced_by_user_id = NULL WHERE sourced_by_user_id IS NOT NULL", 
              "Job posting user references"),
-            # Scraper session references to portal users
-            ("UPDATE scrape_sessions SET started_by_user_id = NULL WHERE started_by_user_id IS NOT NULL",
-             "Scrape session user references"),
+            # Job postings - clear tenant references for email-sourced jobs
+            ("UPDATE job_postings SET source_tenant_id = NULL WHERE source_tenant_id IS NOT NULL",
+             "Job posting tenant references"),
         ]
         
         for query, display_name in cleanup_queries:
-            try:
-                result = db.session.execute(text(query))
-                count = result.rowcount
-                db.session.commit()
-                print(f"  ✅ {display_name}: {count} rows updated")
-            except Exception as e:
-                db.session.rollback()
-                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+            safe_update(query, display_name)
         
         # Summary
         print("\n" + "=" * 80)
@@ -250,8 +264,8 @@ def clean_data(app: Flask, confirm: bool = False) -> None:
                 result = db.session.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
                 count = result.scalar()
                 print(f"  • {display_name}: {count}")
-            except Exception as e:
-                print(f"  • {display_name}: (error counting)")
+            except Exception:
+                print(f"  • {display_name}: (table not found)")
         
         print("\nNext steps:")
         print("  1. Run './deploy.sh seed' to create new tenants")
