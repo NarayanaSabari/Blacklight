@@ -170,6 +170,87 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
         }
 
 
+@inngest_client.create_function(
+    fn_id="polish-resume-async",
+    trigger=inngest.TriggerEvent(event="candidate/polish-resume"),
+    retries=2,
+    name="Polish Resume Async"
+)
+async def polish_resume_workflow(ctx) -> dict:
+    """
+    Async workflow to polish an already-parsed resume.
+    
+    This is used when a candidate submits via email onboarding where:
+    - The resume was already parsed during the onboarding flow
+    - The candidate record already has parsed_resume_data
+    - We only need to generate the polished markdown version
+    
+    Event data:
+        - candidate_id: int
+        - tenant_id: int
+    """
+    event_data = ctx.event.data
+    candidate_id = event_data.get("candidate_id")
+    tenant_id = event_data.get("tenant_id")
+    
+    logger.info(f"[POLISH-RESUME] Starting async polishing for candidate {candidate_id}")
+    
+    try:
+        # Step 1: Fetch candidate
+        candidate = _fetch_candidate(candidate_id, tenant_id)
+        
+        if not candidate:
+            logger.error(f"[POLISH-RESUME] Candidate {candidate_id} not found")
+            return {"status": "error", "message": "Candidate not found"}
+        
+        # Check if already polished
+        if candidate.polished_resume_data and candidate.polished_resume_data.get('markdown_content'):
+            logger.info(f"[POLISH-RESUME] Candidate {candidate_id} already has polished resume, skipping")
+            return {
+                "status": "success",
+                "candidate_id": candidate_id,
+                "skipped": True,
+                "message": "Already polished"
+            }
+        
+        # Check if we have parsed data to polish
+        parsed_data = candidate.parsed_resume_data
+        if not parsed_data:
+            logger.warning(f"[POLISH-RESUME] Candidate {candidate_id} has no parsed_resume_data")
+            return {"status": "error", "message": "No parsed resume data available"}
+        
+        # Step 2: Polish the resume
+        candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+        
+        polished_data = await ctx.step.run(
+            "ai-polish-resume",
+            lambda: _polish_resume(parsed_data, candidate_name)
+        )
+        
+        if not polished_data or not polished_data.get('markdown_content'):
+            logger.error(f"[POLISH-RESUME] Polishing failed for candidate {candidate_id}")
+            return {"status": "error", "message": "Resume polishing failed"}
+        
+        # Step 3: Update candidate with polished data
+        _update_candidate_with_polished_data(candidate_id, polished_data)
+        
+        logger.info(f"[POLISH-RESUME] Successfully polished resume for candidate {candidate_id}")
+        
+        return {
+            "status": "success",
+            "candidate_id": candidate_id,
+            "has_polished_data": True
+        }
+        
+    except Exception as e:
+        logger.error(f"[POLISH-RESUME] Error polishing resume for candidate {candidate_id}: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "candidate_id": candidate_id,
+            "error": str(e)
+        }
+
+
 # Helper functions (sync)
 
 def _fetch_candidate(candidate_id: int, tenant_id: int) -> Candidate:

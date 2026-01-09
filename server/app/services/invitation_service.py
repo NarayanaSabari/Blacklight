@@ -610,6 +610,19 @@ class InvitationService:
 
             invitation.candidate_id = candidate.id
             logger.info(f"Created candidate {candidate.id} from submitted invitation {invitation.id}")
+            
+            # Link resume file from invitation documents to candidate
+            resume_doc = db.session.execute(
+                select(CandidateDocument).where(
+                    CandidateDocument.invitation_id == invitation.id,
+                    CandidateDocument.document_type == 'resume'
+                ).order_by(CandidateDocument.uploaded_at.desc())
+            ).scalar()
+            
+            if resume_doc:
+                candidate.resume_file_key = resume_doc.file_key
+                candidate.resume_storage_backend = resume_doc.storage_backend or 'gcs'
+                logger.info(f"Linked resume file {resume_doc.file_key} to candidate {candidate.id}")
         
         # Log the action
         InvitationAuditLog.log_action(
@@ -690,6 +703,35 @@ class InvitationService:
                 logger.info(f"[INNGEST] ✅ Event sent successfully to HR. Result: {event_result}")
         except Exception as e:
             logger.error(f"Failed to send Inngest event for HR notification: {e}")
+        
+        # Trigger resume polishing if candidate was created and has parsed data
+        if invitation.candidate_id:
+            try:
+                from app.inngest import inngest_client
+                import inngest
+                
+                # Get the candidate to check if it has parsed resume data
+                candidate_for_polish = db.session.execute(
+                    select(Candidate).where(Candidate.id == invitation.candidate_id)
+                ).scalar()
+                
+                if candidate_for_polish and candidate_for_polish.parsed_resume_data:
+                    logger.info(f"[INNGEST] Triggering resume polish for candidate {invitation.candidate_id}")
+                    
+                    polish_result = inngest_client.send_sync(
+                        inngest.Event(
+                            name="candidate/polish-resume",
+                            data={
+                                "candidate_id": invitation.candidate_id,
+                                "tenant_id": invitation.tenant_id
+                            }
+                        )
+                    )
+                    logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {invitation.candidate_id}. Result: {polish_result}")
+                else:
+                    logger.info(f"[INNGEST] Skipping resume polish - candidate {invitation.candidate_id} has no parsed resume data")
+            except Exception as e:
+                logger.error(f"Failed to send Inngest event for resume polishing: {e}")
         
         return invitation
     
