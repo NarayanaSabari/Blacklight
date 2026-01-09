@@ -631,7 +631,7 @@ class InvitationService:
                     storage_backend=resume_doc.storage_backend or 'gcs',
                     original_filename=resume_doc.file_name or 'resume',
                     file_size=resume_doc.file_size,
-                    mime_type=resume_doc.file_type,
+                    mime_type=resume_doc.mime_type,
                     is_primary=True,
                     uploaded_by_user_id=None,
                     uploaded_by_candidate=True,
