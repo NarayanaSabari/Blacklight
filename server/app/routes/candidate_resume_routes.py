@@ -212,6 +212,11 @@ def upload_resume(candidate_id: int):
             uploaded_by_candidate=False,
         )
         
+        # CRITICAL: Commit the resume before triggering Inngest event
+        # CandidateResumeService.upload_and_create_resume() only does flush(), not commit()
+        # The Inngest worker runs in a separate process and needs committed data
+        db.session.commit()
+        
         # Trigger async parsing if requested
         if trigger_parsing:
             try:
