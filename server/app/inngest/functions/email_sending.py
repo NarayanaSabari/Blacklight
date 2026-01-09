@@ -139,6 +139,38 @@ async def send_approval_email_workflow(ctx: inngest.Context) -> dict:
 
 
 @inngest_client.create_function(
+    fn_id="send-rejection-email",
+    trigger=inngest.TriggerEvent(event="email/rejection"),
+    retries=3,
+    name="Send Rejection Email"
+)
+async def send_rejection_email_workflow(ctx: inngest.Context) -> dict:
+    """Send rejection email to candidate"""
+    event = ctx.event
+    tenant_id = event.data.get("tenant_id")
+    email = event.data.get("to_email")  # Field name from the event
+    candidate_name = event.data.get("candidate_name")
+    reason = event.data.get("reason")
+    
+    logger.info(f"[INNGEST] Processing rejection email for {email}, tenant {tenant_id}")
+    
+    if not email:
+        logger.error(f"[INNGEST] Missing to_email in event data: {event.data}")
+        return {"email_sent": False, "error": "Missing to_email"}
+    
+    result = await ctx.step.run(
+        "send-rejection",
+        send_rejection_step,
+        tenant_id,
+        email,
+        candidate_name,
+        reason
+    )
+    
+    return {"email_sent": result}
+
+
+@inngest_client.create_function(
     fn_id="send-hr-notification",
     trigger=inngest.TriggerEvent(event="email/hr-notification"),
     retries=3,
