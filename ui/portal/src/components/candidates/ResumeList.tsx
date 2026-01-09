@@ -18,6 +18,8 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -235,6 +237,19 @@ export function ResumeList({ candidateId, onUpload, showUploadButton = true }: R
                             {statusConfig.icon}
                             <span className="ml-1">{statusConfig.label}</span>
                           </Badge>
+                          {/* Document verification status */}
+                          {resume.is_verified === true && (
+                            <Badge className="bg-emerald-100 text-emerald-800">
+                              <ShieldCheck className="h-4 w-4" />
+                              <span className="ml-1">Verified</span>
+                            </Badge>
+                          )}
+                          {resume.is_verified === false && (
+                            <Badge className="bg-orange-100 text-orange-800">
+                              <ShieldX className="h-4 w-4" />
+                              <span className="ml-1">Unverified</span>
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                           <span>{formatFileSize(resume.file_size)}</span>

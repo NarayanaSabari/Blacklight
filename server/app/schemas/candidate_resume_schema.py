@@ -29,6 +29,9 @@ class CandidateResumeResponseSchema(BaseModel):
     processing_status: str = "pending"  # pending, processing, completed, failed
     processing_error: Optional[str] = None
     
+    # Document verification status (from CandidateDocument if exists)
+    is_verified: Optional[bool] = None
+    
     # Data flags (don't include full data by default)
     has_parsed_data: bool = False
     has_polished_resume: bool = False

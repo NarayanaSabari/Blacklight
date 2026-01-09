@@ -74,6 +74,8 @@ export interface CandidateResume {
   processed_at?: string | null;
   created_at: string;
   updated_at: string;
+  // Document verification status (from CandidateDocument if exists)
+  is_verified?: boolean | null;
   // Optional - included when requesting full data
   parsed_resume_data?: Record<string, unknown>;
   polished_resume_data?: PolishedResumeData;

@@ -82,6 +82,22 @@ def list_resumes(candidate_id: int):
         # Get all resumes
         resumes = CandidateResumeService.get_resumes_for_candidate(candidate_id, tenant_id)
         
+        # Look up CandidateDocument verification status by file_key
+        from sqlalchemy import select, and_
+        from app.models.candidate_document import CandidateDocument
+        
+        # Build a mapping of file_key -> is_verified
+        file_keys = [r.file_key for r in resumes]
+        doc_stmt = select(CandidateDocument.file_key, CandidateDocument.is_verified).where(
+            and_(
+                CandidateDocument.tenant_id == tenant_id,
+                CandidateDocument.candidate_id == candidate_id,
+                CandidateDocument.file_key.in_(file_keys)
+            )
+        )
+        doc_results = db.session.execute(doc_stmt).fetchall()
+        verification_map = {row.file_key: row.is_verified for row in doc_results}
+        
         # Find primary resume ID
         primary_id = None
         for resume in resumes:
@@ -89,14 +105,18 @@ def list_resumes(candidate_id: int):
                 primary_id = resume.id
                 break
         
-        # Serialize response
+        # Serialize response with is_verified added
+        resume_dicts = []
+        for r in resumes:
+            r_dict = r.to_dict()
+            # Add is_verified from the corresponding CandidateDocument
+            r_dict['is_verified'] = verification_map.get(r.file_key, None)
+            resume_dicts.append(CandidateResumeResponseSchema.model_validate(r_dict))
+        
         response = CandidateResumeListSchema(
             total=len(resumes),
             primary_resume_id=primary_id,
-            resumes=[
-                CandidateResumeResponseSchema.model_validate(r.to_dict())
-                for r in resumes
-            ]
+            resumes=resume_dicts
         )
         
         return jsonify(response.model_dump()), 200
