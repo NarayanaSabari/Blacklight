@@ -43,6 +43,7 @@ import {
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { invitationApi } from '@/lib/api/invitationApi';
+import { getErrorMessage } from '@/lib/api-client';
 
 interface SubmissionData {
   phone?: string;
@@ -92,8 +93,8 @@ export default function InvitationReviewPage() {
       setShowApproveDialog(false);
       navigate('/candidate-management?tab=onboarding');
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to approve invitation');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -109,8 +110,8 @@ export default function InvitationReviewPage() {
       setRejectionReason('');
       navigate('/candidate-management?tab=onboarding');
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to reject invitation');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 

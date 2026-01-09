@@ -31,6 +31,7 @@ import {
 import { toast } from 'sonner';
 import { candidateApi } from '@/lib/candidateApi';
 import { invitationApi } from '@/lib/api/invitationApi';
+import { getErrorMessage } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import type { Candidate, CandidateUpdateInput } from '@/types/candidate';
 import type { InvitationWithRelations } from '@/types/invitation';
@@ -145,8 +146,8 @@ export function SplitScreenReview({
                 setSelectedIndex(prev => prev - 1);
             }
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to approve candidate');
+        onError: (error: unknown) => {
+            toast.error(getErrorMessage(error));
         },
     });
 
@@ -164,8 +165,8 @@ export function SplitScreenReview({
                 setSelectedIndex(prev => prev - 1);
             }
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to approve invitation');
+        onError: (error: unknown) => {
+            toast.error(getErrorMessage(error));
         },
     });
 
@@ -183,8 +184,8 @@ export function SplitScreenReview({
                 setSelectedIndex(prev => prev - 1);
             }
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to reject candidate');
+        onError: (error: unknown) => {
+            toast.error(getErrorMessage(error));
         },
     });
 
@@ -203,8 +204,8 @@ export function SplitScreenReview({
                 setSelectedIndex(prev => prev - 1);
             }
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to reject invitation');
+        onError: (error: unknown) => {
+            toast.error(getErrorMessage(error));
         },
     });
 

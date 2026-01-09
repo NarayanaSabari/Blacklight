@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { candidateApi } from '@/lib/candidateApi';
+import { getErrorMessage } from '@/lib/api-client';
 import type { Candidate, CandidateUpdateInput } from '@/types/candidate';
 
 interface ReviewModalProps {
@@ -54,8 +55,8 @@ export function ReviewModal({ candidate, open, onOpenChange, onSuccess }: Review
     onSuccess: () => {
       toast.success('Changes saved successfully');
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to save changes');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -73,8 +74,8 @@ export function ReviewModal({ candidate, open, onOpenChange, onSuccess }: Review
       onOpenChange(false);
       if (onSuccess) onSuccess();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to approve candidate');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -94,8 +95,8 @@ export function ReviewModal({ candidate, open, onOpenChange, onSuccess }: Review
       await queryClient.refetchQueries({ queryKey: ['pending-review-candidates'] });
       if (onSuccess) onSuccess();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || 'Failed to reject candidate');
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 

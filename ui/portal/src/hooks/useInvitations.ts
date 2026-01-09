@@ -5,6 +5,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { invitationApi } from '@/lib/api/invitationApi';
+import { getErrorMessage } from '@/lib/api-client';
 import { toast } from 'sonner';
 import type {
   InvitationCreateRequest,
@@ -89,14 +90,15 @@ export function useCreateInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.stats() });
       toast.success('Invitation sent successfully');
     },
-    onError: (error: AxiosError) => {
-      if (error?.response?.status === 409) {
+    onError: (error: unknown) => {
+      const axiosError = error as AxiosError;
+      if (axiosError?.response?.status === 409) {
         toast.error('Duplicate Invitation', {
           description: 'An active invitation for this email address already exists.',
         });
       } else {
         toast.error('Failed to send invitation', {
-          description: error.message || 'An unexpected error occurred.',
+          description: getErrorMessage(error),
         });
       }
     },
@@ -117,8 +119,8 @@ export function useUpdateInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.lists() });
       toast.success('Invitation updated successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to update invitation: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }
@@ -137,8 +139,8 @@ export function useResendInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.auditLogs(id) });
       toast.success(data.message || 'Invitation resent successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to resend invitation: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }
@@ -158,8 +160,8 @@ export function useCancelInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.auditLogs(id) });
       toast.success('Invitation cancelled successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to cancel invitation: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }
@@ -180,8 +182,8 @@ export function useApproveInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.auditLogs(variables.id) });
       toast.success('Invitation approved successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to approve invitation: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }
@@ -202,8 +204,8 @@ export function useRejectInvitation() {
       queryClient.invalidateQueries({ queryKey: invitationKeys.auditLogs(variables.id) });
       toast.success('Invitation rejected');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to reject invitation: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }
@@ -231,8 +233,8 @@ export function useBulkCreateInvitations() {
         toast.success(`${data.created} invitations sent successfully`);
       }
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to send invitations: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 }

@@ -52,6 +52,7 @@ import { documentApi } from '@/lib/documentApi';
 import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { submissionApi } from '@/lib/submissionApi';
+import { getErrorMessage } from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
@@ -211,8 +212,8 @@ export function CandidateDetailPage() {
       toast.success('Candidate deleted successfully');
       navigate('/candidate-management?tab=all-candidates');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to delete candidate: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -223,8 +224,8 @@ export function CandidateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
       toast.success('Resume re-parsed successfully');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to re-parse resume: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -236,16 +237,16 @@ export function CandidateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['candidates'] });
       toast.success('Candidate approved successfully!');
     },
-    onError: (error: any) => {
-      // Check if error contains unverified documents info
-      const errorMessage = error?.message || 'Failed to approve candidate';
+    onError: (error: unknown) => {
+      // Extract error message from axios error response
+      const errorMessage = getErrorMessage(error);
       if (errorMessage.includes('documents must be verified')) {
         toast.error(errorMessage, {
           duration: 6000,
           description: 'Please verify all documents before approving this candidate.',
         });
       } else {
-        toast.error(`Failed to approve: ${errorMessage}`);
+        toast.error(errorMessage);
       }
     },
   });
@@ -257,8 +258,8 @@ export function CandidateDetailPage() {
       toast.success('Candidate rejected');
       navigate('/candidate-management?tab=onboarding');
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to reject: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -302,8 +303,8 @@ export function CandidateDetailPage() {
         toast.success('Preferred roles updated');
       }
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to update preferred roles: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -329,9 +330,9 @@ export function CandidateDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['candidate', id] });
       toast.success('AI role suggestions generated!');
     },
-    onError: (error: Error) => {
+    onError: (error: unknown) => {
       setIsGeneratingRoles(false);
-      toast.error(`Failed to generate suggestions: ${error.message}`);
+      toast.error(getErrorMessage(error));
     },
   });
 
@@ -578,8 +579,8 @@ export function CandidateDetailPage() {
       setHasUnsavedChanges(false);
       setValidationErrors({});
     },
-    onError: (error: Error) => {
-      toast.error(`Failed to update candidate: ${error.message}`);
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
     },
   });
 
