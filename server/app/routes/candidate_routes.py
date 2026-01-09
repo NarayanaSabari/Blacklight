@@ -732,12 +732,31 @@ def upload_and_create():
             uploaded_by_candidate=False,
         )
         
+        # Also create a CandidateDocument record for consistency with email invitation flow
+        # This ensures resumes appear in document listings and are subject to verification
+        from app.models.candidate_document import CandidateDocument
+        
+        resume_document = CandidateDocument(
+            tenant_id=tenant_id,
+            candidate_id=candidate.id,
+            invitation_id=None,  # HR upload, not from invitation
+            document_type='resume',
+            file_name=file.filename or 'resume',
+            file_key=file_key,
+            file_size=upload_result.get('file_size') or 0,
+            mime_type=upload_result.get('mime_type') or 'application/pdf',
+            storage_backend=upload_result.get('storage_backend', 'gcs'),
+            uploaded_by_id=g.user_id,
+            is_verified=False,  # Requires HR verification like other docs
+        )
+        db.session.add(resume_document)
+        
         # CRITICAL: Commit the resume before triggering Inngest event
         # CandidateResumeService.create_resume() only does flush(), not commit()
         # The Inngest worker runs in a separate process and needs committed data
         db.session.commit()
         
-        logger.info(f"[UPLOAD-{request_id}] Created resume {resume.id} for candidate {candidate.id}")
+        logger.info(f"[UPLOAD-{request_id}] Created resume {resume.id} and document {resume_document.id} for candidate {candidate.id}")
         
         # Trigger async Inngest parsing workflow (fire and forget)
         try:

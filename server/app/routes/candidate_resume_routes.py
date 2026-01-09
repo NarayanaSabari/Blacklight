@@ -212,10 +212,31 @@ def upload_resume(candidate_id: int):
             uploaded_by_candidate=False,
         )
         
+        # Also create a CandidateDocument record for consistency with email invitation flow
+        # This ensures resumes appear in document listings and are subject to verification
+        from app.models.candidate_document import CandidateDocument
+        
+        resume_document = CandidateDocument(
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            invitation_id=None,  # HR upload, not from invitation
+            document_type='resume',
+            file_name=file.filename or 'resume',
+            file_key=file_key,
+            file_size=resume.file_size or 0,
+            mime_type=resume.mime_type or 'application/pdf',
+            storage_backend=resume.storage_backend or 'gcs',
+            uploaded_by_id=user_id,
+            is_verified=False,  # Requires HR verification like other docs
+        )
+        db.session.add(resume_document)
+        
         # CRITICAL: Commit the resume before triggering Inngest event
         # CandidateResumeService.upload_and_create_resume() only does flush(), not commit()
         # The Inngest worker runs in a separate process and needs committed data
         db.session.commit()
+        
+        logger.info(f"Uploaded resume {resume.id} and document {resume_document.id} for candidate {candidate_id}")
         
         # Trigger async parsing if requested
         if trigger_parsing:

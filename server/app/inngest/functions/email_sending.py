@@ -139,56 +139,49 @@ async def send_approval_email_workflow(ctx: inngest.Context) -> dict:
 
 
 @inngest_client.create_function(
-    fn_id="send-rejection-email",
-    trigger=inngest.TriggerEvent(event="email/rejection"),
-    retries=3,
-    name="Send Rejection Email"
-)
-async def send_rejection_email_workflow(ctx: inngest.Context) -> dict:
-    """Send rejection email to candidate"""
-    event = ctx.event
-    tenant_id = event.data.get("tenant_id")
-    email = event.data.get("to_email")  # Field name from the event
-    candidate_name = event.data.get("candidate_name")
-    reason = event.data.get("reason")
-    
-    logger.info(f"[INNGEST] Processing rejection email for {email}, tenant {tenant_id}")
-    
-    if not email:
-        logger.error(f"[INNGEST] Missing to_email in event data: {event.data}")
-        return {"email_sent": False, "error": "Missing to_email"}
-    
-    result = await ctx.step.run(
-        "send-rejection",
-        send_rejection_step,
-        tenant_id,
-        email,
-        candidate_name,
-        reason
-    )
-    
-    return {"email_sent": result}
-
-
-@inngest_client.create_function(
     fn_id="send-hr-notification",
     trigger=inngest.TriggerEvent(event="email/hr-notification"),
     retries=3,
     name="Send HR Notification Email"
 )
 async def send_hr_notification_workflow(ctx: inngest.Context) -> dict:
-    """Send notification to HR team"""
+    """
+    Send notification to HR team about new candidate submissions.
+    
+    Event data (flat structure from invitation_service.py):
+        - tenant_id: int
+        - invitation_id: int
+        - hr_emails: list[str] (optional - if provided, use directly)
+        - candidate_name: str
+        - candidate_email: str
+        - review_url: str
+    """
     event = ctx.event
     tenant_id = event.data.get("tenant_id")
-    notification_type = event.data.get("notification_type")
-    data = event.data.get("data", {})
+    
+    # Extract data directly from event (flat structure)
+    # The trigger sends: invitation_id, hr_emails, candidate_name, candidate_email, review_url
+    hr_emails = event.data.get("hr_emails")
+    candidate_name = event.data.get("candidate_name")
+    candidate_email = event.data.get("candidate_email")
+    invitation_id = event.data.get("invitation_id")
+    review_url = event.data.get("review_url")
+    
+    logger.info(f"[INNGEST] Processing HR notification for invitation {invitation_id}, tenant {tenant_id}")
+    
+    if not tenant_id:
+        logger.error(f"[INNGEST] Missing tenant_id in HR notification event data: {event.data}")
+        return {"notification_sent": False, "error": "Missing tenant_id"}
     
     result = await ctx.step.run(
         "send-hr-notification",
-        send_hr_notification_step,
+        send_hr_notification_step_v2,
         tenant_id,
-        notification_type,
-        data
+        hr_emails,
+        candidate_name,
+        candidate_email,
+        invitation_id,
+        review_url
     )
     
     return {"notification_sent": result}
@@ -397,6 +390,52 @@ def send_hr_notification_step(
         )
     
     return False
+
+
+def send_hr_notification_step_v2(
+    tenant_id: int,
+    hr_emails: list,
+    candidate_name: str,
+    candidate_email: str,
+    invitation_id: int,
+    review_url: str
+) -> bool:
+    """
+    Send notification to HR team about new candidate submission.
+    
+    This is the v2 step function that accepts flat parameters matching
+    the event data structure from invitation_service.py.
+    
+    Args:
+        tenant_id: Tenant ID
+        hr_emails: List of HR email addresses (if None, will be looked up)
+        candidate_name: Name of the candidate who submitted
+        candidate_email: Email of the candidate
+        invitation_id: ID of the invitation
+        review_url: URL for HR to review the submission
+    """
+    from app.services.email_service import EmailService
+    from app.services.portal_user_service import PortalUserService
+    
+    # If hr_emails not provided, look them up
+    if not hr_emails:
+        hr_users = PortalUserService.get_hr_users(tenant_id)
+        hr_emails = [user.email for user in hr_users]
+    
+    if not hr_emails:
+        logger.warning(f"[INNGEST] No HR users found for tenant {tenant_id}")
+        return False
+    
+    logger.info(f"[INNGEST] Sending HR notification to {len(hr_emails)} recipients for invitation {invitation_id}")
+    
+    return EmailService.send_hr_notification(
+        tenant_id=tenant_id,
+        hr_emails=hr_emails,
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        invitation_id=invitation_id,
+        review_url=review_url
+    )
 
 
 def log_email_status_step(
