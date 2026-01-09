@@ -507,8 +507,9 @@ export function CandidateDetailPage() {
     if (successCount > 0) {
       toast.success(`Successfully uploaded ${successCount} ${uploadDocumentType === 'resume' ? 'resume(s)' : 'document(s)'}`);
       // Invalidate both documents and resumes queries when uploading resumes
+      // Note: ResumeList uses Number(id) as candidateId, so we must match that for proper cache invalidation
       if (uploadDocumentType === 'resume') {
-        queryClient.invalidateQueries({ queryKey: ['candidate-resumes', id] });
+        queryClient.invalidateQueries({ queryKey: ['candidate-resumes', Number(id)] });
       }
       queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
     }
