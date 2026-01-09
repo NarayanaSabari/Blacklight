@@ -15,7 +15,7 @@ from sqlalchemy import (
     DECIMAL, Enum as SQLEnum
 )
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app import db
 from app.models import BaseModel
@@ -147,8 +147,9 @@ class TailoredResume(BaseModel):
     # Relationships
     candidate = relationship(
         'Candidate', 
-        backref='tailored_resumes',
-        lazy='joined'
+        backref=backref('tailored_resumes', passive_deletes=True),
+        lazy='joined',
+        passive_deletes=True
     )
     job_posting = relationship(
         'JobPosting', 
