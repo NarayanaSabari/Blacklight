@@ -49,6 +49,8 @@ import {
   Upload,
   AlertCircle,
   AlertTriangle,
+  Plus,
+  Check,
 } from 'lucide-react';
 import { DocumentUpload, type UploadedFile } from '@/components/documents/DocumentUpload';
 import { useSubmitOnboarding, useUploadOnboardingDocument } from '@/hooks/useOnboarding';
@@ -436,6 +438,28 @@ export function CandidateOnboardingFlow({
     } finally {
       setIsGeneratingRoles(false);
     }
+  };
+
+  const handleAddSuggestedRole = (role: string) => {
+    // Check if role is already in preferred roles (case-insensitive)
+    const roleExists = preferredRoles.some(
+      (existingRole) => existingRole.toLowerCase() === role.toLowerCase()
+    );
+
+    if (roleExists) {
+      toast.info(`"${role}" is already in your preferred roles`);
+      return;
+    }
+
+    // Check maximum limit
+    if (preferredRoles.length >= 10) {
+      toast.error('Maximum 10 preferred roles allowed');
+      return;
+    }
+
+    // Add the role to preferred roles
+    setPreferredRoles([...preferredRoles, role]);
+    toast.success(`Added "${role}" to preferred roles`);
   };
 
   const handleSubmit = async () => {
@@ -1222,30 +1246,71 @@ export function CandidateOnboardingFlow({
 
                       {suggestedRoles ? (
                         <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-                          {suggestedRoles.roles.slice(0, 5).map((suggestion, index) => (
-                            <div
-                              key={index}
-                              className="p-3 bg-white rounded-lg border border-slate-200 hover:border-purple-300 transition-colors"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <p className="font-medium text-sm text-slate-900">{suggestion.role}</p>
-                                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{suggestion.reasoning}</p>
+                          {suggestedRoles.roles.slice(0, 5).map((suggestion, index) => {
+                            const isAlreadyAdded = preferredRoles.some(
+                              (role) => role.toLowerCase() === suggestion.role.toLowerCase()
+                            );
+                            return (
+                              <div
+                                key={index}
+                                onClick={() => !isAlreadyAdded && handleAddSuggestedRole(suggestion.role)}
+                                className={cn(
+                                  "p-3 rounded-lg border transition-all",
+                                  isAlreadyAdded
+                                    ? "bg-green-50 border-green-300 cursor-default"
+                                    : "bg-white border-slate-200 hover:border-purple-400 hover:shadow-md cursor-pointer"
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-sm text-slate-900 truncate">{suggestion.role}</p>
+                                      {isAlreadyAdded && (
+                                        <Check className="h-4 w-4 text-green-600 shrink-0" />
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{suggestion.reasoning}</p>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1 shrink-0">
+                                    <Badge
+                                      className={`text-xs ${
+                                        suggestion.score >= 0.8
+                                          ? 'bg-green-100 text-green-700'
+                                          : suggestion.score >= 0.6
+                                            ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-slate-100 text-slate-600'
+                                      }`}
+                                    >
+                                      {(suggestion.score * 100).toFixed(0)}%
+                                    </Badge>
+                                    {!isAlreadyAdded && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleAddSuggestedRole(suggestion.role);
+                                        }}
+                                        className="p-1 rounded-full bg-purple-100 hover:bg-purple-200 text-purple-600 transition-colors"
+                                        title={`Add "${suggestion.role}" to preferred roles`}
+                                      >
+                                        <Plus className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                                <Badge
-                                  className={`text-xs shrink-0 ${
-                                    suggestion.score >= 0.8
-                                      ? 'bg-green-100 text-green-700'
-                                      : suggestion.score >= 0.6
-                                        ? 'bg-yellow-100 text-yellow-700'
-                                        : 'bg-slate-100 text-slate-600'
-                                  }`}
-                                >
-                                  {(suggestion.score * 100).toFixed(0)}%
-                                </Badge>
+                                {!isAlreadyAdded && (
+                                  <p className="text-xs text-purple-600 mt-2 font-medium">
+                                    Click to add to preferred roles
+                                  </p>
+                                )}
+                                {isAlreadyAdded && (
+                                  <p className="text-xs text-green-600 mt-2 font-medium">
+                                    Added to preferred roles
+                                  </p>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-sm text-slate-500 text-center py-4">
