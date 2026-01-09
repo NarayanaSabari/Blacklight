@@ -515,7 +515,7 @@ export function ResumeTailorPage() {
 
   if (isMatchLoading || existingLoading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="max-w-7xl mx-auto">
         <Skeleton className="h-8 w-32 mb-6" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Skeleton className="h-96" />
@@ -527,7 +527,7 @@ export function ResumeTailorPage() {
 
   if (!matchData || !job) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="max-w-7xl mx-auto">
         <Button variant="ghost" onClick={handleBack} className="mb-6">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Matches
@@ -542,7 +542,7 @@ export function ResumeTailorPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
