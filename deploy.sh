@@ -145,8 +145,13 @@ clean_data() {
     read -p "Are you sure you want to proceed? (yes/no): " confirm
     if [ "$confirm" = "yes" ]; then
         log_info "Cleaning candidate and tenant data..."
-        docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec backend python manage.py clean-data yes
-        log_info "Data cleaned. Run './deploy.sh seed' to recreate tenants."
+        # Run directly without rebuilding - assumes container has latest code
+        docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec -T backend python manage.py clean-data yes
+        if [ $? -eq 0 ]; then
+            log_info "Data cleaned. Run './deploy.sh seed' to recreate tenants."
+        else
+            log_error "Clean failed. You may need to rebuild: ./deploy.sh rebuild-backend"
+        fi
     else
         log_info "Operation cancelled."
     fi
