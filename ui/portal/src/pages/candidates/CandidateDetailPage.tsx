@@ -481,11 +481,20 @@ export function CandidateDetailPage() {
 
     for (const uploadFile of uploadFiles) {
       try {
-        await documentApi.uploadDocument({
-          file: uploadFile.file,
-          document_type: uploadDocumentType,
-          candidate_id: Number(id),
-        });
+        // Use resume-specific API when uploading resumes to create proper CandidateResume records
+        // This ensures resumes show in ResumeList and trigger AI parsing
+        if (uploadDocumentType === 'resume') {
+          await candidateApi.uploadNewResume(Number(id), uploadFile.file, {
+            is_primary: false,  // Don't auto-set as primary when uploading additional resumes
+            trigger_parsing: true,
+          });
+        } else {
+          await documentApi.uploadDocument({
+            file: uploadFile.file,
+            document_type: uploadDocumentType,
+            candidate_id: Number(id),
+          });
+        }
         successCount++;
       } catch (error) {
         console.error('Upload failed:', error);
@@ -496,11 +505,15 @@ export function CandidateDetailPage() {
     setIsUploading(false);
 
     if (successCount > 0) {
-      toast.success(`Successfully uploaded ${successCount} document(s)`);
+      toast.success(`Successfully uploaded ${successCount} ${uploadDocumentType === 'resume' ? 'resume(s)' : 'document(s)'}`);
+      // Invalidate both documents and resumes queries when uploading resumes
+      if (uploadDocumentType === 'resume') {
+        queryClient.invalidateQueries({ queryKey: ['candidate-resumes', id] });
+      }
       queryClient.invalidateQueries({ queryKey: ['documents', 'candidate', id] });
     }
     if (errorCount > 0) {
-      toast.error(`Failed to upload ${errorCount} document(s)`);
+      toast.error(`Failed to upload ${errorCount} ${uploadDocumentType === 'resume' ? 'resume(s)' : 'document(s)'}`);
     }
 
     // Reset and close dialog

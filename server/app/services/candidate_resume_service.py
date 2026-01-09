@@ -13,6 +13,7 @@ from werkzeug.datastructures import FileStorage
 from app import db
 from app.models.candidate import Candidate
 from app.models.candidate_resume import CandidateResume
+from app.models.candidate_document import CandidateDocument
 from app.services.file_storage import FileStorageService
 
 logger = logging.getLogger(__name__)
@@ -332,7 +333,7 @@ class CandidateResumeService:
     @staticmethod
     def delete_resume(resume_id: int, tenant_id: int) -> bool:
         """
-        Delete a resume.
+        Delete a resume and its corresponding CandidateDocument record.
         
         Args:
             resume_id: Resume ID
@@ -350,6 +351,7 @@ class CandidateResumeService:
         
         candidate_id = resume.candidate_id
         was_primary = resume.is_primary
+        file_key = resume.file_key
         
         # Check if this is the only resume
         count = db.session.scalar(
@@ -367,21 +369,44 @@ class CandidateResumeService:
         # Delete the file from storage
         try:
             storage_service = FileStorageService()
-            storage_service.delete_file(resume.file_key)
+            storage_service.delete_file(file_key)
         except Exception as e:
-            logger.warning(f"Failed to delete resume file {resume.file_key}: {e}")
+            logger.warning(f"Failed to delete resume file {file_key}: {e}")
+        
+        # Find and delete matching CandidateDocument record (linked by file_key)
+        # This prevents orphan document records when resume is deleted
+        doc_stmt = select(CandidateDocument).where(
+            and_(
+                CandidateDocument.file_key == file_key,
+                CandidateDocument.tenant_id == tenant_id,
+                CandidateDocument.candidate_id == candidate_id
+            )
+        )
+        matching_doc = db.session.scalar(doc_stmt)
+        if matching_doc:
+            db.session.delete(matching_doc)
+            logger.info(f"Deleted matching CandidateDocument {matching_doc.id} for resume {resume_id}")
         
         # Delete the resume record
         db.session.delete(resume)
-        db.session.commit()
         
-        # If was primary, set another as primary
+        # If was primary, set another as primary before committing
         if was_primary:
-            other_resume = CandidateResumeService.get_primary_resume(candidate_id, tenant_id)
+            # Find the next most recent resume to set as primary
+            next_primary_stmt = select(CandidateResume).where(
+                and_(
+                    CandidateResume.candidate_id == candidate_id,
+                    CandidateResume.tenant_id == tenant_id,
+                    CandidateResume.id != resume_id
+                )
+            ).order_by(CandidateResume.created_at.desc()).limit(1)
+            other_resume = db.session.scalar(next_primary_stmt)
             if other_resume:
                 other_resume.is_primary = True
-                db.session.commit()
                 logger.info(f"Set resume {other_resume.id} as new primary after deletion")
+        
+        # Single commit for all changes (resume delete, document delete, primary update)
+        db.session.commit()
         
         logger.info(f"Deleted resume {resume_id} for candidate {candidate_id}")
         
