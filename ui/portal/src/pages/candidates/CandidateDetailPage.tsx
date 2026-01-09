@@ -44,6 +44,8 @@ import {
   Star,
   Upload,
   Send,
+  Plus,
+  Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -376,6 +378,31 @@ export function CandidateDetailPage() {
         });
       }
     }, 500);
+  };
+
+  // Add a suggested role to preferred roles
+  const handleAddSuggestedRole = (role: string) => {
+    // Check if already in preferred roles (case-insensitive)
+    const normalizedRole = role.trim();
+    const alreadyExists = preferredRoles.some(
+      (r) => r.toLowerCase() === normalizedRole.toLowerCase()
+    );
+    
+    if (alreadyExists) {
+      toast.info(`"${normalizedRole}" is already in preferred roles`);
+      return;
+    }
+    
+    // Check max limit
+    if (preferredRoles.length >= 10) {
+      toast.error('Maximum 10 preferred roles allowed');
+      return;
+    }
+    
+    // Add the role
+    const newRoles = [...preferredRoles, normalizedRole];
+    handleUpdatePreferredRoles(newRoles);
+    toast.success(`Added "${normalizedRole}" to preferred roles`);
   };
 
 
@@ -1752,39 +1779,64 @@ export function CandidateDetailPage() {
 
                 return suggestedRoles ? (
                   <div className="space-y-3">
-                    {suggestedRoles.roles.slice(0, 5).map((suggestion: any, index: number) => (
-                      <div
-                        key={index}
-                        className="p-4 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-2"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-2 flex-1">
-                            <Badge
-                              className="bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold"
-                            >
-                              #{index + 1}
-                            </Badge>
-                            <div>
-                              <h4 className="font-bold text-base text-slate-900">{suggestion.role}</h4>
-                              <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{suggestion.reasoning}</p>
+                    {suggestedRoles.roles.slice(0, 5).map((suggestion: any, index: number) => {
+                      const isAlreadyPreferred = preferredRoles.some(
+                        (r) => r.toLowerCase() === suggestion.role.toLowerCase()
+                      );
+                      return (
+                        <div
+                          key={index}
+                          className="p-4 bg-white rounded border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-2 flex-1">
+                              <Badge
+                                className="bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex-shrink-0 font-bold"
+                              >
+                                #{index + 1}
+                              </Badge>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-base text-slate-900">{suggestion.role}</h4>
+                                  {isAlreadyPreferred && (
+                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">
+                                      <Check className="h-3 w-3 mr-1" />
+                                      Added
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{suggestion.reasoning}</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                              <Badge
+                                className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${suggestion.score >= 0.8
+                                    ? 'bg-green-500 text-white'
+                                    : suggestion.score >= 0.6
+                                      ? 'bg-yellow-500 text-white'
+                                      : 'bg-slate-500 text-white'
+                                  }`}
+                              >
+                                {(suggestion.score * 100).toFixed(0)}%
+                              </Badge>
+                              <span className="text-xs text-slate-500">match</span>
+                              {!isAlreadyPreferred && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAddSuggestedRole(suggestion.role)}
+                                  disabled={updatePreferredRolesMutation.isPending || preferredRoles.length >= 10}
+                                  className="text-xs h-7 px-2 border-2 border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] hover:bg-purple-50"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add
+                                </Button>
+                              )}
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                            <Badge
-                              className={`font-bold border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${suggestion.score >= 0.8
-                                  ? 'bg-green-500 text-white'
-                                  : suggestion.score >= 0.6
-                                    ? 'bg-yellow-500 text-white'
-                                    : 'bg-slate-500 text-white'
-                                }`}
-                            >
-                              {(suggestion.score * 100).toFixed(0)}%
-                            </Badge>
-                            <span className="text-xs text-slate-500">match</span>
-                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="text-xs text-slate-500 text-center pt-2">
                       Generated {new Date(suggestedRoles.generated_at).toLocaleString()} • {suggestedRoles.model_version}
                     </div>
