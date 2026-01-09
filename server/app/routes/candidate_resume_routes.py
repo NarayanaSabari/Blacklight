@@ -262,14 +262,17 @@ def upload_resume(candidate_id: int):
         if trigger_parsing:
             try:
                 from app.inngest import inngest_client
-                inngest_client.send_sync({
-                    "name": "candidate-resume/parse",
-                    "data": {
-                        "resume_id": resume.id,
-                        "tenant_id": tenant_id,
-                        "update_candidate_profile": resume.is_primary,
-                    }
-                })
+                import inngest
+                inngest_client.send_sync(
+                    inngest.Event(
+                        name="candidate-resume/parse",
+                        data={
+                            "resume_id": resume.id,
+                            "tenant_id": tenant_id,
+                            "update_candidate_profile": resume.is_primary,
+                        }
+                    )
+                )
                 logger.info(f"Triggered parsing for resume {resume.id}")
             except Exception as inngest_error:
                 logger.warning(f"Failed to trigger resume parsing: {inngest_error}")
@@ -422,7 +425,7 @@ def download_resume(candidate_id: int, resume_id: int):
 
 # ==================== Reprocess Resume ====================
 
-@candidate_resume_bp.route('/<int:resume_id>/reprocess', methods=['POST'])
+@candidate_resume_bp.route('/<int:resume_id>/reparse', methods=['POST'])
 @require_portal_auth
 @with_tenant_context
 @require_permission('candidates.edit')
@@ -459,14 +462,17 @@ def reprocess_resume(candidate_id: int, resume_id: int):
         # Trigger async parsing
         try:
             from app.inngest import inngest_client
-            inngest_client.send_sync({
-                "name": "candidate-resume/parse",
-                "data": {
-                    "resume_id": resume.id,
-                    "tenant_id": tenant_id,
-                    "update_candidate_profile": update_profile,
-                }
-            })
+            import inngest
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="candidate-resume/parse",
+                    data={
+                        "resume_id": resume.id,
+                        "tenant_id": tenant_id,
+                        "update_candidate_profile": update_profile,
+                    }
+                )
+            )
             logger.info(f"Triggered reprocessing for resume {resume.id}")
         except Exception as inngest_error:
             logger.error(f"Failed to trigger resume reprocessing: {inngest_error}")
