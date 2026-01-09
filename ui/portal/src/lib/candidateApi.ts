@@ -13,6 +13,8 @@ import type {
   UploadResumeResponse,
   CandidateStats,
   PolishedResumeData,
+  CandidateResume,
+  CandidateResumeListResponse,
 } from '@/types/candidate';
 
 export const candidateApi = {
@@ -214,6 +216,87 @@ export const candidateApi = {
     candidate_id: number;
   }> => {
     return apiRequest.post(`/api/candidates/${id}/polished-resume/regenerate`);
+  },
+
+  // ==================== Multi-Resume APIs ====================
+
+  /**
+   * List all resumes for a candidate
+   */
+  listResumes: async (candidateId: number): Promise<CandidateResumeListResponse> => {
+    return apiRequest.get(`/api/candidates/${candidateId}/resumes`);
+  },
+
+  /**
+   * Get a specific resume by ID
+   */
+  getResume: async (candidateId: number, resumeId: number): Promise<CandidateResume> => {
+    const resp = await apiRequest.get<{ resume: CandidateResume }>(
+      `/api/candidates/${candidateId}/resumes/${resumeId}`
+    );
+    return resp.resume;
+  },
+
+  /**
+   * Upload a new resume for a candidate
+   */
+  uploadNewResume: async (
+    candidateId: number,
+    file: File,
+    options?: {
+      is_primary?: boolean;
+      trigger_parsing?: boolean;
+    }
+  ): Promise<{ resume: CandidateResume; message: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (options?.is_primary) formData.append('is_primary', 'true');
+    if (options?.trigger_parsing !== false) formData.append('trigger_parsing', 'true');
+
+    return apiRequest.post(`/api/candidates/${candidateId}/resumes`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    });
+  },
+
+  /**
+   * Set a resume as primary
+   */
+  setResumePrimary: async (candidateId: number, resumeId: number): Promise<CandidateResume> => {
+    const resp = await apiRequest.patch<{ resume: CandidateResume; message: string }>(
+      `/api/candidates/${candidateId}/resumes/${resumeId}/primary`
+    );
+    return resp.resume;
+  },
+
+  /**
+   * Delete a resume
+   */
+  deleteResume: async (candidateId: number, resumeId: number): Promise<void> => {
+    await apiRequest.delete(`/api/candidates/${candidateId}/resumes/${resumeId}`);
+  },
+
+  /**
+   * Get signed URL for a specific resume
+   */
+  getResumeDownloadUrl: async (candidateId: number, resumeId: number): Promise<string> => {
+    const resp = await apiRequest.get<{ signed_url: string }>(
+      `/api/candidates/${candidateId}/resumes/${resumeId}/url`
+    );
+    return resp.signed_url;
+  },
+
+  /**
+   * Trigger re-parsing of a specific resume
+   */
+  reparseSpecificResume: async (
+    candidateId: number,
+    resumeId: number,
+    updateProfile?: boolean
+  ): Promise<{ message: string; resume: CandidateResume }> => {
+    return apiRequest.post(`/api/candidates/${candidateId}/resumes/${resumeId}/reparse`, {
+      update_candidate_profile: updateProfile ?? true,
+    });
   },
 };
 

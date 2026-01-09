@@ -42,16 +42,21 @@ aiClient.interceptors.request.use((config) => {
 export const resumeTailorApi = {
   /**
    * Tailor a resume for a specific job posting
+   * @param candidateId - The candidate ID
+   * @param jobPostingId - The job posting ID
+   * @param resumeId - Optional specific resume ID (defaults to primary resume)
    */
   tailorResume: async (
     candidateId: number,
-    jobPostingId: number
+    jobPostingId: number,
+    resumeId?: number
   ): Promise<TailorResumeResponse> => {
     const response = await aiClient.post<TailorResumeResponse>(
       `${BASE_URL}/tailor`,
       {
         candidate_id: candidateId,
         job_posting_id: jobPostingId,
+        resume_id: resumeId,
       }
     );
     return response.data;
@@ -59,13 +64,16 @@ export const resumeTailorApi = {
 
   /**
    * Tailor a resume based on an existing job match
+   * @param matchId - The job match ID
+   * @param resumeId - Optional specific resume ID (defaults to primary resume)
    */
   tailorFromMatch: async (
-    matchId: number
+    matchId: number,
+    resumeId?: number
   ): Promise<TailorResumeResponse> => {
     const response = await aiClient.post<TailorResumeResponse>(
       `${BASE_URL}/tailor-from-match`,
-      { match_id: matchId }
+      { match_id: matchId, resume_id: resumeId }
     );
     return response.data;
   },
@@ -81,6 +89,7 @@ export const resumeTailorApi = {
     jobLocation?: string;
     targetScore?: number;
     maxIterations?: number;
+    resumeId?: number;
   }): Promise<TailorResumeResponse> => {
     const response = await aiClient.post<TailorResumeResponse>(
       `${BASE_URL}/tailor-manual`,
@@ -92,6 +101,7 @@ export const resumeTailorApi = {
         job_location: params.jobLocation,
         target_score: params.targetScore ?? 80,
         max_iterations: params.maxIterations ?? 1,
+        resume_id: params.resumeId,
       }
     );
     return response.data;

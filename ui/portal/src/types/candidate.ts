@@ -44,6 +44,52 @@ export interface PolishedResumeData {
   last_edited_by_user_id?: number | null;
 }
 
+/**
+ * Resume processing status
+ */
+export type ResumeProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Candidate Resume - multiple resumes per candidate
+ */
+export interface CandidateResume {
+  id: number;
+  tenant_id: number;
+  candidate_id: number;
+  file_key: string;
+  storage_backend: 'local' | 'gcs';
+  original_filename: string;
+  file_size?: number;
+  file_size_mb?: number;
+  file_extension?: string;
+  mime_type?: string;
+  is_primary: boolean;
+  processing_status: ResumeProcessingStatus;
+  processing_error?: string | null;
+  has_parsed_data: boolean;
+  has_polished_resume: boolean;
+  uploaded_by_user_id?: number | null;
+  uploaded_by_candidate: boolean;
+  uploaded_at: string;
+  processed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Optional - included when requesting full data
+  parsed_resume_data?: Record<string, unknown>;
+  polished_resume_data?: PolishedResumeData;
+  polished_resume_markdown?: string;
+}
+
+/**
+ * Response for listing resumes
+ */
+export interface CandidateResumeListResponse {
+  candidate_id: number;
+  resumes: CandidateResume[];
+  total: number;
+  primary_resume_id?: number | null;
+}
+
 export interface Candidate {
   id: number;
   tenant_id: number;
@@ -55,13 +101,18 @@ export interface Candidate {
   phone?: string;
   full_name?: string;
 
-  // Resume Info
+  // Resume Info (from primary resume - for backward compatibility)
   resume_file_key?: string;
   resume_storage_backend?: string;
   // Signed URLs are provided via the `GET /api/candidates/:id/resume-url` endpoint;
   // Do not depend on `resume_file_url` which was a legacy public field.
   resume_uploaded_at?: string;
   resume_parsed_at?: string;
+  
+  // Multi-resume support
+  has_primary_resume?: boolean;
+  resume_count?: number;
+  resumes?: CandidateResume[];  // Included when requesting with include_resumes=true
 
   // Enhanced Personal Info
   location?: string;
@@ -228,4 +279,25 @@ export interface CandidateFilters {
   search?: string;
   page?: number;
   per_page?: number;
+}
+
+/**
+ * Resume upload response (for new candidate via resume)
+ */
+export interface ResumeUploadResponse {
+  resume_id: number;
+  candidate_id: number;
+  file_key: string;
+  processing_status: ResumeProcessingStatus;
+  is_primary: boolean;
+  message?: string;
+}
+
+/**
+ * Resume signed URL response
+ */
+export interface ResumeUrlResponse {
+  signed_url: string;
+  resume_id: number;
+  expires_in?: number;
 }

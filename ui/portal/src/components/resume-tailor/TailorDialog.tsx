@@ -4,8 +4,8 @@
  * Uses simple REST API (no streaming)
  */
 
-import { useState, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileText,
   Sparkles,
@@ -26,9 +26,18 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
+import { candidateApi } from '@/lib/candidateApi';
 import type { TailoredResume } from '@/types/tailoredResume';
+import type { CandidateResume } from '@/types/candidate';
 
 interface TailorDialogProps {
   open: boolean;
@@ -60,14 +69,32 @@ export function TailorDialog({
   const [phase, setPhase] = useState<TailorPhase>('confirm');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TailoredResume | null>(null);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | undefined>(undefined);
+
+  // Fetch candidate's resumes
+  const { data: resumesData } = useQuery({
+    queryKey: ['candidate-resumes', candidateId],
+    queryFn: () => candidateApi.listResumes(candidateId),
+    enabled: open && !!candidateId,
+  });
+
+  const candidateResumes = resumesData?.resumes || [];
+  const primaryResumeId = resumesData?.primary_resume_id;
+
+  // Set initial selected resume to primary when resumes load
+  useEffect(() => {
+    if (primaryResumeId && selectedResumeId === undefined) {
+      setSelectedResumeId(primaryResumeId);
+    }
+  }, [primaryResumeId, selectedResumeId]);
 
   // Simple REST API mutation
   const tailorMutation = useMutation({
     mutationFn: async () => {
       if (jobMatchId) {
-        return resumeTailorApi.tailorFromMatch(jobMatchId);
+        return resumeTailorApi.tailorFromMatch(jobMatchId, selectedResumeId);
       } else if (jobPostingId) {
-        return resumeTailorApi.tailorResume(candidateId, jobPostingId);
+        return resumeTailorApi.tailorResume(candidateId, jobPostingId, selectedResumeId);
       }
       throw new Error('Either jobMatchId or jobPostingId is required');
     },
@@ -95,6 +122,7 @@ export function TailorDialog({
     setPhase('confirm');
     setError(null);
     setResult(null);
+    setSelectedResumeId(undefined);
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -149,6 +177,36 @@ export function TailorDialog({
                   Improve match score with AI suggestions
                 </p>
               </div>
+
+              {/* Resume Selector - only show if multiple resumes */}
+              {candidateResumes.length > 1 && (
+                <div className="space-y-2 pt-2 border-t">
+                  <label className="text-sm font-medium">Select Resume</label>
+                  <Select
+                    value={selectedResumeId?.toString() || ''}
+                    onValueChange={(v) => setSelectedResumeId(parseInt(v, 10))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a resume" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidateResumes.map((resume: CandidateResume) => (
+                        <SelectItem key={resume.id} value={resume.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <span className="truncate max-w-[200px]">{resume.original_filename}</span>
+                            {resume.is_primary && (
+                              <Badge variant="secondary" className="text-xs">Primary</Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Choose which resume to tailor for this job.
+                  </p>
+                </div>
+              )}
             </div>
 
             <DialogFooter>

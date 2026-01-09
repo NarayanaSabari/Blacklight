@@ -96,6 +96,7 @@ import { TagInput } from '@/components/ui/tag-input';
 import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEditor';
 import { EducationEditor } from '@/components/candidates/EducationEditor';
 import { ResumeComparisonSection } from '@/components/candidates/ResumeComparisonSection';
+import { ResumeList } from '@/components/candidates/ResumeList';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -1198,6 +1199,18 @@ export function CandidateDetailPage() {
               </CardContent>
             </Card>
           ) : null}
+
+          {/* Resumes Section - Multi-resume support */}
+          {candidate && (
+            <ResumeList
+              candidateId={candidate.id}
+              onUpload={() => {
+                setUploadDocumentType('resume');
+                setShowUploadDialog(true);
+              }}
+              showUploadButton={true}
+            />
+          )}
 
           {/* Documents Section */}
           <Card className={`border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${isReviewMode && hasUnverifiedDocs ? 'ring-2 ring-amber-500' : ''}`}>

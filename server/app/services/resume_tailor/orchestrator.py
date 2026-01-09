@@ -19,6 +19,7 @@ from sqlalchemy import select
 from app import db
 from app.models.tailored_resume import TailoredResume, TailoredResumeStatus
 from app.models.candidate import Candidate
+from app.models.candidate_resume import CandidateResume
 from app.models.job_posting import JobPosting
 from app.models.candidate_job_match import CandidateJobMatch
 from app.services.resume_tailor.keyword_extractor import KeywordExtractorService, ExtractedJobData
@@ -128,7 +129,8 @@ class ResumeTailorOrchestrator:
         job_posting_id: int,
         tenant_id: int,
         target_score: int = 80,
-        max_iterations: int = 3
+        max_iterations: int = 3,
+        resume_id: Optional[int] = None
     ) -> TailoredResume:
         """
         Execute the full resume tailoring workflow.
@@ -139,6 +141,7 @@ class ResumeTailorOrchestrator:
             tenant_id: Tenant ID for multi-tenancy
             target_score: Target match score to achieve (50-100)
             max_iterations: Maximum improvement iterations (1-5)
+            resume_id: Optional specific resume ID to tailor (defaults to primary resume)
             
         Returns:
             TailoredResume model with results
@@ -153,9 +156,18 @@ class ResumeTailorOrchestrator:
             if not job_posting:
                 raise ValueError(f"Job posting {job_posting_id} not found")
             
+            # Get the specific resume to tailor (or primary if not specified)
+            resume: Optional[CandidateResume] = None
+            if resume_id:
+                resume = db.session.get(CandidateResume, resume_id)
+                if not resume or resume.candidate_id != candidate_id:
+                    raise ValueError(f"Resume {resume_id} not found for candidate {candidate_id}")
+            else:
+                resume = candidate.primary_resume
+            
             # Extract resume text and markdown
-            resume_text = self._get_resume_text(candidate)
-            resume_markdown = self._get_resume_markdown(candidate)
+            resume_text = self._get_resume_text(candidate, resume)
+            resume_markdown = self._get_resume_markdown(candidate, resume)
             
             # Create initial record with original content
             tailored_resume = TailoredResume(
@@ -376,7 +388,8 @@ class ResumeTailorOrchestrator:
         job_posting_id: int,
         tenant_id: int,
         target_score: int = 80,
-        max_iterations: int = 3
+        max_iterations: int = 3,
+        resume_id: Optional[int] = None
     ) -> Generator[TailorProgressEvent, None, None]:
         """
         Execute resume tailoring with streaming progress updates.
@@ -389,6 +402,7 @@ class ResumeTailorOrchestrator:
             tenant_id: Tenant ID
             target_score: Target match score
             max_iterations: Maximum iterations
+            resume_id: Optional specific resume ID to tailor (defaults to primary resume)
             
         Yields:
             TailorProgressEvent objects with progress updates
@@ -421,13 +435,22 @@ class ResumeTailorOrchestrator:
             if not job_posting:
                 raise ValueError(f"Job posting {job_posting_id} not found")
             
+            # Get the specific resume to tailor (or primary if not specified)
+            resume: Optional[CandidateResume] = None
+            if resume_id:
+                resume = db.session.get(CandidateResume, resume_id)
+                if not resume or resume.candidate_id != candidate_id:
+                    raise ValueError(f"Resume {resume_id} not found for candidate {candidate_id}")
+            else:
+                resume = candidate.primary_resume
+            
             yield emit(
                 'analyzing_resume', 
                 f'Analyzing resume for {candidate.first_name} {candidate.last_name}...'
             )
             
-            resume_text = self._get_resume_text(candidate)
-            resume_markdown = self._get_resume_markdown(candidate)
+            resume_text = self._get_resume_text(candidate, resume)
+            resume_markdown = self._get_resume_markdown(candidate, resume)
             
             # Create record with required fields
             tailored_resume = TailoredResume(
@@ -948,13 +971,23 @@ class ResumeTailorOrchestrator:
         )
         return list(db.session.scalars(stmt))
     
-    def _get_resume_text(self, candidate: Candidate) -> str:
-        """Extract resume text from candidate's resume file."""
+    def _get_resume_text(self, candidate: Candidate, resume: Optional['CandidateResume'] = None) -> str:
+        """
+        Extract resume text from candidate's resume file.
+        
+        Args:
+            candidate: Candidate model
+            resume: Optional specific CandidateResume to use (defaults to primary resume)
+        """
+        # Get the resume to use
+        if resume is None:
+            resume = candidate.primary_resume
+        
         # Try to get from file first
-        if candidate.resume_file_key:
+        if resume and resume.file_key:
             try:
                 # Download to temp file and extract text
-                temp_path, error = self.file_storage.download_to_temp(candidate.resume_file_key)
+                temp_path, error = self.file_storage.download_to_temp(resume.file_key)
                 if temp_path and not error:
                     result = TextExtractor.extract_from_file(temp_path)
                     text = result.get('text', '')
@@ -969,9 +1002,9 @@ class ResumeTailorOrchestrator:
             except Exception as e:
                 logger.warning(f"Could not extract from file: {e}")
         
-        # Fallback to parsed data
-        if candidate.parsed_resume_data:
-            return self._parsed_data_to_text(candidate.parsed_resume_data)
+        # Fallback to parsed data from resume
+        if resume and resume.parsed_resume_data:
+            return self._parsed_data_to_text(resume.parsed_resume_data)
         
         # Last resort: build from candidate fields
         parts = []
@@ -988,24 +1021,32 @@ class ResumeTailorOrchestrator:
         
         return "\n".join(parts)
     
-    def _get_resume_markdown(self, candidate: Candidate) -> str:
+    def _get_resume_markdown(self, candidate: Candidate, resume: Optional[CandidateResume] = None) -> str:
         """
         Get resume as markdown format.
+        
+        Args:
+            candidate: Candidate model
+            resume: Optional specific CandidateResume to use (defaults to primary resume)
         
         Priority order:
         1. Polished resume markdown (AI-formatted or recruiter-edited)
         2. Parsed resume data converted to markdown
         3. Basic candidate fields
         """
-        # Priority 1: Use polished resume if available
-        if candidate.has_polished_resume:
-            logger.info(f"Using polished resume markdown for candidate {candidate.id}")
-            return candidate.polished_resume_markdown
+        # Get the resume to use
+        if resume is None:
+            resume = candidate.primary_resume
         
-        # Priority 2: Use parsed resume data
-        if candidate.parsed_resume_data:
+        # Priority 1: Use polished resume if available
+        if resume and resume.has_polished_resume:
+            logger.info(f"Using polished resume markdown for candidate {candidate.id}, resume {resume.id}")
+            return resume.polished_resume_markdown
+        
+        # Priority 2: Use parsed resume data from resume record
+        if resume and resume.parsed_resume_data:
             # Ensure candidate contact info is in parsed data
-            parsed_data = dict(candidate.parsed_resume_data)
+            parsed_data = dict(resume.parsed_resume_data)
             if 'personal_info' not in parsed_data:
                 parsed_data['personal_info'] = {}
             

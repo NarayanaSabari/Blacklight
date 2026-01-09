@@ -80,15 +80,8 @@ class Candidate(BaseModel):
     # including future hires (no explicit CandidateAssignment record needed)
     is_visible_to_all_team = db.Column(db.Boolean, default=False, server_default="false", nullable=False)
 
-    # Resume File Storage
-    # GCS file key for the resume (preferred storage key in GCS)
-    resume_file_key = db.Column(String(1000))
-    # Which storage backend the resume uses (e.g., 'local' or 'gcs')
-    resume_storage_backend = db.Column(String(20), default="gcs")
-    # Legacy/local fields retained for backward compatibility (may be deprecated later)
-    resume_file_path = db.Column(String(500))
-    resume_uploaded_at = db.Column(DateTime)
-    resume_parsed_at = db.Column(DateTime)
+    # NOTE: Resume fields moved to CandidateResume model for multi-resume support
+    # See candidate_resumes table and use candidate.primary_resume for access
 
     # Enhanced Personal Information (from resume parsing)
     full_name = db.Column(String(200))  # Parsed full name
@@ -139,21 +132,8 @@ class Candidate(BaseModel):
     #   }
     # ]
 
-    # Full parsed resume data (raw output from parser)
-    parsed_resume_data = db.Column(JSONB)
-
-    # AI-Polished Resume Data (formatted markdown with metadata)
-    # Structure:
-    # {
-    #     "markdown_content": "# John Doe\n\n## Professional Summary\n...",
-    #     "polished_at": "2026-01-02T10:30:00Z",
-    #     "polished_by": "ai",  // "ai" | "recruiter"
-    #     "ai_model": "gemini-2.5-flash",
-    #     "version": 1,
-    #     "last_edited_at": null,
-    #     "last_edited_by_user_id": null
-    # }
-    polished_resume_data = db.Column(JSONB)
+    # NOTE: parsed_resume_data and polished_resume_data moved to CandidateResume model
+    # Each resume now has its own parsed and polished data
 
     # AI-Suggested Roles (NEW)
     suggested_roles = db.Column(JSONB)  # AI-generated role suggestions
@@ -177,6 +157,14 @@ class Candidate(BaseModel):
         "CandidateGlobalRole",
         back_populates="candidate",
         cascade="all, delete-orphan",
+    )
+    
+    # Multiple resumes support
+    resumes = db.relationship(
+        "CandidateResume",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="desc(CandidateResume.is_primary), desc(CandidateResume.created_at)",
     )
 
     # Onboarding relationships
@@ -207,14 +195,18 @@ class Candidate(BaseModel):
     def __repr__(self):
         return f"<Candidate {self.first_name} {self.last_name}>"
 
-    def to_dict(self, include_assignments=False, include_onboarding_users=False):
+    def to_dict(self, include_assignments=False, include_onboarding_users=False, include_resumes=False):
         """
         Convert candidate to dictionary
 
         Args:
             include_assignments: Include assignment history
             include_onboarding_users: Include onboarded_by, approved_by, rejected_by user details
+            include_resumes: Include resume list with basic info
         """
+        # Get primary resume for backward compatibility
+        primary = self.primary_resume
+        
         result = {
             "id": self.id,
             "tenant_id": self.tenant_id,
@@ -224,18 +216,13 @@ class Candidate(BaseModel):
             "phone": self.phone,
             "status": self.status,
             "source": self.source,
-            "resume_file_key": self.resume_file_key,
-            "resume_storage_backend": self.resume_storage_backend,
-            # NOTE: `resume_file_path` is a legacy field retained in the DB for
-            # backward compatibility. As part of the Phase 3 cleanup we stopped
-            # writing `resume_file_url` to this model and the column may be removed
-            # via a migration once all clients and integrations no longer depend on it.
-            "resume_uploaded_at": self.resume_uploaded_at.isoformat()
-            if self.resume_uploaded_at
-            else None,
-            "resume_parsed_at": self.resume_parsed_at.isoformat()
-            if self.resume_parsed_at
-            else None,
+            # Resume fields from primary resume (for backward compatibility)
+            "resume_file_key": primary.file_key if primary else None,
+            "resume_storage_backend": primary.storage_backend if primary else None,
+            "resume_uploaded_at": primary.uploaded_at.isoformat() if primary and primary.uploaded_at else None,
+            "resume_parsed_at": primary.processed_at.isoformat() if primary and primary.processed_at else None,
+            "has_primary_resume": primary is not None,
+            "resume_count": len(list(self.resumes)) if self.resumes else 0,  # type: ignore[arg-type]
             "full_name": self.full_name,
             "location": self.location,
             "linkedin_url": self.linkedin_url,
@@ -251,9 +238,10 @@ class Candidate(BaseModel):
             "languages": self.languages,
             "education": self.education,
             "work_experience": self.work_experience,
-            "parsed_resume_data": self.parsed_resume_data,
-            "polished_resume_data": self.polished_resume_data,
-            # Role preferences (NEW)
+            # Resume data from primary resume (for backward compatibility)
+            "parsed_resume_data": primary.parsed_resume_data if primary else None,
+            "polished_resume_data": primary.polished_resume_data if primary else None,
+            # Role preferences
             "preferred_roles": self.preferred_roles if self.preferred_roles else [],
             "suggested_roles": self.suggested_roles,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -287,7 +275,7 @@ class Candidate(BaseModel):
                     else None,
                     "status": assignment.status,
                 }
-                for assignment in self.assignments
+                for assignment in self.assignments  # type: ignore[union-attr]
             ]
 
         # Include onboarding user details if requested
@@ -327,54 +315,58 @@ class Candidate(BaseModel):
                     "first_name": self.recruiter.first_name,
                     "last_name": self.recruiter.last_name,
                 }
+        
+        # Include resumes list if requested
+        if include_resumes and self.resumes:
+            result["resumes"] = [
+                resume.to_dict(include_parsed_data=False, include_polished_data=False)
+                for resume in self.resumes  # type: ignore[union-attr]
+            ]
 
         return result
 
-    # Helper methods for polished resume data
+    # Helper property to get the primary resume
+    @property
+    def primary_resume(self):
+        """Get the primary resume for this candidate."""
+        # Access the relationship as a list (SQLAlchemy lazy loads it)
+        resumes_list = list(self.resumes) if self.resumes else []  # type: ignore[arg-type]
+        if not resumes_list:
+            return None
+        for resume in resumes_list:
+            if resume.is_primary:
+                return resume
+        # If no primary is set, return the most recent one
+        return resumes_list[0] if resumes_list else None
+
+    # Helper methods for polished resume data (from primary resume)
     @property
     def polished_resume_markdown(self) -> str:
-        """Get the polished resume markdown content."""
-        if self.polished_resume_data:
-            return self.polished_resume_data.get("markdown_content", "")
+        """Get the polished resume markdown content from primary resume."""
+        primary = self.primary_resume
+        if primary and primary.polished_resume_data:
+            return primary.polished_resume_data.get("markdown_content", "")
         return ""
 
     @property
     def has_polished_resume(self) -> bool:
-        """Check if candidate has a polished resume."""
+        """Check if candidate has a polished resume (on primary)."""
+        primary = self.primary_resume
         return bool(
-            self.polished_resume_data
-            and self.polished_resume_data.get("markdown_content")
+            primary
+            and primary.polished_resume_data
+            and primary.polished_resume_data.get("markdown_content")
         )
-
-    def set_polished_resume(
-        self,
-        markdown_content: str,
-        polished_by: str = "ai",
-        ai_model: str = None,
-        user_id: int = None,
-    ) -> None:
-        """
-        Set or update the polished resume data.
-
-        Args:
-            markdown_content: The polished markdown content
-            polished_by: Who polished it ("ai" or "recruiter")
-            ai_model: AI model used (if polished by AI)
-            user_id: User ID (if edited by recruiter)
-        """
-        current_version = 1
-        if self.polished_resume_data:
-            current_version = self.polished_resume_data.get("version", 0) + 1
-
-        now = datetime.utcnow().isoformat() + "Z"
-
-        self.polished_resume_data = {
-            "markdown_content": markdown_content,
-            "polished_at": now if polished_by == "ai" else self.polished_resume_data.get("polished_at") if self.polished_resume_data else now,
-            "polished_by": "ai" if polished_by == "ai" else self.polished_resume_data.get("polished_by", "ai") if self.polished_resume_data else polished_by,
-            "ai_model": ai_model or (self.polished_resume_data.get("ai_model") if self.polished_resume_data else None),
-            "version": current_version,
-            "last_edited_at": now if polished_by == "recruiter" else None,
-            "last_edited_by_user_id": user_id if polished_by == "recruiter" else None,
-        }
+    
+    @property
+    def parsed_resume_data(self):
+        """Get parsed resume data from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.parsed_resume_data if primary else None
+    
+    @property
+    def polished_resume_data(self):
+        """Get polished resume data from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.polished_resume_data if primary else None
 

@@ -98,7 +98,8 @@ def tailor_resume():
             job_posting_id=data.job_posting_id,
             tenant_id=tenant_id,
             target_score=data.target_score,
-            max_iterations=data.max_iterations
+            max_iterations=data.max_iterations,
+            resume_id=data.resume_id
         )
         
         return jsonify(tailored_resume.to_dict()), 201
@@ -281,7 +282,8 @@ def tailor_resume_stream():
                 job_posting_id=data.job_posting_id,
                 tenant_id=tenant_id,
                 target_score=data.target_score,
-                max_iterations=data.max_iterations
+                max_iterations=data.max_iterations,
+                resume_id=data.resume_id
             ):
                 yield event.to_sse()
                 

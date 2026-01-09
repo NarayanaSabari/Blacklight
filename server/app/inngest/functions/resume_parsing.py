@@ -1,170 +1,444 @@
 """
 Inngest Resume Parsing Workflow
 Handles async resume parsing after upload
+
+Supports both:
+- New CandidateResume model via 'candidate-resume/parse' event
+- Legacy candidate.resume_file_key via 'candidate/parse-resume' event (backward compat)
 """
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import inngest
 from app.inngest import inngest_client
 
 from app import db
 from app.models.candidate import Candidate
+from app.models.candidate_resume import CandidateResume
 from app.services.resume_parser import ResumeParserService
 from app.services.resume_polishing_service import ResumePolishingService
-from app.utils.text_extractor import TextExtractor  # FIXED: correct import path
+from app.utils.text_extractor import TextExtractor
 from app.services.file_storage import FileStorageService
+from app.services.candidate_resume_service import CandidateResumeService
 
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# NEW: Resume-centric parsing (uses CandidateResume model)
+# =============================================================================
+
 @inngest_client.create_function(
-    fn_id="parse-resume-async",
-    trigger=inngest.TriggerEvent(event="candidate/parse-resume"),
-    # Disable automatic retries to avoid multiple executions per upload while debugging
-    retries=0,
-    name="Parse Resume Async"
+    fn_id="parse-candidate-resume",
+    trigger=inngest.TriggerEvent(event="candidate-resume/parse"),
+    retries=2,
+    name="Parse Candidate Resume"
 )
-async def parse_resume_workflow(ctx: inngest.Context) -> dict:
+async def parse_candidate_resume_workflow(ctx) -> dict:
     """
-    Async workflow to parse resume after upload
+    Async workflow to parse a specific resume from CandidateResume table.
+    
+    This is the new preferred method for resume parsing that works with
+    the multi-resume feature.
     
     Workflow Steps:
-    1. Fetch candidate record
-    2. Extract text from resume file (STEP - external dependency)
-    3. Run AI parsing (STEP - external API, needs retry)
-    4. Update candidate with parsed data
-    5. Change status to 'pending_review'
+    1. Fetch resume record
+    2. Update status to 'processing'
+    3. Extract text from resume file
+    4. Run AI parsing
+    5. Polish resume
+    6. Update resume record with parsed/polished data
+    7. If primary resume, update candidate profile fields
     
     Event data:
-        - candidate_id: int
-        - tenant_id: int
+        - resume_id: int (required)
+        - tenant_id: int (required)
+        - update_candidate_profile: bool (default True for primary resume)
     """
     event_data = ctx.event.data
-    candidate_id = event_data.get("candidate_id")
+    resume_id = event_data.get("resume_id")
     tenant_id = event_data.get("tenant_id")
+    update_profile = event_data.get("update_candidate_profile", True)
     
-    logger.info(f"[PARSE-RESUME] Starting async parsing for candidate {candidate_id}")
+    logger.info(f"[PARSE-RESUME] Starting parsing for resume {resume_id}")
     
     try:
-        # Step 1: Fetch candidate (direct - no step needed, fast DB query)
-        candidate = _fetch_candidate(candidate_id, tenant_id)
+        # Step 1: Fetch resume record
+        resume = _fetch_resume(resume_id, tenant_id)
         
-        if not candidate:
-            logger.error(f"[PARSE-RESUME] Candidate {candidate_id} not found")
-            return {"status": "error", "message": "Candidate not found"}
+        if not resume:
+            logger.error(f"[PARSE-RESUME] Resume {resume_id} not found")
+            return {"status": "error", "message": "Resume not found"}
         
-        # Idempotency guard: if candidate is already parsed & in/after pending_review, skip work
-        if getattr(candidate, "resume_parsed_at", None) is not None and candidate.status in [
-            "pending_review",
-            "onboarded",
-            "ready_for_assignment",
-        ]:
-            logger.info(f"[PARSE-RESUME] Candidate {candidate_id} already parsed; skipping re-processing")
+        candidate_id = resume.candidate_id
+        
+        # Idempotency guard: if resume is already completed, skip
+        if resume.processing_status == 'completed' and resume.parsed_resume_data:
+            logger.info(f"[PARSE-RESUME] Resume {resume_id} already parsed; skipping")
             return {
                 "status": "success",
+                "resume_id": resume_id,
                 "candidate_id": candidate_id,
-                "has_data": bool(getattr(candidate, "parsed_resume_data", None)),
                 "skipped": True,
             }
         
-        if not candidate.resume_file_key:
-            logger.error(f"[PARSE-RESUME] No resume file for candidate {candidate_id}")
-            _update_candidate_status(candidate_id, "pending_review", {})
+        # Step 2: Update status to processing
+        _update_resume_status(resume_id, 'processing')
+        
+        if not resume.file_key:
+            logger.error(f"[PARSE-RESUME] No file_key for resume {resume_id}")
+            _update_resume_status(resume_id, 'failed', error="No resume file")
             return {"status": "error", "message": "No resume file"}
         
-        # Step 2: Extract text (STEP - file operation, might fail)
-        local_path = None
-        # If file is remote, download to temp using FileStorageService
-        if getattr(candidate, 'resume_file_key', None):
-            storage = FileStorageService()
-            local_path, err = storage.download_to_temp(candidate.resume_file_key)
-            if err:
-                logger.error(f"[PARSE-RESUME] Failed to download file for candidate {candidate_id}: {err}")
-                _update_candidate_status(candidate_id, "pending_review", {})
-                return {"status": "error", "message": "Failed to download resume file"}
-
-            try:
-                resume_text = await ctx.step.run(
-                    "extract-resume-text",
-                    lambda: _extract_resume_text(local_path)
-                )
-            finally:
-                try:
-                    import os
-                    os.remove(local_path)
-                except Exception:
-                    pass
-        else:
-            # NOTE: No local fallback supported in Phase 3 - we only support parsing by file_key.
+        # Step 3: Download and extract text
+        storage = FileStorageService()
+        local_path, err = storage.download_to_temp(resume.file_key)
+        
+        if err or not local_path:
+            logger.error(f"[PARSE-RESUME] Failed to download file for resume {resume_id}: {err}")
+            _update_resume_status(resume_id, 'failed', error=f"Download failed: {err}")
+            return {"status": "error", "message": "Failed to download resume file"}
+        
+        try:
             resume_text = await ctx.step.run(
                 "extract-resume-text",
                 lambda: _extract_resume_text(local_path)
             )
+        finally:
+            try:
+                if local_path:
+                    os.remove(local_path)
+            except Exception:
+                pass
         
         if not resume_text:
-            logger.error(f"[PARSE-RESUME] Failed to extract text from resume for candidate {candidate_id}")
-            # Update to pending_review so HR can manually enter data
-            _update_candidate_status(candidate_id, "pending_review", {})
+            logger.error(f"[PARSE-RESUME] Failed to extract text from resume {resume_id}")
+            _update_resume_status(resume_id, 'failed', error="Could not extract text")
             return {"status": "error", "message": "Could not extract resume text"}
         
-        # Step 3: Run AI parsing (STEP - external API, can fail, needs retry)
+        # Step 4: Run AI parsing
         parsed_data = await ctx.step.run(
             "ai-parse-resume",
-            lambda: _parse_with_ai(resume_text, local_path)
+            lambda: _parse_with_ai(resume_text, resume.original_filename or "resume.pdf")
         )
         
-        # Step 4: Update candidate with parsed data (direct - simple DB operations)
-        if parsed_data:
-            _update_candidate_with_parsed_data(candidate_id, parsed_data)
+        if not parsed_data:
+            logger.warning(f"[PARSE-RESUME] AI parsing returned empty for resume {resume_id}")
+            _update_resume_status(resume_id, 'failed', error="AI parsing failed")
+            return {"status": "error", "message": "AI parsing failed"}
         
-        # Step 5: Polish resume - convert parsed data to formatted markdown
-        # This runs after parsing so we have data to polish
+        # Step 5: Polish resume
+        candidate = _fetch_candidate(candidate_id, tenant_id)
+        candidate_name = None
+        if candidate:
+            candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
+        
         polished_data = None
-        if parsed_data:
-            try:
-                # Fetch fresh candidate for name
-                fresh_candidate = _fetch_candidate(candidate_id, tenant_id)
-                candidate_name = None
-                if fresh_candidate:
-                    candidate_name = fresh_candidate.full_name or f"{fresh_candidate.first_name} {fresh_candidate.last_name}".strip()
-                
-                polished_data = await ctx.step.run(
-                    "ai-polish-resume",
-                    lambda: _polish_resume(parsed_data, candidate_name)
-                )
-                
-                if polished_data:
-                    _update_candidate_with_polished_data(candidate_id, polished_data)
-                    logger.info(f"[PARSE-RESUME] Successfully polished resume for candidate {candidate_id}")
-            except Exception as polish_error:
-                # Log but don't fail - polishing is non-critical
-                logger.warning(f"[PARSE-RESUME] Resume polishing failed for candidate {candidate_id}: {polish_error}")
+        try:
+            polished_data = await ctx.step.run(
+                "ai-polish-resume",
+                lambda: _polish_resume(parsed_data, candidate_name)
+            )
+        except Exception as polish_error:
+            logger.warning(f"[PARSE-RESUME] Resume polishing failed for resume {resume_id}: {polish_error}")
         
-        # Step 6: Update status to pending_review
-        _update_candidate_status(candidate_id, "pending_review", parsed_data)
+        # Step 6: Update resume record with parsed/polished data
+        CandidateResumeService.update_processing_status(
+            resume_id=resume_id,
+            status='completed',
+            parsed_data=parsed_data,
+            polished_data=polished_data
+        )
         
-        logger.info(f"[PARSE-RESUME] Successfully parsed resume for candidate {candidate_id}, status: pending_review")
+        # Step 7: If primary resume and update_profile is True, update candidate fields
+        if resume.is_primary and update_profile and parsed_data:
+            _update_candidate_with_parsed_data(candidate_id, parsed_data)
+            if polished_data:
+                _update_candidate_polished_via_resume(candidate_id, polished_data)
+            # Update status to pending_review
+            _update_candidate_status(candidate_id, "pending_review")
+        
+        logger.info(f"[PARSE-RESUME] Successfully parsed resume {resume_id} for candidate {candidate_id}")
         
         return {
             "status": "success",
+            "resume_id": resume_id,
             "candidate_id": candidate_id,
             "has_data": bool(parsed_data),
             "has_polished_data": bool(polished_data)
         }
     
     except Exception as e:
-        # Catch-all error handler - always update status to pending_review even on failure
-        logger.error(f"[PARSE-RESUME] Workflow failed for candidate {candidate_id}: {e}", exc_info=True)
+        logger.error(f"[PARSE-RESUME] Workflow failed for resume {resume_id}: {e}", exc_info=True)
         try:
-            _update_candidate_status(candidate_id, "pending_review", {})
-            logger.info(f"[PARSE-RESUME] Updated candidate {candidate_id} to pending_review after error")
-        except Exception as status_error:
-            logger.error(f"[PARSE-RESUME] Failed to update status: {status_error}")
+            _update_resume_status(resume_id, 'failed', error=str(e))
+        except Exception:
+            pass
         
         return {
             "status": "error",
+            "resume_id": resume_id,
+            "error": str(e)
+        }
+
+
+@inngest_client.create_function(
+    fn_id="polish-candidate-resume",
+    trigger=inngest.TriggerEvent(event="candidate-resume/polish"),
+    retries=2,
+    name="Polish Candidate Resume"
+)
+async def polish_candidate_resume_workflow(ctx) -> dict:
+    """
+    Async workflow to polish an already-parsed resume from CandidateResume table.
+    
+    Event data:
+        - resume_id: int (required)
+        - tenant_id: int (required)
+    """
+    event_data = ctx.event.data
+    resume_id = event_data.get("resume_id")
+    tenant_id = event_data.get("tenant_id")
+    
+    logger.info(f"[POLISH-RESUME] Starting polishing for resume {resume_id}")
+    
+    try:
+        # Fetch resume record
+        resume = _fetch_resume(resume_id, tenant_id)
+        
+        if not resume:
+            logger.error(f"[POLISH-RESUME] Resume {resume_id} not found")
+            return {"status": "error", "message": "Resume not found"}
+        
+        # Check if already polished
+        if resume.polished_resume_data and resume.polished_resume_data.get('markdown_content'):
+            logger.info(f"[POLISH-RESUME] Resume {resume_id} already polished, skipping")
+            return {
+                "status": "success",
+                "resume_id": resume_id,
+                "skipped": True
+            }
+        
+        # Check if we have parsed data
+        if not resume.parsed_resume_data:
+            logger.warning(f"[POLISH-RESUME] Resume {resume_id} has no parsed data")
+            return {"status": "error", "message": "No parsed data available"}
+        
+        # Get candidate name
+        candidate = _fetch_candidate(resume.candidate_id, tenant_id)
+        candidate_name = None
+        if candidate:
+            candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+        
+        # Polish the resume
+        polished_data = await ctx.step.run(
+            "ai-polish-resume",
+            lambda: _polish_resume(resume.parsed_resume_data, candidate_name)
+        )
+        
+        if not polished_data or not polished_data.get('markdown_content'):
+            logger.error(f"[POLISH-RESUME] Polishing failed for resume {resume_id}")
+            return {"status": "error", "message": "Polishing failed"}
+        
+        # Update resume with polished data
+        CandidateResumeService.update_processing_status(
+            resume_id=resume_id,
+            status='completed',
+            polished_data=polished_data
+        )
+        
+        # If primary resume, also update candidate (polished data is accessed via primary_resume property)
+        # No need to update candidate directly since polished_resume_data is a property
+        
+        logger.info(f"[POLISH-RESUME] Successfully polished resume {resume_id}")
+        
+        return {
+            "status": "success",
+            "resume_id": resume_id,
+            "has_polished_data": True
+        }
+    
+    except Exception as e:
+        logger.error(f"[POLISH-RESUME] Error for resume {resume_id}: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "resume_id": resume_id,
+            "error": str(e)
+        }
+
+
+# =============================================================================
+# LEGACY: Candidate-centric parsing (backward compatibility)
+# =============================================================================
+
+@inngest_client.create_function(
+    fn_id="parse-resume-async",
+    trigger=inngest.TriggerEvent(event="candidate/parse-resume"),
+    retries=0,
+    name="Parse Resume Async (Legacy)"
+)
+async def parse_resume_workflow(ctx) -> dict:
+    """
+    LEGACY: Async workflow to parse resume after upload.
+    
+    This function maintains backward compatibility for code that still
+    triggers the old 'candidate/parse-resume' event.
+    
+    For new code, use 'candidate-resume/parse' event with resume_id instead.
+    
+    Event data:
+        - candidate_id: int
+        - tenant_id: int
+        - resume_id: int (optional - if provided, delegates to new workflow)
+    """
+    event_data = ctx.event.data
+    candidate_id = event_data.get("candidate_id")
+    tenant_id = event_data.get("tenant_id")
+    resume_id = event_data.get("resume_id")
+    
+    logger.info(f"[PARSE-RESUME-LEGACY] Starting for candidate {candidate_id}")
+    
+    # If resume_id is provided, find and use that resume
+    if resume_id:
+        resume = _fetch_resume(resume_id, tenant_id)
+        if resume:
+            # Delegate to the new resume-centric parsing
+            return await _parse_resume_impl(ctx, resume, candidate_id, tenant_id)
+    
+    # Otherwise, try to find the primary/latest resume for this candidate
+    candidate = _fetch_candidate(candidate_id, tenant_id)
+    if not candidate:
+        logger.error(f"[PARSE-RESUME-LEGACY] Candidate {candidate_id} not found")
+        return {"status": "error", "message": "Candidate not found"}
+    
+    # Try to get primary resume from new model
+    primary_resume = candidate.primary_resume
+    if primary_resume:
+        return await _parse_resume_impl(ctx, primary_resume, candidate_id, tenant_id)
+    
+    # No resume found - update status and return error
+    logger.error(f"[PARSE-RESUME-LEGACY] No resume found for candidate {candidate_id}")
+    _update_candidate_status(candidate_id, "pending_review")
+    return {"status": "error", "message": "No resume found"}
+
+
+async def _parse_resume_impl(ctx, resume: CandidateResume, candidate_id: int, tenant_id: int) -> dict:
+    """
+    Implementation of resume parsing logic for a CandidateResume record.
+    """
+    resume_id = resume.id
+    
+    try:
+        # Idempotency guard
+        if resume.processing_status == 'completed' and resume.parsed_resume_data:
+            candidate = _fetch_candidate(candidate_id, tenant_id)
+            if candidate and candidate.status in ["pending_review", "onboarded", "ready_for_assignment"]:
+                logger.info(f"[PARSE-RESUME] Resume {resume_id} already parsed; skipping")
+                return {
+                    "status": "success",
+                    "resume_id": resume_id,
+                    "candidate_id": candidate_id,
+                    "skipped": True,
+                }
+        
+        # Update status to processing
+        _update_resume_status(resume_id, 'processing')
+        
+        if not resume.file_key:
+            logger.error(f"[PARSE-RESUME] No file_key for resume {resume_id}")
+            _update_resume_status(resume_id, 'failed', error="No resume file")
+            _update_candidate_status(candidate_id, "pending_review")
+            return {"status": "error", "message": "No resume file"}
+        
+        # Download file
+        storage = FileStorageService()
+        local_path, err = storage.download_to_temp(resume.file_key)
+        
+        if err or not local_path:
+            logger.error(f"[PARSE-RESUME] Failed to download: {err}")
+            _update_resume_status(resume_id, 'failed', error=f"Download failed: {err}")
+            _update_candidate_status(candidate_id, "pending_review")
+            return {"status": "error", "message": "Failed to download resume file"}
+        
+        try:
+            resume_text = await ctx.step.run(
+                "extract-resume-text",
+                lambda: _extract_resume_text(local_path)
+            )
+        finally:
+            try:
+                if local_path:
+                    os.remove(local_path)
+            except Exception:
+                pass
+        
+        if not resume_text:
+            logger.error(f"[PARSE-RESUME] Failed to extract text from resume {resume_id}")
+            _update_resume_status(resume_id, 'failed', error="Could not extract text")
+            _update_candidate_status(candidate_id, "pending_review")
+            return {"status": "error", "message": "Could not extract resume text"}
+        
+        # AI parsing
+        parsed_data = await ctx.step.run(
+            "ai-parse-resume",
+            lambda: _parse_with_ai(resume_text, resume.original_filename or "resume.pdf")
+        )
+        
+        # Update candidate with parsed data
+        if parsed_data:
+            _update_candidate_with_parsed_data(candidate_id, parsed_data)
+        
+        # Polish resume
+        polished_data = None
+        if parsed_data:
+            try:
+                candidate = _fetch_candidate(candidate_id, tenant_id)
+                candidate_name = None
+                if candidate:
+                    candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
+                
+                polished_data = await ctx.step.run(
+                    "ai-polish-resume",
+                    lambda: _polish_resume(parsed_data, candidate_name)
+                )
+                
+                # Polished data is stored in resume, accessible via candidate.primary_resume.polished_resume_data
+            except Exception as polish_error:
+                logger.warning(f"[PARSE-RESUME] Polishing failed: {polish_error}")
+        
+        # Update resume record
+        CandidateResumeService.update_processing_status(
+            resume_id=resume_id,
+            status='completed',
+            parsed_data=parsed_data,
+            polished_data=polished_data
+        )
+        
+        # Update candidate status
+        _update_candidate_status(candidate_id, "pending_review")
+        
+        logger.info(f"[PARSE-RESUME] Successfully parsed resume {resume_id} for candidate {candidate_id}")
+        
+        return {
+            "status": "success",
+            "resume_id": resume_id,
+            "candidate_id": candidate_id,
+            "has_data": bool(parsed_data),
+            "has_polished_data": bool(polished_data)
+        }
+    
+    except Exception as e:
+        logger.error(f"[PARSE-RESUME] Failed for resume {resume_id}: {e}", exc_info=True)
+        try:
+            _update_resume_status(resume_id, 'failed', error=str(e))
+            _update_candidate_status(candidate_id, "pending_review")
+        except Exception:
+            pass
+        
+        return {
+            "status": "error",
+            "resume_id": resume_id,
             "candidate_id": candidate_id,
             "error": str(e)
         }
@@ -174,52 +448,73 @@ async def parse_resume_workflow(ctx: inngest.Context) -> dict:
     fn_id="polish-resume-async",
     trigger=inngest.TriggerEvent(event="candidate/polish-resume"),
     retries=2,
-    name="Polish Resume Async"
+    name="Polish Resume Async (Legacy)"
 )
 async def polish_resume_workflow(ctx) -> dict:
     """
-    Async workflow to polish an already-parsed resume.
+    LEGACY: Async workflow to polish an already-parsed resume.
     
-    This is used when a candidate submits via email onboarding where:
-    - The resume was already parsed during the onboarding flow
-    - The candidate record already has parsed_resume_data
-    - We only need to generate the polished markdown version
+    For new code, use 'candidate-resume/polish' event with resume_id.
     
     Event data:
         - candidate_id: int
         - tenant_id: int
+        - resume_id: int (optional)
     """
     event_data = ctx.event.data
     candidate_id = event_data.get("candidate_id")
     tenant_id = event_data.get("tenant_id")
+    resume_id = event_data.get("resume_id")
     
-    logger.info(f"[POLISH-RESUME] Starting async polishing for candidate {candidate_id}")
+    logger.info(f"[POLISH-RESUME-LEGACY] Starting for candidate {candidate_id}")
     
     try:
-        # Step 1: Fetch candidate
-        candidate = _fetch_candidate(candidate_id, tenant_id)
+        # If resume_id provided, use new model
+        if resume_id:
+            resume = _fetch_resume(resume_id, tenant_id)
+            if resume and resume.parsed_resume_data:
+                candidate = _fetch_candidate(candidate_id, tenant_id)
+                candidate_name = None
+                if candidate:
+                    candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+                
+                polished_data = await ctx.step.run(
+                    "ai-polish-resume",
+                    lambda: _polish_resume(resume.parsed_resume_data, candidate_name)
+                )
+                
+                if polished_data:
+                    CandidateResumeService.update_processing_status(
+                        resume_id=resume_id,
+                        status='completed',
+                        polished_data=polished_data
+                    )
+                
+                return {
+                    "status": "success",
+                    "resume_id": resume_id,
+                    "candidate_id": candidate_id,
+                    "has_polished_data": bool(polished_data)
+                }
         
+        # Fallback to candidate's primary resume
+        candidate = _fetch_candidate(candidate_id, tenant_id)
         if not candidate:
-            logger.error(f"[POLISH-RESUME] Candidate {candidate_id} not found")
             return {"status": "error", "message": "Candidate not found"}
         
+        primary_resume = candidate.primary_resume
+        if not primary_resume:
+            return {"status": "error", "message": "No resume found"}
+        
+        if not primary_resume.parsed_resume_data:
+            return {"status": "error", "message": "No parsed data available"}
+        
+        parsed_data = primary_resume.parsed_resume_data
+        
         # Check if already polished
-        if candidate.polished_resume_data and candidate.polished_resume_data.get('markdown_content'):
-            logger.info(f"[POLISH-RESUME] Candidate {candidate_id} already has polished resume, skipping")
-            return {
-                "status": "success",
-                "candidate_id": candidate_id,
-                "skipped": True,
-                "message": "Already polished"
-            }
+        if primary_resume.polished_resume_data and primary_resume.polished_resume_data.get('markdown_content'):
+            return {"status": "success", "candidate_id": candidate_id, "skipped": True}
         
-        # Check if we have parsed data to polish
-        parsed_data = candidate.parsed_resume_data
-        if not parsed_data:
-            logger.warning(f"[POLISH-RESUME] Candidate {candidate_id} has no parsed_resume_data")
-            return {"status": "error", "message": "No parsed resume data available"}
-        
-        # Step 2: Polish the resume
         candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
         
         polished_data = await ctx.step.run(
@@ -228,32 +523,55 @@ async def polish_resume_workflow(ctx) -> dict:
         )
         
         if not polished_data or not polished_data.get('markdown_content'):
-            logger.error(f"[POLISH-RESUME] Polishing failed for candidate {candidate_id}")
-            return {"status": "error", "message": "Resume polishing failed"}
+            return {"status": "error", "message": "Polishing failed"}
         
-        # Step 3: Update candidate with polished data
-        _update_candidate_with_polished_data(candidate_id, polished_data)
-        
-        logger.info(f"[POLISH-RESUME] Successfully polished resume for candidate {candidate_id}")
+        # Update resume record
+        CandidateResumeService.update_processing_status(
+            resume_id=primary_resume.id,
+            status='completed',
+            polished_data=polished_data
+        )
         
         return {
             "status": "success",
             "candidate_id": candidate_id,
             "has_polished_data": True
         }
-        
+    
     except Exception as e:
-        logger.error(f"[POLISH-RESUME] Error polishing resume for candidate {candidate_id}: {e}", exc_info=True)
-        return {
-            "status": "error",
-            "candidate_id": candidate_id,
-            "error": str(e)
-        }
+        logger.error(f"[POLISH-RESUME-LEGACY] Error: {e}", exc_info=True)
+        return {"status": "error", "candidate_id": candidate_id, "error": str(e)}
 
 
-# Helper functions (sync)
+# =============================================================================
+# Helper Functions
+# =============================================================================
 
-def _fetch_candidate(candidate_id: int, tenant_id: int) -> Candidate:
+def _fetch_resume(resume_id: int, tenant_id: int) -> Optional[CandidateResume]:
+    """Fetch resume from database"""
+    from sqlalchemy import select, and_
+    stmt = select(CandidateResume).where(
+        and_(
+            CandidateResume.id == resume_id,
+            CandidateResume.tenant_id == tenant_id
+        )
+    )
+    return db.session.scalar(stmt)
+
+
+def _update_resume_status(resume_id: int, status: str, error: Optional[str] = None) -> None:
+    """Update resume processing status"""
+    from datetime import datetime
+    resume = db.session.get(CandidateResume, resume_id)
+    if resume:
+        resume.processing_status = status
+        resume.processing_error = error
+        if status == 'completed':
+            resume.processed_at = datetime.utcnow()
+        db.session.commit()
+
+
+def _fetch_candidate(candidate_id: int, tenant_id: int) -> Optional[Candidate]:
     """Fetch candidate from database"""
     from sqlalchemy import select
     stmt = select(Candidate).where(
@@ -269,7 +587,6 @@ def _extract_resume_text(file_path: str) -> str:
         return ""
     
     try:
-        # TextExtractor.extract_from_file() returns dict with 'text' key
         result = TextExtractor.extract_from_file(file_path)
         text = result.get('text', '')
         logger.info(f"[PARSE-RESUME] Extracted {len(text)} characters from resume")
@@ -283,7 +600,6 @@ def _parse_with_ai(text: str, filename: str) -> Dict[str, Any]:
     """Run AI parsing on resume text"""
     try:
         parser = ResumeParserService()
-        # Determine file type from filename
         file_type = 'pdf' if filename.endswith('.pdf') else 'docx'
         parsed_data = parser.parse_resume(text, file_type)
         logger.info(f"[PARSE-RESUME] AI parsing completed successfully")
@@ -293,8 +609,8 @@ def _parse_with_ai(text: str, filename: str) -> Dict[str, Any]:
         return {}
 
 
-def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str, Any]) -> Candidate:
-    """Update candidate with parsed data"""
+def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str, Any]) -> Optional[Candidate]:
+    """Update candidate profile fields with parsed data from resume."""
     from sqlalchemy import select
     
     stmt = select(Candidate).where(Candidate.id == candidate_id)
@@ -303,15 +619,13 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
     if not candidate:
         return None
     
-    # Update fields from parsed data
     if parsed_data:
         # Personal info - support both flat and nested structure
-        personal = parsed_data.get('personal_info', parsed_data)  # Fall back to parsed_data if no personal_info
+        personal = parsed_data.get('personal_info', parsed_data)
         
         if personal.get('full_name'):
             candidate.full_name = personal['full_name']
-            # Also update first/last name if needed
-            if not candidate.first_name or candidate.first_name == 'Unknown' or candidate.first_name == 'Processing':
+            if not candidate.first_name or candidate.first_name in ('Unknown', 'Processing'):
                 names = personal['full_name'].split()
                 if names:
                     candidate.first_name = names[0]
@@ -350,20 +664,18 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
         if parsed_data.get('preferred_locations'):
             candidate.preferred_locations = parsed_data['preferred_locations']
         
-        # Auto-infer preferred_roles from current_title if not already set
-        # This enables role normalization and job matching after approval
+        # Auto-infer preferred_roles
         if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
-            inferred_roles = []
+            inferred_roles: List[str] = []
             if parsed_data.get('current_title'):
                 inferred_roles.append(parsed_data['current_title'])
-            # Also extract unique titles from work experience
             if parsed_data.get('work_experience'):
-                for exp in parsed_data['work_experience'][:3]:  # Top 3 most recent jobs
+                for exp in parsed_data['work_experience'][:3]:
                     title = exp.get('title') or exp.get('job_title')
                     if title and title not in inferred_roles:
                         inferred_roles.append(title)
             if inferred_roles:
-                candidate.preferred_roles = inferred_roles[:5]  # Max 5 inferred roles
+                candidate.preferred_roles = inferred_roles[:5]
                 logger.info(f"[PARSE-RESUME] Auto-inferred preferred_roles: {candidate.preferred_roles}")
         
         # JSONB
@@ -371,17 +683,13 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
             candidate.education = parsed_data['education']
         if parsed_data.get('work_experience'):
             candidate.work_experience = parsed_data['work_experience']
-        
-        # Store full parsed data
-        candidate.parsed_resume_data = parsed_data
-        candidate.resume_parsed_at = db.func.now()
     
     db.session.commit()
     logger.info(f"[PARSE-RESUME] Updated candidate {candidate_id} with parsed data")
     return candidate
 
 
-def _update_candidate_status(candidate_id: int, status: str, parsed_data: Dict[str, Any]) -> bool:
+def _update_candidate_status(candidate_id: int, status: str) -> bool:
     """Update candidate status"""
     from sqlalchemy import select
     
@@ -398,16 +706,7 @@ def _update_candidate_status(candidate_id: int, status: str, parsed_data: Dict[s
 
 
 def _polish_resume(parsed_data: Dict[str, Any], candidate_name: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Polish parsed resume data into formatted markdown.
-    
-    Args:
-        parsed_data: Raw parsed resume data from AI parser
-        candidate_name: Optional candidate name override
-        
-    Returns:
-        Polished resume data dict with markdown_content and metadata
-    """
+    """Polish parsed resume data into formatted markdown."""
     try:
         service = ResumePolishingService()
         polished_data = service.polish_resume(parsed_data, candidate_name)
@@ -418,27 +717,15 @@ def _polish_resume(parsed_data: Dict[str, Any], candidate_name: Optional[str] = 
         return {}
 
 
-def _update_candidate_with_polished_data(candidate_id: int, polished_data: Dict[str, Any]) -> bool:
+def _update_candidate_polished_via_resume(candidate_id: int, polished_data: Dict[str, Any]) -> bool:
     """
-    Update candidate with polished resume data.
+    Note: Polished data is now stored in CandidateResume table and accessed via
+    candidate.primary_resume.polished_resume_data property.
     
-    Args:
-        candidate_id: Candidate ID
-        polished_data: Polished resume data from ResumePolishingService
-        
-    Returns:
-        True if successful, False otherwise
+    This function is kept for backward compatibility but polished_resume_data
+    is now a property on Candidate that delegates to primary_resume.
+    
+    The actual update happens in CandidateResumeService.update_processing_status()
     """
-    from sqlalchemy import select
-    
-    stmt = select(Candidate).where(Candidate.id == candidate_id)
-    candidate = db.session.scalar(stmt)
-    
-    if not candidate:
-        logger.warning(f"[PARSE-RESUME] Candidate {candidate_id} not found for polished data update")
-        return False
-    
-    candidate.polished_resume_data = polished_data
-    db.session.commit()
-    logger.info(f"[PARSE-RESUME] Updated candidate {candidate_id} with polished resume data")
+    logger.info(f"[PARSE-RESUME] Polished data stored in resume record for candidate {candidate_id}")
     return True

@@ -5,7 +5,7 @@
  * pasted job description (no job posting record required).
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -60,8 +60,10 @@ import {
 
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
 import { apiRequest } from '@/lib/api-client';
+import { candidateApi } from '@/lib/candidateApi';
 import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
 import type { CandidateInfo } from '@/types';
+import type { CandidateResume } from '@/types/candidate';
 
 // Extended candidate info with optional fields that may be returned
 interface CandidateWithDetails extends CandidateInfo {
@@ -367,6 +369,7 @@ export function ManualResumeTailorPage() {
   
   // Form state
   const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | undefined>(undefined);
   const [jobTitle, setJobTitle] = useState('');
   const [jobCompany, setJobCompany] = useState('');
   const [jobLocation, setJobLocation] = useState('');
@@ -406,6 +409,25 @@ export function ManualResumeTailorPage() {
   
   const selectedCandidate = allCandidates.find(c => c.id === selectedCandidateId);
 
+  // Fetch resumes for the selected candidate
+  const { data: resumesData } = useQuery({
+    queryKey: ['candidate-resumes', selectedCandidateId],
+    queryFn: () => candidateApi.listResumes(selectedCandidateId!),
+    enabled: !!selectedCandidateId,
+  });
+
+  const candidateResumes = resumesData?.resumes || [];
+  const primaryResumeId = resumesData?.primary_resume_id;
+
+  // Reset and set primary resume when candidate changes
+  useEffect(() => {
+    if (primaryResumeId) {
+      setSelectedResumeId(primaryResumeId);
+    } else {
+      setSelectedResumeId(undefined);
+    }
+  }, [primaryResumeId, selectedCandidateId]);
+
   // Tailor mutation
   const tailorMutation = useMutation({
     mutationFn: () => {
@@ -423,6 +445,7 @@ export function ManualResumeTailorPage() {
         jobLocation: jobLocation.trim() || undefined,
         targetScore: 80,
         maxIterations: 1,
+        resumeId: selectedResumeId,
       });
     },
     onSuccess: (data) => {
@@ -644,6 +667,46 @@ export function ManualResumeTailorPage() {
                           )}
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Resume Selector - show when candidate is selected and has multiple resumes */}
+                  {selectedCandidateId && candidateResumes.length > 1 && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label>Select Resume to Tailor</Label>
+                      <Select
+                        value={selectedResumeId?.toString() || ''}
+                        onValueChange={(v) => setSelectedResumeId(parseInt(v, 10))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a resume" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {candidateResumes.map((resume: CandidateResume) => (
+                            <SelectItem key={resume.id} value={resume.id.toString()}>
+                              <div className="flex items-center gap-2">
+                                <span className="truncate max-w-[180px]">{resume.original_filename}</span>
+                                {resume.is_primary && (
+                                  <Badge variant="secondary" className="text-xs">Primary</Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        This candidate has {candidateResumes.length} resumes available.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Show selected resume info when there's only one resume */}
+                  {selectedCandidateId && candidateResumes.length === 1 && (
+                    <div className="p-2 bg-blue-50 rounded-lg border-t mt-2">
+                      <div className="flex items-center gap-2 text-sm text-blue-700">
+                        <FileText className="h-4 w-4" />
+                        <span className="truncate">{candidateResumes[0]?.original_filename}</span>
+                      </div>
                     </div>
                   )}
                 </CardContent>

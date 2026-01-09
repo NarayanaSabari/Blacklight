@@ -148,6 +148,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes import pm_admin_routes
     from app.routes import role_routes
     from app.routes import candidate_routes
+    from app.routes import candidate_resume_routes
     from app.routes import invitation_routes
     from app.routes import document_routes
     from app.routes import public_document_routes
@@ -183,6 +184,9 @@ def register_blueprints(app: Flask) -> None:
     
     # Candidate and Resume Parsing routes
     app.register_blueprint(candidate_routes.candidate_bp)
+    
+    # Candidate Resume Management routes (multi-resume support)
+    app.register_blueprint(candidate_resume_routes.candidate_resume_bp)
     
     # Candidate Onboarding routes
     app.register_blueprint(invitation_routes.bp)

@@ -13,6 +13,7 @@ from app.models.candidate_invitation import CandidateInvitation
 from app.models.invitation_audit_log import InvitationAuditLog
 from app.models.candidate import Candidate
 from app.models.candidate_document import CandidateDocument
+from app.models.candidate_resume import CandidateResume
 from app.models.tenant import Tenant
 from app.models.portal_user import PortalUser
 from app.models.role import Role
@@ -611,7 +612,7 @@ class InvitationService:
             invitation.candidate_id = candidate.id
             logger.info(f"Created candidate {candidate.id} from submitted invitation {invitation.id}")
             
-            # Link resume file from invitation documents to candidate
+            # Link resume file from invitation documents to candidate via CandidateResume table
             resume_doc = db.session.execute(
                 select(CandidateDocument).where(
                     CandidateDocument.invitation_id == invitation.id,
@@ -620,9 +621,22 @@ class InvitationService:
             ).scalar()
             
             if resume_doc:
-                candidate.resume_file_key = resume_doc.file_key
-                candidate.resume_storage_backend = resume_doc.storage_backend or 'gcs'
-                logger.info(f"Linked resume file {resume_doc.file_key} to candidate {candidate.id}")
+                # Create CandidateResume record instead of setting fields on Candidate
+                from app.services.candidate_resume_service import CandidateResumeService
+                resume = CandidateResumeService.create_resume(
+                    candidate_id=candidate.id,
+                    tenant_id=invitation.tenant_id,
+                    file_key=resume_doc.file_key,
+                    storage_backend=resume_doc.storage_backend or 'gcs',
+                    original_filename=resume_doc.file_name or 'resume',
+                    file_size=resume_doc.file_size,
+                    mime_type=resume_doc.file_type,
+                    is_primary=True,
+                    uploaded_by_user_id=None,
+                    uploaded_by_candidate=True,
+                    parsed_resume_data=parsed_resume or None,
+                )
+                logger.info(f"Created CandidateResume {resume.id} for candidate {candidate.id} from invitation document")
         
         # Log the action
         InvitationAuditLog.log_action(
@@ -704,32 +718,37 @@ class InvitationService:
         except Exception as e:
             logger.error(f"Failed to send Inngest event for HR notification: {e}")
         
-        # Trigger resume polishing if candidate was created and has parsed data
+        # Trigger resume polishing if candidate was created and has a primary resume with parsed data
         if invitation.candidate_id:
             try:
                 from app.inngest import inngest_client
                 import inngest
                 
-                # Get the candidate to check if it has parsed resume data
+                # Get the candidate and their primary resume
                 candidate_for_polish = db.session.execute(
                     select(Candidate).where(Candidate.id == invitation.candidate_id)
                 ).scalar()
                 
-                if candidate_for_polish and candidate_for_polish.parsed_resume_data:
-                    logger.info(f"[INNGEST] Triggering resume polish for candidate {invitation.candidate_id}")
+                if candidate_for_polish:
+                    # Get primary resume from CandidateResume table
+                    primary_resume = candidate_for_polish.primary_resume
                     
-                    polish_result = inngest_client.send_sync(
-                        inngest.Event(
-                            name="candidate/polish-resume",
-                            data={
-                                "candidate_id": invitation.candidate_id,
-                                "tenant_id": invitation.tenant_id
-                            }
+                    if primary_resume and primary_resume.parsed_resume_data:
+                        logger.info(f"[INNGEST] Triggering resume polish for candidate {invitation.candidate_id}, resume {primary_resume.id}")
+                        
+                        polish_result = inngest_client.send_sync(
+                            inngest.Event(
+                                name="candidate-resume/polish",
+                                data={
+                                    "candidate_id": invitation.candidate_id,
+                                    "tenant_id": invitation.tenant_id,
+                                    "resume_id": primary_resume.id
+                                }
+                            )
                         )
-                    )
-                    logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {invitation.candidate_id}. Result: {polish_result}")
-                else:
-                    logger.info(f"[INNGEST] Skipping resume polish - candidate {invitation.candidate_id} has no parsed resume data")
+                        logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {invitation.candidate_id}, resume {primary_resume.id}. Result: {polish_result}")
+                    else:
+                        logger.info(f"[INNGEST] Skipping resume polish - candidate {invitation.candidate_id} has no primary resume with parsed data")
             except Exception as e:
                 logger.error(f"Failed to send Inngest event for resume polishing: {e}")
         
@@ -973,7 +992,9 @@ class InvitationService:
         
         candidate.education = education_data
         candidate.work_experience = work_exp_data
-        candidate.parsed_resume_data = parsed_resume if parsed_resume else candidate.parsed_resume_data
+        
+        # NOTE: parsed_resume_data is now stored in CandidateResume table
+        # The primary resume's parsed data will be updated after documents are moved
         
         # Move documents from invitation to candidate (includes file move in GCS/local storage)
         from app.services.document_service import DocumentService
@@ -986,6 +1007,17 @@ class InvitationService:
             logger.warning(f"Document move had issues: {move_error}")
         else:
             logger.info(f"Moved {moved_count} documents from invitation {invitation.id} to candidate {candidate.id}")
+        
+        # Update parsed_resume_data on the primary resume if it exists
+        if parsed_resume:
+            primary_resume = candidate.primary_resume
+            if primary_resume:
+                primary_resume.parsed_resume_data = parsed_resume
+                logger.info(f"Updated parsed_resume_data on primary resume {primary_resume.id}")
+            else:
+                # If no primary resume exists yet, we'll need to create one or wait for document move
+                # This can happen if the invitation didn't have a resume document
+                logger.warning(f"No primary resume found for candidate {candidate.id} to update parsed data")
         
         # Update invitation
         invitation.status = 'approved'

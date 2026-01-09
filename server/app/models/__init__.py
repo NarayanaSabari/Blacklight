@@ -67,6 +67,7 @@ from app.models.candidate import Candidate
 from app.models.candidate_invitation import CandidateInvitation
 from app.models.invitation_audit_log import InvitationAuditLog
 from app.models.candidate_document import CandidateDocument
+from app.models.candidate_resume import CandidateResume
 
 # Import candidate assignment models
 from app.models.candidate_assignment import CandidateAssignment

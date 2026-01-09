@@ -52,10 +52,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { candidateApi } from '@/lib/candidateApi';
 import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
+import type { CandidateResume } from '@/types/candidate';
 
 // ============================================================================
 // Markdown Renderer Component
@@ -362,6 +371,7 @@ export function ResumeTailorPage() {
   const [viewMode, setViewMode] = useState<'rendered' | 'raw' | 'diff'>('diff');
   const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedResumeId, setSelectedResumeId] = useState<number | undefined>(undefined);
   
   const candidateIdNum = parseInt(candidateId || '0', 10);
   const jobIdNum = parseInt(jobId || '0', 10);
@@ -399,6 +409,23 @@ export function ResumeTailorPage() {
     enabled: !!candidateIdNum,
   });
 
+  // Fetch candidate's resumes for the resume selector
+  const { data: resumesData } = useQuery({
+    queryKey: ['candidate-resumes', candidateIdNum],
+    queryFn: () => candidateApi.listResumes(candidateIdNum),
+    enabled: !!candidateIdNum,
+  });
+
+  const candidateResumes = resumesData?.resumes || [];
+  const primaryResumeId = resumesData?.primary_resume_id;
+
+  // Set initial selected resume to primary when resumes load
+  useEffect(() => {
+    if (primaryResumeId && selectedResumeId === undefined) {
+      setSelectedResumeId(primaryResumeId);
+    }
+  }, [primaryResumeId, selectedResumeId]);
+
   // Fetch existing tailored resume if tailorId provided
   const { data: existingTailored, isLoading: existingLoading } = useQuery({
     queryKey: ['tailoredResume', existingTailorId],
@@ -419,10 +446,10 @@ export function ResumeTailorPage() {
     mutationFn: () => {
       if (isOnTheFlyMatch) {
         // For on-the-fly matches, use candidateId + jobId directly
-        return resumeTailorApi.tailorResume(candidateIdNum, jobIdNum);
+        return resumeTailorApi.tailorResume(candidateIdNum, jobIdNum, selectedResumeId);
       } else {
         // For stored matches, use the match ID
-        return resumeTailorApi.tailorFromMatch(matchIdNum);
+        return resumeTailorApi.tailorFromMatch(matchIdNum, selectedResumeId);
       }
     },
     onSuccess: (data: TailoredResume | { tailored_resume: TailoredResume }) => {
@@ -672,7 +699,52 @@ export function ResumeTailorPage() {
                   AI will analyze the job requirements and enhance your resume to better match this position.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Resume Selector - only show if candidate has multiple resumes */}
+                {candidateResumes.length > 1 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Select Resume to Tailor</label>
+                    <Select
+                      value={selectedResumeId?.toString() || ''}
+                      onValueChange={(v) => setSelectedResumeId(parseInt(v, 10))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a resume" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {candidateResumes.map((resume: CandidateResume) => (
+                          <SelectItem key={resume.id} value={resume.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <span className="truncate max-w-[180px]">{resume.original_filename}</span>
+                              {resume.is_primary && (
+                                <Badge variant="secondary" className="text-xs">Primary</Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      You have {candidateResumes.length} resumes. Select which one to tailor for this job.
+                    </p>
+                  </div>
+                )}
+                
+                {/* Show selected resume info */}
+                {selectedResumeId && candidateResumes.length > 0 && (
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium truncate">
+                        {candidateResumes.find((r: CandidateResume) => r.id === selectedResumeId)?.original_filename || 'Resume'}
+                      </span>
+                      {candidateResumes.find((r: CandidateResume) => r.id === selectedResumeId)?.is_primary && (
+                        <Badge variant="outline" className="text-xs">Primary</Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
                 <Button onClick={startTailoring} className="w-full" size="lg">
                   <Sparkles className="h-5 w-5 mr-2" />
                   Start Tailoring

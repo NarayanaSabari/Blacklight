@@ -3,16 +3,21 @@ Candidate Service
 Business logic for candidate management and resume parsing
 """
 import os
+import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from werkzeug.datastructures import FileStorage
 
 from app import db
 from app.models.candidate import Candidate
+from app.models.candidate_resume import CandidateResume
 from app.services.file_storage import FileStorageService
 from app.services.resume_parser import ResumeParserService
+from app.services.candidate_resume_service import CandidateResumeService
 from app.utils.text_extractor import TextExtractor
 from app.utils.skills_matcher import SkillsMatcher
+
+logger = logging.getLogger(__name__)
 
 
 class CandidateService:
@@ -237,7 +242,7 @@ class CandidateService:
         if education_data:
             print(f"[DEBUG] First education: {education_data[0]}")
         
-            candidate = Candidate(
+        candidate = Candidate(
             tenant_id=tenant_id,
             
             # Basic info - ensure no nulls
@@ -247,12 +252,8 @@ class CandidateService:
             phone=parsed_data.get('phone'),
             full_name=full_name,
             
-            # Resume file
-            # File storage fields
-            resume_file_key=file_info.get('file_key'),
-            resume_storage_backend=file_info.get('storage_backend', 'local'),
-            resume_uploaded_at=datetime.utcnow(),
-            resume_parsed_at=datetime.utcnow(),
+            # NOTE: Resume file info is now stored in CandidateResume table
+            # See the call to CandidateResumeService.create_resume() below
             
             # Professional info
             location=parsed_data.get('location'),
@@ -272,9 +273,6 @@ class CandidateService:
             education=education_data,
             work_experience=work_exp_data,
             
-            # Store full parsed data
-            parsed_resume_data=parsed_data,
-            
             # Default values - all sources start as 'pending_review' for HR approval
             status='pending_review',
             source='resume_upload',
@@ -285,6 +283,24 @@ class CandidateService:
         print(f"[DEBUG] Candidate object created with education: {len(candidate.education or [])} items")
         
         db.session.add(candidate)
+        db.session.flush()  # Get the candidate ID without committing
+        
+        # Create CandidateResume record for this resume
+        if file_info.get('file_key'):
+            resume = CandidateResumeService.create_resume(
+                candidate_id=candidate.id,
+                tenant_id=tenant_id,
+                file_key=file_info['file_key'],
+                storage_backend=file_info.get('storage_backend', 'gcs'),
+                original_filename=file_info.get('file_name') or file_info.get('original_filename') or 'resume',
+                file_size=file_info.get('file_size'),
+                mime_type=file_info.get('mime_type'),
+                is_primary=True,
+                uploaded_by_user_id=None,  # Will be set if we have user context
+                uploaded_by_candidate=False,
+                parsed_resume_data=parsed_data,
+            )
+            logger.info(f"Created CandidateResume {resume.id} for candidate {candidate.id}")
         
         # Invalidate tenant roles cache if candidate has preferred_roles (Phase 3)
         if parsed_data.get('preferred_roles'):
@@ -305,12 +321,24 @@ class CandidateService:
         if not candidate:
             raise ValueError(f"Candidate {candidate_id} not found")
         
-        # Update resume file
-        candidate.resume_file_key = file_info.get('file_key')
-        candidate.resume_storage_backend = file_info.get('storage_backend', candidate.resume_storage_backend)
-        # Do not set `resume_file_url` (legacy field); prefer signed URL generation using `resume_file_key`.
-        candidate.resume_uploaded_at = datetime.utcnow()
-        candidate.resume_parsed_at = datetime.utcnow()
+        # Create or update resume record
+        # NOTE: Resume file info is now stored in CandidateResume table
+        if file_info.get('file_key'):
+            # Create a new resume record (this will become primary if it's the first one)
+            resume = CandidateResumeService.create_resume(
+                candidate_id=candidate_id,
+                tenant_id=candidate.tenant_id,
+                file_key=file_info['file_key'],
+                storage_backend=file_info.get('storage_backend', 'gcs'),
+                original_filename=file_info.get('file_name') or file_info.get('original_filename') or 'resume',
+                file_size=file_info.get('file_size'),
+                mime_type=file_info.get('mime_type'),
+                is_primary=True,  # New upload becomes primary
+                uploaded_by_user_id=None,
+                uploaded_by_candidate=False,
+                parsed_resume_data=parsed_data,
+            )
+            logger.info(f"Created CandidateResume {resume.id} for existing candidate {candidate_id}")
         
         # Update fields if not already set or if empty
         if not candidate.full_name and parsed_data.get('full_name'):
@@ -356,8 +384,8 @@ class CandidateService:
         candidate.education = parsed_data.get('education', candidate.education)
         candidate.work_experience = parsed_data.get('work_experience', candidate.work_experience)
         
-        # Store full parsed data
-        candidate.parsed_resume_data = parsed_data
+        # NOTE: parsed_resume_data is now stored in CandidateResume table
+        # The candidate.parsed_resume_data property delegates to primary_resume
         
         return candidate
     
@@ -525,8 +553,11 @@ class CandidateService:
         if not candidate:
             return False
         
-        # Store resume file key before deletion (prefer file_key for GCS)
-        resume_file_key = candidate.resume_file_key
+        # Store resume file keys before deletion (from CandidateResume table)
+        from sqlalchemy import select as sql_select
+        resume_stmt = sql_select(CandidateResume).where(CandidateResume.candidate_id == candidate_id)
+        resumes = list(db.session.scalars(resume_stmt).all())
+        resume_file_keys = [r.file_key for r in resumes if r.file_key]
         
         # Get all document file paths before deletion
         doc_stmt = select(CandidateDocument).where(CandidateDocument.candidate_id == candidate_id)
@@ -561,21 +592,14 @@ class CandidateService:
             db.session.rollback()
             raise Exception(f"Failed to delete candidate from database: {str(e)}")
         
-        # Delete resume file after successful database deletion
-        # Prefer delete by resume_file_key (GCS), otherwise by legacy path
-        try:
-            if resume_file_key:
-                self.file_storage.delete_file(resume_file_key)
-            else:
-                # No fallback deletion by local path - we only delete files by `resume_file_key`.
-                # Legacy local files will not be deleted by this operation. This is acceptable
-                # because we are deprecating local `resume_file_path` usage and won't backfill.
-                pass
-        except Exception as e:
-            # Log but don't fail - database deletion already succeeded
-            # Provide whichever path/key was attempted to be deleted for debugging
-            attempted = resume_file_key
-            print(f"Warning: Failed to delete resume file {attempted}: {e}")
+        # Delete resume files after successful database deletion
+        # Resume files are now in CandidateResume table
+        for file_key in resume_file_keys:
+            try:
+                self.file_storage.delete_file(file_key)
+            except Exception as e:
+                # Log but don't fail - database deletion already succeeded
+                logger.warning(f"Failed to delete resume file {file_key}: {e}")
         
         # Delete document files after successful database deletion
         for doc_path in document_paths:
@@ -587,13 +611,14 @@ class CandidateService:
         
         return True
     
-    def reparse_resume(self, candidate_id: int, tenant_id: int) -> Dict[str, Any]:
+    def reparse_resume(self, candidate_id: int, tenant_id: int, resume_id: Optional[int] = None) -> Dict[str, Any]:
         """
         Re-parse existing resume file
         
         Args:
             candidate_id: Candidate ID
             tenant_id: Tenant ID (for access control)
+            resume_id: Optional specific resume ID to reparse (default: primary resume)
         
         Returns:
             Parsed data
@@ -603,51 +628,65 @@ class CandidateService:
         if not candidate:
             raise ValueError("Candidate not found")
 
-        # Determine file source: prefer resume_file_key for GCS or remote storage
-        local_path = None
-        if getattr(candidate, 'resume_file_key', None):
-            local_path, err = self.file_storage.download_to_temp(candidate.resume_file_key)
-            if err:
-                raise Exception(f"Failed to download resume for parsing: {err}")
-            target_path = local_path
+        # Get the resume to reparse
+        if resume_id:
+            resume = CandidateResumeService.get_resume_by_id(resume_id, tenant_id)
+            if not resume or resume.candidate_id != candidate_id:
+                raise ValueError("Resume not found")
         else:
-            # Require `resume_file_key` (no fallback to `resume_file_path` in Phase 3)
-            raise ValueError("Candidate or resume file not found")
+            # Get primary resume
+            resume = candidate.primary_resume
+            if not resume:
+                raise ValueError("No resume found for candidate")
 
-        # Extract text
-        extracted = TextExtractor.extract_from_file(target_path)
-        text = TextExtractor.clean_text(extracted['text'])
+        # Download resume file
+        if not resume.file_key:
+            raise ValueError("Resume file not found")
+        
+        local_path, err = self.file_storage.download_to_temp(resume.file_key)
+        if err:
+            raise Exception(f"Failed to download resume for parsing: {err}")
+        target_path = local_path
 
-        # Parse
-        parser = self._get_parser()
-        file_ext = os.path.splitext(target_path)[1][1:]
-        parsed_data = parser.parse_resume(text, file_type=file_ext)
-        
-        # Enhance skills
-        if parsed_data.get('skills'):
-            skills_analysis = self.skills_matcher.extract_skills(' '.join(parsed_data['skills']))
-            parsed_data['skills'] = skills_analysis['matched_skills']
-            parsed_data['skills_categories'] = skills_analysis['categories']
-        # At this point `target_path` is guaranteed to be set and accessible.
-        
-        # Update candidate
-        # Set parsed metadata and cleanup
-        candidate.parsed_resume_data = parsed_data
-        candidate.resume_parsed_at = datetime.utcnow()
-        if local_path:
-            try:
-                os.remove(local_path)
-            except Exception:
-                pass
-        
-        db.session.commit()
-        
-        return {
-            'candidate_id': candidate.id,
-            'parsed_data': parsed_data,
-            'extracted_metadata': extracted,
-            'status': 'success',
-        }
+        try:
+            # Extract text
+            extracted = TextExtractor.extract_from_file(target_path)
+            text = TextExtractor.clean_text(extracted['text'])
+
+            # Parse
+            parser = self._get_parser()
+            file_ext = os.path.splitext(target_path)[1][1:]
+            parsed_data = parser.parse_resume(text, file_type=file_ext)
+            
+            # Enhance skills
+            if parsed_data.get('skills'):
+                skills_analysis = self.skills_matcher.extract_skills(' '.join(parsed_data['skills']))
+                parsed_data['skills'] = skills_analysis['matched_skills']
+                parsed_data['skills_categories'] = skills_analysis['categories']
+            
+            # Update resume record with parsed data
+            CandidateResumeService.update_processing_status(
+                resume_id=resume.id,
+                status='completed',
+                parsed_data=parsed_data,
+            )
+            
+            db.session.commit()
+            
+            return {
+                'candidate_id': candidate.id,
+                'resume_id': resume.id,
+                'parsed_data': parsed_data,
+                'extracted_metadata': extracted,
+                'status': 'success',
+            }
+        finally:
+            # Cleanup temp file
+            if local_path:
+                try:
+                    os.remove(local_path)
+                except Exception:
+                    pass
     
     # Onboarding Workflow Methods
     

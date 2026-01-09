@@ -25,6 +25,11 @@ class TailorResumeRequest(BaseModel):
     """Schema for initiating a resume tailoring request"""
     candidate_id: int = Field(..., gt=0, description="ID of the candidate whose resume to tailor")
     job_posting_id: int = Field(..., gt=0, description="ID of the job posting to tailor the resume for")
+    resume_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Optional specific resume ID to tailor (defaults to primary resume)"
+    )
     target_score: Optional[int] = Field(
         default=80,
         ge=50,
@@ -71,6 +76,11 @@ class TailorManualResumeRequest(BaseModel):
     job_company: Optional[str] = Field(None, max_length=200, description="Company name (optional)")
     job_description: str = Field(..., min_length=50, max_length=50000, description="Full job description text")
     job_location: Optional[str] = Field(None, max_length=200, description="Job location (optional)")
+    resume_id: Optional[int] = Field(
+        default=None,
+        gt=0,
+        description="Optional specific resume ID to tailor (defaults to primary resume)"
+    )
     target_score: Optional[int] = Field(
         default=80,
         ge=50,

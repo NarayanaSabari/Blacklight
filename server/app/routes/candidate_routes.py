@@ -66,9 +66,8 @@ def create_candidate():
         from app import db
         from app.models.candidate import Candidate
         
-        # NOTE: We persist both `resume_file_key` + `resume_storage_backend` and
-        # the legacy `resume_file_path` for backward compatibility. This legacy
-        # field will be removed in Phase 3 after migration verification.
+        # NOTE: Resume files are now stored in the CandidateResume table.
+        # Use CandidateResumeService to create resume records.
         candidate = Candidate(
             tenant_id=tenant_id,
             first_name=data.first_name,
@@ -159,7 +158,9 @@ def get_candidate_resume_url(candidate_id: int):
             if not candidate:
                 return error_response("Candidate not found", 404)
 
-            if not candidate.resume_file_key or candidate.resume_storage_backend != 'gcs':
+            # Get primary resume for URL generation
+            primary_resume = candidate.primary_resume
+            if not primary_resume or not primary_resume.file_key or primary_resume.storage_backend != 'gcs':
                 return error_response("No resume available for signed URL", 404)
 
             # Optional TTL
@@ -167,7 +168,7 @@ def get_candidate_resume_url(candidate_id: int):
             ttl_seconds = int(ttl) if ttl else None
             from app.services.file_storage import FileStorageService
             fs = FileStorageService()
-            url, err = fs.generate_signed_url(candidate.resume_file_key, expiry_seconds=ttl_seconds) if ttl_seconds else fs.generate_signed_url(candidate.resume_file_key)
+            url, err = fs.generate_signed_url(primary_resume.file_key, expiry_seconds=ttl_seconds) if ttl_seconds else fs.generate_signed_url(primary_resume.file_key)
             if err or not url:
                 return error_response(f"Failed to generate signed URL: {err or 'unknown error'}", 500)
 
@@ -699,6 +700,8 @@ def upload_and_create():
         
         # Create candidate with minimal data and status='processing'
         from app.models.candidate import Candidate
+        from app.services.candidate_resume_service import CandidateResumeService
+        
         candidate = Candidate(
             tenant_id=tenant_id,
             first_name="Processing",  # Temporary, will be updated by AI
@@ -707,10 +710,6 @@ def upload_and_create():
             phone=None,
             status='processing',  # NEW: Processing status
             source='resume_upload',
-            resume_file_key=upload_result.get('file_key') or upload_result.get('file_path'),
-            resume_storage_backend=upload_result.get('storage_backend', 'local'),
-            # Note: legacy `resume_file_path` and `resume_file_url` are deprecated; store only file_key + backend
-            resume_uploaded_at=datetime.utcnow()
         )
         
         db.session.add(candidate)
@@ -718,21 +717,40 @@ def upload_and_create():
         
         logger.info(f"[UPLOAD-{request_id}] Created candidate {candidate.id} with status='processing'")
         
+        # Create CandidateResume record (primary resume for this candidate)
+        file_key = upload_result.get('file_key') or upload_result.get('file_path')
+        resume = CandidateResumeService.create_resume(
+            candidate_id=candidate.id,
+            tenant_id=tenant_id,
+            file_key=file_key,
+            storage_backend=upload_result.get('storage_backend', 'gcs'),
+            original_filename=file.filename or 'resume',
+            file_size=upload_result.get('file_size'),
+            mime_type=upload_result.get('mime_type'),
+            is_primary=True,
+            uploaded_by_user_id=g.user_id,
+            uploaded_by_candidate=False,
+        )
+        
+        logger.info(f"[UPLOAD-{request_id}] Created resume {resume.id} for candidate {candidate.id}")
+        
         # Trigger async Inngest parsing workflow (fire and forget)
         try:
             from app.inngest import inngest_client
             import inngest
             
+            # Use new candidate-resume/parse event with resume_id
             inngest_client.send_sync(
                 inngest.Event(
-                    name="candidate/parse-resume",
+                    name="candidate-resume/parse",
                     data={
+                        "resume_id": resume.id,
                         "candidate_id": candidate.id,
                         "tenant_id": tenant_id
                     }
                 )
             )
-            logger.info(f"[UPLOAD-{request_id}] Triggered async parsing workflow for candidate {candidate.id}")
+            logger.info(f"[UPLOAD-{request_id}] Triggered async parsing workflow for resume {resume.id}")
         except Exception as e:
             # Log but don't fail - candidate is created, parsing can be retried
             logger.warning(f"[UPLOAD-{request_id}] Failed to trigger parsing workflow: {str(e)}")
@@ -1443,8 +1461,13 @@ def update_polished_resume(candidate_id: int):
         if not candidate:
             return error_response("Candidate not found", 404)
         
-        # Update using the helper method
-        candidate.set_polished_resume(
+        # Get primary resume
+        primary_resume = candidate.primary_resume
+        if not primary_resume:
+            return error_response("Candidate has no resume to update", 400)
+        
+        # Update using the helper method on the resume
+        primary_resume.set_polished_resume(
             markdown_content=markdown_content.strip(),
             polished_by="recruiter",
             user_id=user_id
@@ -1452,7 +1475,7 @@ def update_polished_resume(candidate_id: int):
         
         db.session.commit()
         
-        logger.info(f"Polished resume updated for candidate {candidate_id} by user {user_id}")
+        logger.info(f"Polished resume updated for candidate {candidate_id} (resume {primary_resume.id}) by user {user_id}")
         
         return jsonify({
             'message': 'Polished resume updated successfully',
@@ -1497,8 +1520,13 @@ def regenerate_polished_resume(candidate_id: int):
         if not candidate:
             return error_response("Candidate not found", 404)
         
+        # Get primary resume
+        primary_resume = candidate.primary_resume
+        if not primary_resume:
+            return error_response("Candidate has no resume to polish", 400)
+        
         # Check if there's parsed data to polish
-        if not candidate.parsed_resume_data:
+        if not primary_resume.parsed_resume_data:
             return error_response(
                 "No parsed resume data available. Please upload and parse a resume first.",
                 400
@@ -1513,18 +1541,18 @@ def regenerate_polished_resume(candidate_id: int):
         try:
             service = ResumePolishingService()
             polished_data = service.polish_resume(
-                parsed_data=candidate.parsed_resume_data,
+                parsed_data=primary_resume.parsed_resume_data,
                 candidate_name=candidate_name
             )
         except Exception as polish_error:
             logger.error(f"AI polishing failed for candidate {candidate_id}: {polish_error}")
             return error_response(f"AI polishing failed: {str(polish_error)}", 500)
         
-        # Update candidate
-        candidate.polished_resume_data = polished_data
+        # Update the primary resume
+        primary_resume.polished_resume_data = polished_data
         db.session.commit()
         
-        logger.info(f"Polished resume regenerated for candidate {candidate_id}")
+        logger.info(f"Polished resume regenerated for candidate {candidate_id} (resume {primary_resume.id})")
         
         return jsonify({
             'message': 'Polished resume regenerated successfully',
