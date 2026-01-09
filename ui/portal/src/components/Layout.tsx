@@ -65,7 +65,7 @@ const navigation: NavItem[] = [
     label: 'Documents',
     icon: FolderOpen,
     href: '/documents',
-    roles: ['TENANT_ADMIN', 'MANAGER', 'TEAM_LEAD'],
+    roles: ['TENANT_ADMIN', 'MANAGER'],
   },
   {
     id: 'jobs',
