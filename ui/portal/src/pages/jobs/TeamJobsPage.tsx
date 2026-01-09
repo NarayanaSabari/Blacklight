@@ -118,6 +118,7 @@ export function TeamJobsPage() {
   
   // Determine user role for UI adaptation
   const userRoles = user?.roles?.map(r => r.name) || [];
+  const isTenantAdmin = userRoles.includes('TENANT_ADMIN');
   const isRecruiter = userRoles.includes('RECRUITER') && !userRoles.includes('TENANT_ADMIN') && !userRoles.includes('MANAGER') && !userRoles.includes('TEAM_LEAD');
   const hasTeamView = !isRecruiter; // Managers, Team Leads, Admins see team view
   
@@ -173,7 +174,22 @@ export function TeamJobsPage() {
   // Check if user has team members
   const hasNoTeamMembers = hasTeamView && teamMembersData && teamMembersData.team_members.length === 0;
 
-  // Get recruiter's own candidates (for recruiters OR managers with no team)
+  // Get ALL candidates in tenant (for tenant admins)
+  const {
+    data: allCandidatesData,
+    isLoading: isLoadingAllCandidates,
+  } = useQuery({
+    queryKey: ['all-tenant-candidates'],
+    queryFn: async () => {
+      // Fetch all candidates with status ready for job matching
+      return apiRequest.get<{ candidates: CandidateInfo[]; total: number; page: number; per_page: number; pages: number }>(
+        '/api/candidates?per_page=500&status=ready_for_assignment'
+      );
+    },
+    enabled: isTenantAdmin && hasNoTeamMembers,
+  });
+
+  // Get recruiter's own candidates (for recruiters OR non-admin managers with no team)
   const {
     data: ownCandidatesData,
     isLoading: isLoadingOwnCandidates,
@@ -184,7 +200,7 @@ export function TeamJobsPage() {
         '/api/candidates/assignments/my-candidates'
       );
     },
-    enabled: isRecruiter || hasNoTeamMembers,
+    enabled: isRecruiter || (hasNoTeamMembers && !isTenantAdmin),
   });
 
   // Get selected team member's candidates (for managers viewing team member)
@@ -232,6 +248,10 @@ export function TeamJobsPage() {
   
   // Determine which candidates to show based on context
   const getCandidates = (): CandidateInfo[] => {
+    // Tenant admin with no team members sees ALL candidates in tenant
+    if (isTenantAdmin && hasNoTeamMembers) {
+      return allCandidatesData?.candidates || [];
+    }
     if (isRecruiter || hasNoTeamMembers) {
       return ownCandidatesData?.candidates || [];
     }
@@ -634,7 +654,9 @@ export function TeamJobsPage() {
 
   // Determine if we should show candidates column
   const showCandidates = isRecruiter || hasNoTeamMembers || selectedMemberId !== null;
-  const isLoadingCandidates = isRecruiter || hasNoTeamMembers ? isLoadingOwnCandidates : isLoadingTeamCandidates;
+  const isLoadingCandidates = isTenantAdmin && hasNoTeamMembers 
+    ? isLoadingAllCandidates 
+    : (isRecruiter || hasNoTeamMembers ? isLoadingOwnCandidates : isLoadingTeamCandidates);
 
   return (
     <TooltipProvider>

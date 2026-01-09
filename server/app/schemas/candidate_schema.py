@@ -226,6 +226,7 @@ class CandidateListItemSchema(BaseModel):
     skills: Optional[List[str]] = Field(default_factory=list)
     status: str
     source: str
+    onboarding_status: Optional[str] = None
     resume_uploaded_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

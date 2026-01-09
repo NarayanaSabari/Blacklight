@@ -139,9 +139,9 @@ export interface CandidateInfo {
   id: number;
   first_name: string;
   last_name: string;
-  email: string;
-  phone: string | null;
-  onboarding_status: string;
+  email?: string | null;
+  phone?: string | null;
+  onboarding_status?: string | null;
   current_assignment?: CandidateAssignment;
 }
 
