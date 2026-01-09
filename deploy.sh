@@ -12,6 +12,7 @@
 #   init               - Initialize database (create tables)
 #   migrate            - Run database migrations
 #   seed               - Seed the database
+#   clean-data         - Clean candidate/tenant data (preserve jobs)
 #   shell              - Open shell in backend container
 #   rebuild-frontend   - Rebuild frontend containers
 #   rebuild-backend    - Rebuild backend container
@@ -134,6 +135,21 @@ seed_all_database() {
     log_info "Seeding database..."
     docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec backend python manage.py seed-all
     log_info "Database seeded."
+}
+
+clean_data() {
+    check_prerequisites
+    log_warn "This will delete ALL candidate and tenant data!"
+    log_info "Jobs will be preserved."
+    echo ""
+    read -p "Are you sure you want to proceed? (yes/no): " confirm
+    if [ "$confirm" = "yes" ]; then
+        log_info "Cleaning candidate and tenant data..."
+        docker compose -f $COMPOSE_FILE --env-file $ENV_FILE exec backend python manage.py clean-data yes
+        log_info "Data cleaned. Run './deploy.sh seed' to recreate tenants."
+    else
+        log_info "Operation cancelled."
+    fi
 }
 
 init_database() {
@@ -391,6 +407,9 @@ case "$1" in
     seed)
         seed_all_database
         ;;
+    clean-data)
+        clean_data
+        ;;
     init)
         init_database
         ;;
@@ -443,7 +462,8 @@ case "$1" in
         echo "  status             Check service status"
         echo "  init               Initialize database (create tables)"
         echo "  migrate            Run database migrations"
-        echo "  seed               Seed the database"
+        echo "  seed               Seed the database (plans, admin, tenants)"
+        echo "  clean-data         Clean candidate/tenant data (preserve jobs)"
         echo "  shell              Open shell in backend container"
         echo "  rebuild-frontend   Rebuild frontend containers (portal/central)"
         echo "  rebuild-backend    Rebuild backend container"
@@ -464,6 +484,8 @@ case "$1" in
         echo "Examples:"
         echo "  ./deploy.sh start"
         echo "  ./deploy.sh logs backend"
+        echo "  ./deploy.sh clean-data          # Clean candidates/tenants, keep jobs"
+        echo "  ./deploy.sh seed                # Recreate tenants after clean-data"
         echo "  ./deploy.sh ssl-test blacklight.sivaganesh.in admin@example.com"
         echo "  ./deploy.sh ssl-init blacklight.sivaganesh.in admin@example.com"
         ;;

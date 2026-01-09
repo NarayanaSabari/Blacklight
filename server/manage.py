@@ -119,6 +119,147 @@ def fix_processing_candidates(app: Flask, tenant_id: int = None) -> None:
         print(f"✅ Successfully updated {len(stuck_candidates)} candidates to 'pending_review' status")
 
 
+def clean_data(app: Flask, confirm: bool = False) -> None:
+    """
+    Clean candidate and tenant data while preserving jobs.
+    
+    This function removes:
+    - All candidate-related data (candidates, resumes, documents, matches, etc.)
+    - All tenant-related data (tenants, portal users, roles, etc.)
+    
+    But PRESERVES:
+    - Job postings (global job pool)
+    - Global roles
+    - Scraper configurations
+    - Subscription plans
+    - PM admin users
+    - System permissions
+    
+    After cleaning, run './deploy.sh seed' to recreate tenants.
+    """
+    from sqlalchemy import text
+    
+    if not confirm:
+        response = input(
+            "\n⚠️  WARNING: This will delete ALL candidate and tenant data!\n"
+            "   Jobs will be preserved.\n\n"
+            "Are you sure you want to proceed? [yes/no]: "
+        )
+        if response.lower() != "yes":
+            print("Operation cancelled")
+            return
+    
+    print("\n" + "=" * 80)
+    print("CLEANING CANDIDATE AND TENANT DATA")
+    print("=" * 80)
+    print("\nPreserving: job_postings, global_roles, scraper_*, subscription_plans, pm_admin_users")
+    print()
+    
+    with app.app_context():
+        # Phase 1: Delete candidate-dependent data (most dependent first)
+        print("Phase 1: Cleaning candidate-related data...")
+        
+        candidate_tables = [
+            ("submission_activities", "Submission activities"),
+            ("submissions", "Submissions"),
+            ("tailored_resumes", "Tailored resumes"),
+            ("candidate_job_matches", "Candidate job matches"),
+            ("job_applications", "Job applications"),
+            ("assignment_notifications", "Assignment notifications"),
+            ("candidate_assignments", "Candidate assignments"),
+            ("invitation_audit_logs", "Invitation audit logs"),
+            ("candidate_documents", "Candidate documents"),
+            ("candidate_resumes", "Candidate resumes"),
+            ("candidate_global_roles", "Candidate global roles"),
+            ("candidate_invitations", "Candidate invitations"),
+            ("candidates", "Candidates"),
+        ]
+        
+        for table_name, display_name in candidate_tables:
+            try:
+                result = db.session.execute(text(f"DELETE FROM {table_name}"))
+                count = result.rowcount
+                db.session.commit()
+                print(f"  ✅ {display_name}: {count} rows deleted")
+            except Exception as e:
+                db.session.rollback()
+                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+        
+        # Phase 2: Delete tenant/user-related data
+        print("\nPhase 2: Cleaning tenant/user-related data...")
+        
+        tenant_tables = [
+            ("processed_emails", "Processed emails"),
+            ("user_email_integrations", "User email integrations"),
+            ("user_roles", "User roles"),
+            ("roles", "Custom roles"),
+            ("tenant_subscription_history", "Tenant subscription history"),
+            ("portal_users", "Portal users"),
+            ("tenants", "Tenants"),
+        ]
+        
+        for table_name, display_name in tenant_tables:
+            try:
+                result = db.session.execute(text(f"DELETE FROM {table_name}"))
+                count = result.rowcount
+                db.session.commit()
+                print(f"  ✅ {display_name}: {count} rows deleted")
+            except Exception as e:
+                db.session.rollback()
+                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+        
+        # Phase 3: Clean up orphaned job references (set FK to NULL where allowed)
+        print("\nPhase 3: Cleaning orphaned references in preserved tables...")
+        
+        cleanup_queries = [
+            # Job postings may have tenant_id references - set to NULL for scraped jobs
+            ("UPDATE job_postings SET created_by_user_id = NULL WHERE created_by_user_id IS NOT NULL", 
+             "Job posting user references"),
+            # Scraper session references to portal users
+            ("UPDATE scrape_sessions SET started_by_user_id = NULL WHERE started_by_user_id IS NOT NULL",
+             "Scrape session user references"),
+        ]
+        
+        for query, display_name in cleanup_queries:
+            try:
+                result = db.session.execute(text(query))
+                count = result.rowcount
+                db.session.commit()
+                print(f"  ✅ {display_name}: {count} rows updated")
+            except Exception as e:
+                db.session.rollback()
+                print(f"  ⚠️  {display_name}: {str(e)[:60]}")
+        
+        # Summary
+        print("\n" + "=" * 80)
+        print("✅ DATA CLEANING COMPLETED!")
+        print("=" * 80)
+        print("\nPreserved data:")
+        
+        # Count preserved records
+        preserved_counts = [
+            ("job_postings", "Job postings"),
+            ("global_roles", "Global roles"),
+            ("subscription_plans", "Subscription plans"),
+            ("pm_admin_users", "PM admin users"),
+            ("permissions", "System permissions"),
+        ]
+        
+        for table_name, display_name in preserved_counts:
+            try:
+                result = db.session.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                count = result.scalar()
+                print(f"  • {display_name}: {count}")
+            except Exception as e:
+                print(f"  • {display_name}: (error counting)")
+        
+        print("\nNext steps:")
+        print("  1. Run './deploy.sh seed' to create new tenants")
+        print("  2. Invite candidates via the portal")
+        print("  3. Match candidates with existing jobs")
+        print()
+
+
 def seed_all(app: Flask) -> None:
     """Seed all data: plans, PM admin, roles, permissions, and sample tenants."""
     print("=" * 60)
@@ -659,6 +800,10 @@ if __name__ == "__main__":
             app,
             tenant_id=int(sys.argv[2]) if len(sys.argv) > 2 else None
         ),
+        "clean-data": lambda: clean_data(
+            app,
+            confirm=sys.argv[2].lower() == 'yes' if len(sys.argv) > 2 else False
+        ),
     }
     
     if len(sys.argv) < 2:
@@ -696,6 +841,10 @@ if __name__ == "__main__":
         print("  fix-processing-candidates - Update stuck candidates from 'processing' to 'pending_review'")
         print("                        Usage: fix-processing-candidates [tenant_id]")
         print("                        Example: fix-processing-candidates 2")
+        print("  clean-data            - Clean candidate/tenant data, preserve jobs")
+        print("                        Usage: clean-data [yes]")
+        print("                        Pass 'yes' to skip confirmation prompt")
+        print("                        After cleaning, run 'seed-all' to recreate tenants")
         print("\nSetup Commands:")
         print("  setup-spacy         - Download and setup spaCy model for resume parsing")
         sys.exit(1)
