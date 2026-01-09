@@ -94,7 +94,7 @@ def import_jobs():
         temp_file_path = upload_dir / filename
         file.save(str(temp_file_path))
         
-        logger.info(f"PM_ADMIN {g.user.id} uploaded job file: {filename} for platform: {platform}")
+        logger.info(f"PM_ADMIN {g.user_id} uploaded job file: {filename} for platform: {platform}")
         
         # Import jobs using service
         service = JobImportService()

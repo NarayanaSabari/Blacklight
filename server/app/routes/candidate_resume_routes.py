@@ -174,7 +174,7 @@ def upload_resume(candidate_id: int):
     """
     try:
         tenant_id = g.tenant_id
-        user_id = g.user.id
+        user_id = g.user_id
         
         # Verify candidate exists
         candidate = _get_candidate_or_404(candidate_id, tenant_id)
