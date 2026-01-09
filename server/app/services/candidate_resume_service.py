@@ -196,21 +196,27 @@ class CandidateResumeService:
         """
         # Get file info
         original_filename = file.filename or "resume"
-        file_content = file.read()
-        file_size = len(file_content)
-        mime_type = file.content_type
+        file.seek(0, 2)  # Seek to end to get size
+        file_size = file.tell()
         file.seek(0)  # Reset for storage
+        mime_type = file.content_type
         
-        # Upload to storage
+        # Upload to storage using FileStorageService
         storage_service = FileStorageService()
-        file_key = storage_service.upload_file(
-            file_content=file_content,
-            filename=original_filename,
-            folder=f"resumes/tenant-{tenant_id}",
+        upload_result = storage_service.upload_file(
+            file=file,
+            tenant_id=tenant_id,
+            document_type="resume",
+            candidate_id=candidate_id,
             content_type=mime_type
         )
         
-        storage_backend = current_app.config.get('STORAGE_BACKEND', 'gcs')
+        if not upload_result.get("success"):
+            raise ValueError(f"Failed to upload file: {upload_result.get('error', 'Unknown error')}")
+        
+        file_key = upload_result["file_key"]
+        file_size = upload_result.get("file_size", file_size)
+        storage_backend = upload_result.get("storage_backend", "gcs")
         
         # Create resume record
         resume = CandidateResumeService.create_resume(
@@ -429,9 +435,11 @@ class CandidateResumeService:
             return None
         
         storage_service = FileStorageService()
+        signed_url, error = storage_service.generate_signed_url(resume.file_key)
         
-        if resume.storage_backend == 'gcs':
-            return storage_service.get_signed_url(resume.file_key)
-        else:
-            # Local storage - return a relative path or local URL
+        if error:
+            logger.warning(f"Failed to generate signed URL for resume {resume_id}: {error}")
+            # Fallback to download endpoint
             return f"/api/portal/candidates/{resume.candidate_id}/resumes/{resume_id}/download"
+        
+        return signed_url
