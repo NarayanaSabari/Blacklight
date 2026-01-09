@@ -369,4 +369,29 @@ class Candidate(BaseModel):
         """Get polished resume data from primary resume (for backward compatibility)."""
         primary = self.primary_resume
         return primary.polished_resume_data if primary else None
+    
+    # Resume file properties (for Pydantic schema compatibility)
+    @property
+    def resume_file_key(self):
+        """Get resume file key from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.file_key if primary else None
+    
+    @property
+    def resume_storage_backend(self):
+        """Get resume storage backend from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.storage_backend if primary else None
+    
+    @property
+    def resume_uploaded_at(self):
+        """Get resume uploaded timestamp from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.uploaded_at if primary else None
+    
+    @property
+    def resume_parsed_at(self):
+        """Get resume parsed timestamp from primary resume (for backward compatibility)."""
+        primary = self.primary_resume
+        return primary.processed_at if primary else None
 

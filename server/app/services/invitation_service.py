@@ -509,7 +509,12 @@ class InvitationService:
         invitation.updated_at = datetime.utcnow()
         
         # Track created resume for polish trigger later
+        # Store IDs before commit to avoid DetachedInstanceError after db.session.commit()
         created_resume = None
+        resume_id_for_polish = None
+        resume_candidate_id = None
+        resume_tenant_id = None
+        resume_has_parsed_data = False
         
         # Auto-create a Candidate record in pending_review so email submissions
         # behave like resume uploads (visible in Review Submissions + All Candidates)
@@ -626,21 +631,31 @@ class InvitationService:
             
             if resume_doc:
                 # Create CandidateResume record instead of setting fields on Candidate
-                from app.services.candidate_resume_service import CandidateResumeService
-                created_resume = CandidateResumeService.create_resume(
-                    candidate_id=candidate.id,
-                    tenant_id=invitation.tenant_id,
-                    file_key=resume_doc.file_key,
-                    storage_backend=resume_doc.storage_backend or 'gcs',
-                    original_filename=resume_doc.file_name or 'resume',
-                    file_size=resume_doc.file_size,
-                    mime_type=resume_doc.mime_type,
-                    is_primary=True,
-                    uploaded_by_user_id=None,
-                    uploaded_by_candidate=True,
-                    parsed_resume_data=parsed_resume or None,
-                )
-                logger.info(f"Created CandidateResume {created_resume.id} for candidate {candidate.id} from invitation document")
+                try:
+                    from app.services.candidate_resume_service import CandidateResumeService
+                    created_resume = CandidateResumeService.create_resume(
+                        candidate_id=candidate.id,
+                        tenant_id=invitation.tenant_id,
+                        file_key=resume_doc.file_key,
+                        storage_backend=resume_doc.storage_backend or 'gcs',
+                        original_filename=resume_doc.file_name or 'resume',
+                        file_size=resume_doc.file_size,
+                        mime_type=resume_doc.mime_type,
+                        is_primary=True,
+                        uploaded_by_user_id=None,
+                        uploaded_by_candidate=True,
+                        parsed_resume_data=parsed_resume or None,
+                    )
+                    # Store IDs before commit to avoid DetachedInstanceError
+                    # After db.session.commit(), the created_resume object may be detached
+                    resume_id_for_polish = created_resume.id
+                    resume_candidate_id = created_resume.candidate_id
+                    resume_tenant_id = created_resume.tenant_id
+                    resume_has_parsed_data = bool(created_resume.parsed_resume_data)
+                    logger.info(f"Created CandidateResume {created_resume.id} for candidate {candidate.id} from invitation document")
+                except Exception as resume_error:
+                    logger.error(f"Failed to create CandidateResume for candidate {candidate.id}: {resume_error}", exc_info=True)
+                    # Continue without resume - candidate can still be created
         
         # Log the action
         InvitationAuditLog.log_action(
@@ -653,6 +668,7 @@ class InvitationService:
         )
         
         db.session.commit()
+        db.session.expire_all()  # Ensure fresh data on next access
         
         logger.info(f"Invitation {invitation.id} submitted by candidate")
         
@@ -684,11 +700,14 @@ class InvitationService:
         try:
             from app.inngest import inngest_client
             import inngest
+            from app.models.user_role import UserRole
             
             # Get all recruiters and admins for this tenant
+            # Join through the user_roles association table
             hr_users = db.session.execute(
                 select(PortalUser)
-                .join(Role)
+                .join(UserRole, PortalUser.id == UserRole.user_id)
+                .join(Role, UserRole.role_id == Role.id)
                 .where(
                     and_(
                         PortalUser.tenant_id == invitation.tenant_id,
@@ -723,24 +742,25 @@ class InvitationService:
             logger.error(f"Failed to send Inngest event for HR notification: {e}")
         
         # Trigger resume polishing if we created a resume with parsed data
-        if created_resume and created_resume.parsed_resume_data:
+        # Use the stored IDs (resume_id_for_polish, etc.) to avoid DetachedInstanceError
+        if created_resume and resume_has_parsed_data:
             try:
                 from app.inngest import inngest_client
                 import inngest
                 
-                logger.info(f"[INNGEST] Triggering resume polish for candidate {created_resume.candidate_id}, resume {created_resume.id}")
+                logger.info(f"[INNGEST] Triggering resume polish for candidate {resume_candidate_id}, resume {resume_id_for_polish}")
                 
                 polish_result = inngest_client.send_sync(
                     inngest.Event(
                         name="candidate-resume/polish",
                         data={
-                            "candidate_id": created_resume.candidate_id,
-                            "tenant_id": created_resume.tenant_id,
-                            "resume_id": created_resume.id
+                            "candidate_id": resume_candidate_id,
+                            "tenant_id": resume_tenant_id,
+                            "resume_id": resume_id_for_polish
                         }
                     )
                 )
-                logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {created_resume.candidate_id}, resume {created_resume.id}. Result: {polish_result}")
+                logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {resume_candidate_id}, resume {resume_id_for_polish}. Result: {polish_result}")
             except Exception as e:
                 logger.error(f"Failed to send Inngest event for resume polishing: {e}")
         elif invitation.candidate_id:
@@ -940,7 +960,12 @@ class InvitationService:
         # Prefer the candidate created at submission time, if any
         candidate = None
         if invitation.candidate_id:
-            candidate = db.session.get(Candidate, invitation.candidate_id)
+            # Eagerly load resumes to avoid lazy loading issues with primary_resume property
+            from sqlalchemy.orm import joinedload
+            stmt = select(Candidate).where(
+                Candidate.id == invitation.candidate_id
+            ).options(joinedload(Candidate.resumes))
+            candidate = db.session.scalar(stmt)
             if candidate:
                 logger.info(f"Using existing candidate {candidate.id} for approved invitation {invitation.id}")
         
@@ -1035,6 +1060,7 @@ class InvitationService:
         )
         
         db.session.commit()
+        db.session.expire_all()  # Ensure fresh data on next access
         
         logger.info(f"Approved invitation {invitation.id}, created candidate {candidate.id}")
         

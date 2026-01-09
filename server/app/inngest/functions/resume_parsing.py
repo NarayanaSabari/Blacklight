@@ -201,14 +201,25 @@ async def polish_candidate_resume_workflow(ctx) -> dict:
     resume_id = event_data.get("resume_id")
     tenant_id = event_data.get("tenant_id")
     
-    logger.info(f"[POLISH-RESUME] Starting polishing for resume {resume_id}")
+    # Ensure IDs are integers (they may come as strings from JSON)
+    if resume_id is not None:
+        resume_id = int(resume_id)
+    if tenant_id is not None:
+        tenant_id = int(tenant_id)
+    
+    logger.info(f"[POLISH-RESUME] Starting polishing for resume {resume_id}, tenant {tenant_id}")
+    logger.info(f"[POLISH-RESUME] Full event data: {event_data}")
     
     try:
         # Fetch resume record
         resume = _fetch_resume(resume_id, tenant_id)
         
         if not resume:
-            logger.error(f"[POLISH-RESUME] Resume {resume_id} not found")
+            # Debug: Check what resumes exist
+            from sqlalchemy import select
+            all_resumes_stmt = select(CandidateResume.id, CandidateResume.tenant_id).limit(10)
+            existing = db.session.execute(all_resumes_stmt).fetchall()
+            logger.error(f"[POLISH-RESUME] Resume {resume_id} (tenant={tenant_id}) not found. Sample existing resumes: {existing}")
             return {"status": "error", "message": "Resume not found"}
         
         # Check if already polished
@@ -550,13 +561,22 @@ async def polish_resume_workflow(ctx) -> dict:
 def _fetch_resume(resume_id: int, tenant_id: int) -> Optional[CandidateResume]:
     """Fetch resume from database"""
     from sqlalchemy import select, and_
+    
+    if resume_id is None or tenant_id is None:
+        logger.error(f"[_fetch_resume] Invalid IDs: resume_id={resume_id}, tenant_id={tenant_id}")
+        return None
+    
+    logger.info(f"[_fetch_resume] Looking for resume_id={resume_id} (type={type(resume_id)}), tenant_id={tenant_id} (type={type(tenant_id)})")
+    
     stmt = select(CandidateResume).where(
         and_(
             CandidateResume.id == resume_id,
             CandidateResume.tenant_id == tenant_id
         )
     )
-    return db.session.scalar(stmt)
+    result = db.session.scalar(stmt)
+    logger.info(f"[_fetch_resume] Query result: {result}")
+    return result
 
 
 def _update_resume_status(resume_id: int, status: str, error: Optional[str] = None) -> None:
