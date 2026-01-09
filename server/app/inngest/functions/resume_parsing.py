@@ -129,10 +129,21 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
             return {"status": "error", "message": "AI parsing failed"}
         
         # Step 5: Polish resume
-        candidate = _fetch_candidate(candidate_id, tenant_id)
+        # Get candidate name from parsed data (not from candidate record which may still have "Processing")
         candidate_name = None
-        if candidate:
-            candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
+        personal_info = parsed_data.get('personal_info', parsed_data)
+        if personal_info.get('full_name'):
+            candidate_name = personal_info['full_name']
+        elif personal_info.get('first_name'):
+            first = personal_info.get('first_name', '')
+            last = personal_info.get('last_name', '')
+            candidate_name = f"{first} {last}".strip()
+        
+        # Fallback to candidate record only if parsed data doesn't have a name
+        if not candidate_name:
+            candidate = _fetch_candidate(candidate_id, tenant_id)
+            if candidate and candidate.first_name and candidate.first_name not in ('Unknown', 'Processing'):
+                candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
         
         polished_data = None
         try:
@@ -236,11 +247,22 @@ async def polish_candidate_resume_workflow(ctx) -> dict:
             logger.warning(f"[POLISH-RESUME] Resume {resume_id} has no parsed data")
             return {"status": "error", "message": "No parsed data available"}
         
-        # Get candidate name
-        candidate = _fetch_candidate(resume.candidate_id, tenant_id)
+        # Get candidate name from parsed data first
         candidate_name = None
-        if candidate:
-            candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+        parsed_data = resume.parsed_resume_data or {}
+        personal_info = parsed_data.get('personal_info', parsed_data)
+        if personal_info.get('full_name'):
+            candidate_name = personal_info['full_name']
+        elif personal_info.get('first_name'):
+            first = personal_info.get('first_name', '')
+            last = personal_info.get('last_name', '')
+            candidate_name = f"{first} {last}".strip()
+        
+        # Fallback to candidate record only if parsed data doesn't have a name
+        if not candidate_name:
+            candidate = _fetch_candidate(resume.candidate_id, tenant_id)
+            if candidate and candidate.first_name and candidate.first_name not in ('Unknown', 'Processing'):
+                candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
         
         # Polish the resume
         polished_data = await ctx.step.run(
@@ -404,10 +426,15 @@ async def _parse_resume_impl(ctx, resume: CandidateResume, candidate_id: int, te
         polished_data = None
         if parsed_data:
             try:
-                candidate = _fetch_candidate(candidate_id, tenant_id)
+                # Get candidate name from parsed data first (more reliable)
                 candidate_name = None
-                if candidate:
-                    candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
+                personal_info = parsed_data.get('personal_info', parsed_data)
+                if personal_info.get('full_name'):
+                    candidate_name = personal_info['full_name']
+                elif personal_info.get('first_name'):
+                    first = personal_info.get('first_name', '')
+                    last = personal_info.get('last_name', '')
+                    candidate_name = f"{first} {last}".strip()
                 
                 polished_data = await ctx.step.run(
                     "ai-polish-resume",
@@ -484,10 +511,22 @@ async def polish_resume_workflow(ctx) -> dict:
         if resume_id:
             resume = _fetch_resume(resume_id, tenant_id)
             if resume and resume.parsed_resume_data:
-                candidate = _fetch_candidate(candidate_id, tenant_id)
+                # Get candidate name from parsed data first (candidate record may still have "Processing")
                 candidate_name = None
-                if candidate:
-                    candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+                parsed_data = resume.parsed_resume_data
+                personal_info = parsed_data.get('personal_info', parsed_data)
+                if personal_info.get('full_name'):
+                    candidate_name = personal_info['full_name']
+                elif personal_info.get('first_name'):
+                    first = personal_info.get('first_name', '')
+                    last = personal_info.get('last_name', '')
+                    candidate_name = f"{first} {last}".strip()
+                
+                # Fallback to candidate record only if parsed data doesn't have a valid name
+                if not candidate_name:
+                    candidate = _fetch_candidate(candidate_id, tenant_id)
+                    if candidate and candidate.first_name and candidate.first_name not in ('Unknown', 'Processing'):
+                        candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
                 
                 polished_data = await ctx.step.run(
                     "ai-polish-resume",
@@ -526,7 +565,19 @@ async def polish_resume_workflow(ctx) -> dict:
         if primary_resume.polished_resume_data and primary_resume.polished_resume_data.get('markdown_content'):
             return {"status": "success", "candidate_id": candidate_id, "skipped": True}
         
-        candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
+        # Get candidate name from parsed data first (candidate record may still have "Processing")
+        candidate_name = None
+        personal_info = parsed_data.get('personal_info', parsed_data)
+        if personal_info.get('full_name'):
+            candidate_name = personal_info['full_name']
+        elif personal_info.get('first_name'):
+            first = personal_info.get('first_name', '')
+            last = personal_info.get('last_name', '')
+            candidate_name = f"{first} {last}".strip()
+        
+        # Fallback to candidate record only if parsed data doesn't have a valid name
+        if not candidate_name and candidate.first_name and candidate.first_name not in ('Unknown', 'Processing'):
+            candidate_name = candidate.full_name or f"{candidate.first_name or ''} {candidate.last_name or ''}".strip()
         
         polished_data = await ctx.step.run(
             "ai-polish-resume",
