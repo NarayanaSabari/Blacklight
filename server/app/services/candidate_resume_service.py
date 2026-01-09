@@ -164,7 +164,7 @@ class CandidateResumeService:
         )
         
         db.session.add(resume)
-        db.session.commit()
+        db.session.flush()  # Flush to get ID but don't commit - let caller control transaction
         
         logger.info(f"Created resume {resume.id} for candidate {candidate_id}, is_primary={is_primary}")
         

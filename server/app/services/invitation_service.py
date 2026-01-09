@@ -508,6 +508,9 @@ class InvitationService:
         invitation.submitted_at = datetime.utcnow()
         invitation.updated_at = datetime.utcnow()
         
+        # Track created resume for polish trigger later
+        created_resume = None
+        
         # Auto-create a Candidate record in pending_review so email submissions
         # behave like resume uploads (visible in Review Submissions + All Candidates)
         if not invitation.candidate_id:
@@ -624,7 +627,7 @@ class InvitationService:
             if resume_doc:
                 # Create CandidateResume record instead of setting fields on Candidate
                 from app.services.candidate_resume_service import CandidateResumeService
-                resume = CandidateResumeService.create_resume(
+                created_resume = CandidateResumeService.create_resume(
                     candidate_id=candidate.id,
                     tenant_id=invitation.tenant_id,
                     file_key=resume_doc.file_key,
@@ -637,7 +640,7 @@ class InvitationService:
                     uploaded_by_candidate=True,
                     parsed_resume_data=parsed_resume or None,
                 )
-                logger.info(f"Created CandidateResume {resume.id} for candidate {candidate.id} from invitation document")
+                logger.info(f"Created CandidateResume {created_resume.id} for candidate {candidate.id} from invitation document")
         
         # Log the action
         InvitationAuditLog.log_action(
@@ -719,39 +722,29 @@ class InvitationService:
         except Exception as e:
             logger.error(f"Failed to send Inngest event for HR notification: {e}")
         
-        # Trigger resume polishing if candidate was created and has a primary resume with parsed data
-        if invitation.candidate_id:
+        # Trigger resume polishing if we created a resume with parsed data
+        if created_resume and created_resume.parsed_resume_data:
             try:
                 from app.inngest import inngest_client
                 import inngest
                 
-                # Get the candidate and their primary resume
-                candidate_for_polish = db.session.execute(
-                    select(Candidate).where(Candidate.id == invitation.candidate_id)
-                ).scalar()
+                logger.info(f"[INNGEST] Triggering resume polish for candidate {created_resume.candidate_id}, resume {created_resume.id}")
                 
-                if candidate_for_polish:
-                    # Get primary resume from CandidateResume table
-                    primary_resume = candidate_for_polish.primary_resume
-                    
-                    if primary_resume and primary_resume.parsed_resume_data:
-                        logger.info(f"[INNGEST] Triggering resume polish for candidate {invitation.candidate_id}, resume {primary_resume.id}")
-                        
-                        polish_result = inngest_client.send_sync(
-                            inngest.Event(
-                                name="candidate-resume/polish",
-                                data={
-                                    "candidate_id": invitation.candidate_id,
-                                    "tenant_id": invitation.tenant_id,
-                                    "resume_id": primary_resume.id
-                                }
-                            )
-                        )
-                        logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {invitation.candidate_id}, resume {primary_resume.id}. Result: {polish_result}")
-                    else:
-                        logger.info(f"[INNGEST] Skipping resume polish - candidate {invitation.candidate_id} has no primary resume with parsed data")
+                polish_result = inngest_client.send_sync(
+                    inngest.Event(
+                        name="candidate-resume/polish",
+                        data={
+                            "candidate_id": created_resume.candidate_id,
+                            "tenant_id": created_resume.tenant_id,
+                            "resume_id": created_resume.id
+                        }
+                    )
+                )
+                logger.info(f"[INNGEST] ✅ Resume polish event sent for candidate {created_resume.candidate_id}, resume {created_resume.id}. Result: {polish_result}")
             except Exception as e:
                 logger.error(f"Failed to send Inngest event for resume polishing: {e}")
+        elif invitation.candidate_id:
+            logger.info(f"[INNGEST] Skipping resume polish - candidate {invitation.candidate_id} has no resume with parsed data (created_resume={created_resume})")
         
         return invitation
     
