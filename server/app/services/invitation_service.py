@@ -603,7 +603,8 @@ class InvitationService:
                 preferred_locations=preferred_locations,
                 education=education_data,
                 work_experience=work_exp_data,
-                parsed_resume_data=parsed_resume or None,
+                # NOTE: parsed_resume_data is now stored in CandidateResume table, not Candidate
+                # It will be set when CandidateResume is created below
             )
 
             db.session.add(candidate)
