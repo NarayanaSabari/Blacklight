@@ -9,10 +9,14 @@ from config.settings import settings
 # INNGEST_DEV=false means production mode
 is_production = not settings.inngest_dev
 
-# For Inngest Cloud (production): api_base_url should be None
-# For self-hosted Inngest (dev): api_base_url points to the Inngest server (e.g., http://localhost:8288)
-# We only use api_base_url when NOT in production mode (i.e., using self-hosted Inngest)
+# For Inngest Cloud (production): 
+#   - api_base_url should be None (default to Inngest Cloud)
+#   - event_api_base_url should be None (default to https://inn.gs)
+# For self-hosted Inngest (dev): 
+#   - api_base_url points to the Inngest server (e.g., http://localhost:8288)
+#   - event_api_base_url also points to the Inngest server
 api_base_url = None if is_production else (settings.inngest_base_url or None)
+event_api_base_url = None if is_production else (settings.inngest_base_url or None)
 
 # Initialize Inngest client
 inngest_client = Inngest(
@@ -21,8 +25,9 @@ inngest_client = Inngest(
     signing_key=settings.inngest_signing_key if is_production else None,
     is_production=is_production,
     api_base_url=api_base_url,
+    event_api_base_url=event_api_base_url,
 )
 
-print(f"[INNGEST] Initialized - Production Mode: {is_production}, API URL: {api_base_url}, Event Key: {'***' if settings.inngest_event_key else 'None'}")
+print(f"[INNGEST] Initialized - Production Mode: {is_production}, API URL: {api_base_url}, Event API URL: {event_api_base_url}, Event Key: {'***' if settings.inngest_event_key else 'None'}")
 
 __all__ = ["inngest_client"]
