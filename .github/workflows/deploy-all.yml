@@ -1,0 +1,224 @@
+# ============================================================================
+# Deploy All Services to Cloud Run
+# ============================================================================
+# Manual trigger only - deploys backend, portal, and central
+# Use this for initial deployment or when you need to redeploy everything
+#
+# Required GitHub Secrets:
+#   - GCP_PROJECT_ID: Your GCP project ID
+#   - GCP_SA_KEY: Service account JSON key
+#   - BACKEND_URL: Backend Cloud Run URL (set after first backend deploy)
+#
+# ============================================================================
+
+name: Deploy All
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+env:
+  REGION: asia-south1
+  REPOSITORY: blacklight
+
+jobs:
+  # ==========================================================================
+  # Deploy Backend First
+  # ==========================================================================
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    outputs:
+      backend_url: ${{ steps.get-url.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Backend
+        run: |
+          docker build \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }} \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:latest \
+            -f server/Dockerfile.cloudrun \
+            ./server
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:latest
+
+      - name: Deploy Backend
+        run: |
+          gcloud run deploy blacklight-backend \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --quiet
+
+      - name: Get Backend URL
+        id: get-url
+        run: |
+          URL=$(gcloud run services describe blacklight-backend --region=${{ env.REGION }} --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "✅ Backend deployed: $URL"
+
+  # ==========================================================================
+  # Deploy Frontends (after backend)
+  # ==========================================================================
+  deploy-portal:
+    name: Deploy Portal
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Portal
+        run: |
+          docker build \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/portal:${{ github.sha }} \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/portal:latest \
+            --build-arg VITE_API_BASE_URL=${{ needs.deploy-backend.outputs.backend_url }} \
+            --build-arg VITE_ENVIRONMENT=production \
+            --build-arg VITE_BASE_PATH=/ \
+            ./ui/portal
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/portal:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/portal:latest
+
+      - name: Deploy Portal
+        run: |
+          gcloud run deploy blacklight-portal \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/portal:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=5 \
+            --timeout=60 \
+            --concurrency=100 \
+            --quiet
+
+      - name: Show Portal URL
+        run: |
+          echo "✅ Portal deployed: $(gcloud run services describe blacklight-portal --region=${{ env.REGION }} --format='value(status.url)')"
+
+  deploy-central:
+    name: Deploy Central
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and Push Central
+        run: |
+          docker build \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/central:${{ github.sha }} \
+            -t ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/central:latest \
+            --build-arg VITE_API_BASE_URL=${{ needs.deploy-backend.outputs.backend_url }} \
+            --build-arg VITE_ENVIRONMENT=production \
+            --build-arg VITE_BASE_PATH=/ \
+            ./ui/centralD
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/central:${{ github.sha }}
+          docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/central:latest
+
+      - name: Deploy Central
+        run: |
+          gcloud run deploy blacklight-central \
+            --image=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/central:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --timeout=60 \
+            --concurrency=100 \
+            --quiet
+
+      - name: Show Central URL
+        run: |
+          echo "✅ Central deployed: $(gcloud run services describe blacklight-central --region=${{ env.REGION }} --format='value(status.url)')"
+
+  # ==========================================================================
+  # Update Backend CORS (after frontends are deployed)
+  # ==========================================================================
+  update-cors:
+    name: Update Backend CORS
+    runs-on: ubuntu-latest
+    needs: [deploy-backend, deploy-portal, deploy-central]
+
+    steps:
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Update CORS Settings
+        run: |
+          PORTAL_URL=$(gcloud run services describe blacklight-portal --region=${{ env.REGION }} --format='value(status.url)')
+          CENTRAL_URL=$(gcloud run services describe blacklight-central --region=${{ env.REGION }} --format='value(status.url)')
+          
+          gcloud run services update blacklight-backend \
+            --region=${{ env.REGION }} \
+            --update-env-vars="CORS_ORIGINS=${PORTAL_URL},${CENTRAL_URL}" \
+            --update-env-vars="FRONTEND_BASE_URL=${PORTAL_URL}" \
+            --quiet
+          
+          echo ""
+          echo "=========================================="
+          echo "✅ All Services Deployed Successfully!"
+          echo "=========================================="
+          echo ""
+          echo "Backend:  ${{ needs.deploy-backend.outputs.backend_url }}"
+          echo "Portal:   ${PORTAL_URL}"
+          echo "Central:  ${CENTRAL_URL}"
+          echo ""
+          echo "CORS has been configured automatically."
+          echo "=========================================="

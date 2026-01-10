@@ -1,0 +1,95 @@
+# =============================================================================
+# Blacklight Backend - Flask API Server (Cloud Run Optimized)
+# =============================================================================
+# Key differences from VM Dockerfile:
+# - Uses $PORT environment variable (Cloud Run sets this to 8080)
+# - Single worker with more threads (Cloud Run scales horizontally via instances)
+# - Longer timeout for cold starts
+# - No HEALTHCHECK directive (Cloud Run handles this)
+# =============================================================================
+
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m spacy download en_core_web_sm
+
+# =============================================================================
+# Production stage
+# =============================================================================
+FROM python:3.11-slim AS production
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpoppler-cpp-dev \
+    poppler-utils \
+    libmagic1 \
+    libpq5 \
+    curl \
+    # WeasyPrint dependencies for PDF generation
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf-2.0-0 \
+    libffi-dev \
+    shared-mime-info \
+    libcairo2 \
+    libglib2.0-0 \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy installed packages from builder (site-packages includes spaCy model)
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY . .
+
+# Create directories for uploads and credentials
+RUN mkdir -p /app/storage/uploads /app/uploads /app/credentials
+
+# Cloud Run uses PORT environment variable (default 8080)
+ENV PORT=8080
+EXPOSE 8080
+
+# =============================================================================
+# Gunicorn Configuration for Cloud Run
+# =============================================================================
+# Key differences from VM deployment:
+# - workers: 1 (Cloud Run scales horizontally via instances, not workers)
+# - threads: 8 (handle concurrent requests within single worker)
+# - timeout: 300 (longer timeout for cold starts and AI operations)
+# - keep-alive: 30 (Cloud Run handles connection management)
+# - No max-requests (Cloud Run recycles instances automatically)
+# =============================================================================
+CMD exec gunicorn \
+    --bind 0.0.0.0:$PORT \
+    --workers 1 \
+    --threads 8 \
+    --worker-class gthread \
+    --worker-tmp-dir /dev/shm \
+    --timeout 300 \
+    --graceful-timeout 30 \
+    --keep-alive 30 \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    --enable-stdio-inheritance \
+    --log-level ${LOG_LEVEL:-info} \
+    "wsgi:app"
