@@ -20,6 +20,11 @@ export interface JobPostingWithSource extends JobPosting {
     email_id: string;
     received_at: string;
   }>;
+  email_integration?: {
+    provider: 'gmail' | 'outlook';
+    email_address: string;
+    email_direct_link: string | null;
+  } | null;
 }
 
 /** Job source filter type */

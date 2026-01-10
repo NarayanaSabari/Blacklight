@@ -11,6 +11,7 @@ from app import db
 from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
+from app.models.user_email_integration import UserEmailIntegration
 from app.middleware.portal_auth import require_portal_auth
 from app.middleware.tenant_context import with_tenant_context
 from app.middleware.portal_auth import require_permission
@@ -32,16 +33,79 @@ def error_response(message: str, status: int = 400, details: dict = None):
     return jsonify(response), status
 
 
+def _get_email_direct_link(
+    provider: str,
+    message_id: str,
+    thread_id: str = None,
+    email_address: str = None
+) -> str:
+    """
+    Generate a direct link to open the email in Gmail or Outlook web.
+    
+    Args:
+        provider: 'gmail' or 'outlook'
+        message_id: The email message ID
+        thread_id: Optional thread ID (used for Gmail thread view)
+        email_address: Optional email address (for Gmail multi-account)
+    
+    Returns:
+        URL string to open the email, or None if not supported
+    """
+    from urllib.parse import quote
+    
+    if provider == "gmail":
+        # Use thread_id if available for better UX (shows full conversation)
+        target_id = thread_id or message_id
+        if email_address:
+            # Multi-account support: use email address in URL
+            return f"https://mail.google.com/mail/u/{quote(email_address)}/#all/{target_id}"
+        return f"https://mail.google.com/mail/u/0/#all/{target_id}"
+    
+    elif provider == "outlook":
+        # Outlook deeplink format for Office 365
+        # Note: For personal accounts (outlook.com), users may need outlook.live.com
+        return f"https://outlook.office365.com/mail/deeplink/read/{message_id}"
+    
+    return None
+
+
 def _add_sourced_by_info(job_dict: dict, job: JobPosting) -> dict:
-    """Add sourced_by user info to job dict if email-sourced."""
+    """Add sourced_by user info and email integration details to job dict if email-sourced."""
     if job.is_email_sourced and job.sourced_by_user_id:
         user = db.session.get(PortalUser, job.sourced_by_user_id)
         if user:
             job_dict["sourced_by"] = {
                 "id": user.id,
-                "name": f"{user.first_name} {user.last_name}",
+                "first_name": user.first_name,
+                "last_name": user.last_name,
                 "email": user.email,
             }
+        
+        # Get email integration details (provider and connected email address)
+        # Query ProcessedEmail to find which integration was used for this job
+        if job.source_email_id:
+            processed_email = db.session.scalar(
+                select(ProcessedEmail).where(
+                    ProcessedEmail.job_id == job.id,
+                    ProcessedEmail.email_message_id == job.source_email_id
+                )
+            )
+            if processed_email and processed_email.integration_id:
+                integration = db.session.get(UserEmailIntegration, processed_email.integration_id)
+                if integration:
+                    # Generate direct link to open the email
+                    email_direct_link = _get_email_direct_link(
+                        provider=integration.provider,
+                        message_id=job.source_email_id,
+                        thread_id=processed_email.email_thread_id,
+                        email_address=integration.email_address
+                    )
+                    
+                    job_dict["email_integration"] = {
+                        "provider": integration.provider,  # 'gmail' or 'outlook'
+                        "email_address": integration.email_address,
+                        "email_direct_link": email_direct_link,  # Direct link to open email
+                    }
     return job_dict
 
 

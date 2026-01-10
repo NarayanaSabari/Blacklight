@@ -486,6 +486,38 @@ export function JobDetailPage() {
                   Email Source
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  {/* Email Integration Provider */}
+                  {job?.email_integration && (
+                    <div>
+                      <p className="text-purple-700 font-medium">Integration</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge 
+                          className={
+                            job.email_integration.provider === 'gmail' 
+                              ? "bg-red-100 text-red-700 border-red-200" 
+                              : "bg-blue-100 text-blue-700 border-blue-200"
+                          }
+                        >
+                          {job.email_integration.provider === 'gmail' ? (
+                            <>
+                              <svg className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
+                              </svg>
+                              Gmail
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-3 w-3 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M24 7.387v10.478c0 .23-.08.424-.238.576-.158.154-.352.232-.582.232H8.616c-.228 0-.422-.078-.58-.232-.16-.152-.238-.346-.238-.576V7.387c0-.23.078-.424.238-.576.158-.154.352-.232.58-.232h14.564c.23 0 .424.078.582.232.158.152.238.346.238.576zM24 5.25c0 .357-.103.664-.31.926s-.456.428-.748.502L12 12.25.058 6.678C-.15 6.604-.333 6.391-.49 6.045-.648 5.7-.727 5.357-.727 5.02c0-.443.155-.82.465-1.133.31-.31.687-.465 1.13-.465h22.263c.443 0 .82.155 1.13.465.31.313.466.69.466 1.133-.003.077-.01.153-.027.23z"/>
+                              </svg>
+                              Outlook
+                            </>
+                          )}
+                        </Badge>
+                        <span className="text-purple-900">{job.email_integration.email_address}</span>
+                      </div>
+                    </div>
+                  )}
                   {job?.sourced_by && (
                     <div>
                       <p className="text-purple-700 font-medium">Sourced By</p>
@@ -525,6 +557,25 @@ export function JobDetailPage() {
                     </div>
                   )}
                 </div>
+                
+                {/* Open Original Email Button */}
+                {job?.email_integration?.email_direct_link && (
+                  <div className="mt-4 pt-4 border-t border-purple-200">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-white hover:bg-purple-100 text-purple-700 border-purple-300"
+                      onClick={() => window.open(job.email_integration!.email_direct_link!, '_blank', 'noopener,noreferrer')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open Original Email in {job.email_integration.provider === 'gmail' ? 'Gmail' : 'Outlook'}
+                    </Button>
+                    <p className="text-purple-600 text-xs mt-2">
+                      Opens in a new tab. You must be logged into {job.email_integration.email_address} to view.
+                    </p>
+                  </div>
+                )}
+                
                 {job?.additional_source_users && job.additional_source_users.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-purple-200">
                     <p className="text-purple-700 font-medium mb-2">Also received by:</p>
