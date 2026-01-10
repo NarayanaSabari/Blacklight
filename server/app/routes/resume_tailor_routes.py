@@ -556,14 +556,33 @@ def export_tailored_resume(tailor_id: str):
         except ValueError:
             return error_response(f"Invalid format: {export_format}. Use: pdf, docx, markdown", 400)
         
-        # Generate filename
+        # Generate filename - sanitize to ASCII-safe characters only
+        import re as filename_re
+        
+        def sanitize_filename(text: str) -> str:
+            """Remove non-ASCII and special characters from filename."""
+            if not text:
+                return ""
+            # Replace common unicode dashes/quotes with ASCII equivalents
+            text = text.replace("–", "-").replace("—", "-").replace("'", "").replace("'", "")
+            text = text.replace(""", "").replace(""", "").replace("\"", "")
+            # Keep only alphanumeric, underscore, hyphen, and space
+            text = filename_re.sub(r'[^a-zA-Z0-9_\- ]', '', text)
+            # Replace spaces with underscores
+            text = text.replace(" ", "_")
+            # Remove multiple consecutive underscores
+            text = filename_re.sub(r'_+', '_', text)
+            return text.strip("_")
+        
         candidate_name = "resume"
         if tailored_resume.candidate:
-            candidate_name = f"{tailored_resume.candidate.first_name}_{tailored_resume.candidate.last_name}"
+            first = sanitize_filename(tailored_resume.candidate.first_name or "")
+            last = sanitize_filename(tailored_resume.candidate.last_name or "")
+            candidate_name = f"{first}_{last}" if first and last else (first or last or "resume")
         
         job_title = "tailored"
         if tailored_resume.job_title:
-            job_title = tailored_resume.job_title.replace(" ", "_")[:30]
+            job_title = sanitize_filename(tailored_resume.job_title)[:30] or "tailored"
         
         filename = f"{candidate_name}_{job_title}_tailored"
         
