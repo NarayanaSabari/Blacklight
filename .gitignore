@@ -71,4 +71,6 @@ credentials/gcs-credentials.json
 *.pem
 *.key
 
+github-deployer-key.json
+
 Resume-Matcher
