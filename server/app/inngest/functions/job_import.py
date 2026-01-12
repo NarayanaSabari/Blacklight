@@ -49,6 +49,10 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
     """
     Import jobs for a single platform within a session.
     
+    Supports batched imports - when a platform has many jobs, they are split
+    into multiple events. Each batch is processed independently and the platform
+    status is only marked complete when all batches finish.
+    
     Event data:
     {
         "session_id": "uuid",
@@ -56,7 +60,10 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
         "platform_name": "linkedin",
         "platform_status_id": 456,
         "jobs": [...],
-        "jobs_count": 47
+        "jobs_count": 47,
+        "batch_index": 0,           # Optional: which batch this is (0-indexed)
+        "total_batches": 1,         # Optional: total number of batches
+        "total_jobs_in_platform": 47  # Optional: total jobs across all batches
     }
     """
     event_data = ctx.event.data
@@ -66,9 +73,15 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
     platform_status_id = event_data["platform_status_id"]
     jobs_data = event_data["jobs"]
     
+    # Batch metadata (defaults for backwards compatibility)
+    batch_index = event_data.get("batch_index", 0)
+    total_batches = event_data.get("total_batches", 1)
+    total_jobs_in_platform = event_data.get("total_jobs_in_platform", len(jobs_data))
+    
     logger.info(
         f"[JOB-IMPORT] Starting import for platform '{platform_name}' "
-        f"in session {session_id} with {len(jobs_data)} jobs"
+        f"in session {session_id} - batch {batch_index + 1}/{total_batches} "
+        f"with {len(jobs_data)} jobs"
     )
     
     # Step 1: Validate session and platform status
@@ -81,38 +94,51 @@ async def import_platform_jobs_fn(ctx: inngest.Context) -> dict:
         logger.error(f"[JOB-IMPORT] ❌ Session {session_id} or platform status not found")
         return {"status": "error", "message": "Invalid session or platform"}
     
-    # Step 2: Import jobs for this platform
+    # Step 2: Import jobs for this platform batch
     import_result = await ctx.step.run(
-        "import-jobs",
+        f"import-jobs-batch-{batch_index}",
         lambda: import_jobs_batch_for_platform(jobs_data, session_data, platform_name)
     )
     
     # NOTE: Keyword extraction removed - scoring now uses Skills (45%), Semantic (35%), Experience (20%)
     
-    # Step 3: Update platform status to completed
-    await ctx.step.run(
-        "complete-platform",
-        lambda: complete_platform_status(
+    # Step 3: Update platform status (increment batch counter, mark complete if all batches done)
+    completion_result = await ctx.step.run(
+        f"update-platform-batch-{batch_index}",
+        lambda: update_platform_batch_status(
             platform_status_id,
             session_id,
             scraper_key_id,
             len(jobs_data),
             import_result["imported"],
-            import_result["skipped"]
+            import_result["skipped"],
+            batch_index,
+            total_batches
         )
     )
     
-    logger.info(
-        f"[JOB-IMPORT] ✅ Platform '{platform_name}' completed: "
-        f"{import_result['imported']} imported, {import_result['skipped']} skipped"
-    )
+    if completion_result.get("platform_completed"):
+        logger.info(
+            f"[JOB-IMPORT] ✅ Platform '{platform_name}' fully completed "
+            f"(all {total_batches} batches done): "
+            f"total {completion_result['total_imported']} imported, "
+            f"{completion_result['total_skipped']} skipped"
+        )
+    else:
+        logger.info(
+            f"[JOB-IMPORT] ✓ Platform '{platform_name}' batch {batch_index + 1}/{total_batches} done: "
+            f"{import_result['imported']} imported, {import_result['skipped']} skipped"
+        )
     
     return {
         "status": "success",
         "platform": platform_name,
-        "jobs_imported": import_result["imported"],
-        "jobs_skipped": import_result["skipped"],
-        "job_ids": import_result["job_ids"]
+        "batch_index": batch_index,
+        "total_batches": total_batches,
+        "batch_imported": import_result["imported"],
+        "batch_skipped": import_result["skipped"],
+        "job_ids": import_result["job_ids"],
+        "platform_completed": completion_result.get("platform_completed", False)
     }
 
 
@@ -629,6 +655,85 @@ def extract_keywords_for_jobs(job_ids: List[int]) -> Dict[str, Any]:
 # HELPER FUNCTIONS - Platform Status
 # ============================================================================
 
+def update_platform_batch_status(
+    platform_status_id: int,
+    session_id: str,
+    scraper_key_id: int,
+    jobs_found: int,
+    jobs_imported: int,
+    jobs_skipped: int,
+    batch_index: int,
+    total_batches: int
+) -> Dict[str, Any]:
+    """
+    Update platform status for a completed batch.
+    
+    Increments the completed_batches counter and accumulates job counts.
+    Only marks the platform as 'completed' when all batches are done.
+    
+    Returns:
+        Dict with platform_completed flag and totals
+    """
+    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    
+    if not platform_status:
+        logger.error(f"[JOB-IMPORT] Platform status {platform_status_id} not found")
+        return {"platform_completed": False, "error": "Platform status not found"}
+    
+    # Accumulate job counts from this batch
+    platform_status.jobs_found = (platform_status.jobs_found or 0) + jobs_found
+    platform_status.jobs_imported = (platform_status.jobs_imported or 0) + jobs_imported
+    platform_status.jobs_skipped = (platform_status.jobs_skipped or 0) + jobs_skipped
+    
+    # Increment completed batch counter
+    platform_status.completed_batches = (platform_status.completed_batches or 0) + 1
+    
+    # Ensure total_batches is set (in case of legacy events without batch info)
+    if not platform_status.total_batches or platform_status.total_batches < total_batches:
+        platform_status.total_batches = total_batches
+    
+    # Check if all batches are complete
+    all_batches_complete = platform_status.completed_batches >= platform_status.total_batches
+    
+    if all_batches_complete:
+        # Mark platform as completed
+        platform_status.status = "completed"
+        platform_status.completed_at = datetime.utcnow()
+        
+        # Update session progress counters (only once when fully complete)
+        session = ScrapeSession.query.filter_by(
+            session_id=UUID(session_id),
+            scraper_key_id=scraper_key_id
+        ).first()
+        
+        if session:
+            session.platforms_completed = (session.platforms_completed or 0) + 1
+            session.jobs_found = (session.jobs_found or 0) + platform_status.jobs_found
+            session.jobs_imported = (session.jobs_imported or 0) + platform_status.jobs_imported
+            session.jobs_skipped = (session.jobs_skipped or 0) + platform_status.jobs_skipped
+        
+        logger.info(
+            f"[JOB-IMPORT] Platform {platform_status_id} fully completed "
+            f"({platform_status.completed_batches}/{platform_status.total_batches} batches): "
+            f"{platform_status.jobs_imported} imported, {platform_status.jobs_skipped} skipped"
+        )
+    else:
+        logger.info(
+            f"[JOB-IMPORT] Platform {platform_status_id} batch {batch_index + 1} complete "
+            f"({platform_status.completed_batches}/{platform_status.total_batches} batches done)"
+        )
+    
+    db.session.commit()
+    
+    return {
+        "platform_completed": all_batches_complete,
+        "completed_batches": platform_status.completed_batches,
+        "total_batches": platform_status.total_batches,
+        "total_imported": platform_status.jobs_imported,
+        "total_skipped": platform_status.jobs_skipped
+    }
+
+
 def complete_platform_status(
     platform_status_id: int,
     session_id: str,
@@ -637,34 +742,23 @@ def complete_platform_status(
     jobs_imported: int,
     jobs_skipped: int
 ) -> None:
-    """Update platform status to completed."""
-    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    """
+    Update platform status to completed.
     
-    if platform_status:
-        platform_status.status = "completed"
-        platform_status.jobs_found = jobs_found
-        platform_status.jobs_imported = jobs_imported
-        platform_status.jobs_skipped = jobs_skipped
-        platform_status.completed_at = datetime.utcnow()
-        
-        # Update session progress counters
-        session = ScrapeSession.query.filter_by(
-            session_id=UUID(session_id),
-            scraper_key_id=scraper_key_id
-        ).first()
-        
-        if session:
-            session.platforms_completed = (session.platforms_completed or 0) + 1
-            session.jobs_found = (session.jobs_found or 0) + jobs_found
-            session.jobs_imported = (session.jobs_imported or 0) + jobs_imported
-            session.jobs_skipped = (session.jobs_skipped or 0) + jobs_skipped
-        
-        db.session.commit()
-        
-        logger.info(
-            f"[JOB-IMPORT] Platform status {platform_status_id} completed: "
-            f"{jobs_imported} imported, {jobs_skipped} skipped"
-        )
+    DEPRECATED: Use update_platform_batch_status for batch-aware updates.
+    This function is kept for backwards compatibility with non-batched events.
+    """
+    # Delegate to batch-aware function with single batch
+    update_platform_batch_status(
+        platform_status_id,
+        session_id,
+        scraper_key_id,
+        jobs_found,
+        jobs_imported,
+        jobs_skipped,
+        batch_index=0,
+        total_batches=1
+    )
 
 
 def mark_platform_failed(

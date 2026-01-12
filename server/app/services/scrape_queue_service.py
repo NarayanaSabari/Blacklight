@@ -791,6 +791,8 @@ class ScrapeQueueService:
         Raises:
             ValueError: If session not found
         """
+        from app.models.role_location_queue import RoleLocationQueue
+        
         try:
             session_uuid = uuid.UUID(session_id)
         except ValueError:
@@ -818,6 +820,8 @@ class ScrapeQueueService:
         # Reset the role back to approved status so it goes back in the queue
         role_name = session.role_name
         role_id = session.global_role_id
+        location = session.location
+        role_location_reset = False
         
         if session.global_role_id:
             role = db.session.get(GlobalRole, session.global_role_id)
@@ -826,6 +830,19 @@ class ScrapeQueueService:
                 role.updated_at = datetime.utcnow()
                 role_name = role.name
                 logger.info(f"Role '{role.name}' (id={role.id}) returned to queue")
+        
+        # Reset RoleLocationQueue entry if this was a location-based session
+        if session.role_location_queue_id:
+            queue_entry = db.session.get(RoleLocationQueue, session.role_location_queue_id)
+            if queue_entry:
+                queue_entry.queue_status = 'approved'
+                queue_entry.updated_at = datetime.utcnow()
+                location = queue_entry.location
+                role_location_reset = True
+                logger.info(
+                    f"RoleLocationQueue entry {queue_entry.id} "
+                    f"(role='{role_name}', location='{location}') returned to queue"
+                )
         
         db.session.commit()
         
@@ -836,8 +853,10 @@ class ScrapeQueueService:
             "status": "terminated",
             "role_id": role_id,
             "role_name": role_name,
+            "location": location,
             "role_returned_to_queue": True,
-            "message": f"Session terminated. Role '{role_name}' has been returned to the queue."
+            "role_location_returned_to_queue": role_location_reset,
+            "message": f"Session terminated. Role '{role_name}'" + (f" in '{location}'" if location else "") + " has been returned to the queue."
         }
     
     @staticmethod
@@ -850,6 +869,8 @@ class ScrapeQueueService:
         Returns:
             Dict with counts of timed out sessions
         """
+        from app.models.role_location_queue import RoleLocationQueue
+        
         timeout_threshold = datetime.utcnow() - timedelta(seconds=ScrapeQueueService.SESSION_TIMEOUT_SECONDS)
         
         # Find stale sessions
@@ -861,6 +882,7 @@ class ScrapeQueueService:
         ).all()
         
         timed_out = 0
+        role_location_reset = 0
         
         for session in stale_sessions:
             session.timeout()
@@ -870,12 +892,24 @@ class ScrapeQueueService:
             if role and role.queue_status == "processing":
                 role.queue_status = "approved"
             
+            # Reset RoleLocationQueue entry if this was a location-based session
+            if session.role_location_queue_id:
+                queue_entry = db.session.get(RoleLocationQueue, session.role_location_queue_id)
+                if queue_entry and queue_entry.queue_status == "processing":
+                    queue_entry.queue_status = "approved"
+                    role_location_reset += 1
+                    logger.info(
+                        f"Reset RoleLocationQueue {queue_entry.id} "
+                        f"(role={queue_entry.global_role_id}, location='{queue_entry.location}') "
+                        f"back to approved due to session timeout"
+                    )
+            
             timed_out += 1
             logger.warning(f"Session {session.session_id} timed out")
         
         db.session.commit()
         
-        return {"timed_out": timed_out}
+        return {"timed_out": timed_out, "role_location_reset": role_location_reset}
     
     @staticmethod
     def reset_completed_roles(force: bool = False, hours_threshold: int = 24) -> Dict[str, int]:
@@ -930,6 +964,60 @@ class ScrapeQueueService:
         logger.info(f"Reset {reset_count} completed roles back to pending (threshold: {hours_threshold}h)")
         
         return {"reset_count": reset_count, "mode": "threshold", "hours": hours_threshold}
+    
+    @staticmethod
+    def reset_stuck_role_location_queue() -> Dict[str, int]:
+        """
+        Reset RoleLocationQueue entries that are stuck in 'processing' or 'completed' status.
+        
+        This handles:
+        1. Entries stuck in 'processing' (session never completed)
+        2. Entries stuck in 'completed' (from before the rotation logic was added)
+        
+        Returns:
+            Dict with counts of reset entries
+        """
+        from app.models.role_location_queue import RoleLocationQueue
+        
+        # Reset 'processing' entries that have no active session
+        # (their session must have failed or timed out without proper cleanup)
+        processing_entries = RoleLocationQueue.query.filter(
+            RoleLocationQueue.queue_status == "processing"
+        ).all()
+        
+        processing_reset = 0
+        for entry in processing_entries:
+            # Check if there's an active session for this entry
+            active_session = ScrapeSession.query.filter(
+                ScrapeSession.role_location_queue_id == entry.id,
+                ScrapeSession.status == "in_progress"
+            ).first()
+            
+            if not active_session:
+                # No active session - this entry is stuck, reset it
+                entry.queue_status = "approved"
+                processing_reset += 1
+                logger.info(
+                    f"Reset stuck RoleLocationQueue {entry.id} "
+                    f"(role_id={entry.global_role_id}, location='{entry.location}') "
+                    f"from 'processing' to 'approved'"
+                )
+        
+        # Reset 'completed' entries back to 'approved' for continuous rotation
+        completed_reset = RoleLocationQueue.query.filter(
+            RoleLocationQueue.queue_status == "completed"
+        ).update({"queue_status": "approved"})
+        
+        if completed_reset > 0:
+            logger.info(f"Reset {completed_reset} 'completed' RoleLocationQueue entries to 'approved'")
+        
+        db.session.commit()
+        
+        return {
+            "processing_reset": processing_reset,
+            "completed_reset": completed_reset,
+            "total_reset": processing_reset + completed_reset
+        }
     
     @staticmethod
     def get_active_sessions() -> List[Dict[str, Any]]:

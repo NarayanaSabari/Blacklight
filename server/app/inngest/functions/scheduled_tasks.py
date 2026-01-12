@@ -222,25 +222,31 @@ def store_stats_step(stats: dict) -> None:
 )
 async def cleanup_stale_sessions_workflow(ctx: inngest.Context) -> dict:
     """
-    Cleanup scrape sessions stuck in 'processing' state.
+    Cleanup scrape sessions stuck in 'processing' state and reset stuck queue entries.
     Runs every 15 minutes.
     
     Sessions older than 1 hour in processing state are:
     1. Marked as 'timeout'
-    2. Role is reset to 'pending' for retry
+    2. Role is reset to 'approved' for retry
+    3. RoleLocationQueue entry is reset to 'approved' for retry
+    
+    Also resets any RoleLocationQueue entries stuck in 'processing' or 'completed'.
     """
     logger.info("[INNGEST] Running stale scrape session cleanup")
     
-    # Step 1: Cleanup stale sessions
-    cleanup_count = await ctx.step.run(
+    # Step 1: Cleanup stale sessions and reset stuck queue entries
+    cleanup_result = await ctx.step.run(
         "cleanup-stale-sessions",
         cleanup_stale_sessions_step
     )
     
-    logger.info(f"[INNGEST] Cleaned up {cleanup_count} stale sessions")
+    logger.info(
+        f"[INNGEST] Cleanup complete: {cleanup_result.get('sessions_timed_out', 0)} sessions timed out, "
+        f"{cleanup_result.get('role_location_stuck_reset', 0)} stuck queue entries reset"
+    )
     
     return {
-        "sessions_cleaned": cleanup_count,
+        "cleanup_result": cleanup_result,
         "timestamp": datetime.utcnow().isoformat()
     }
 
@@ -305,10 +311,21 @@ async def update_role_candidate_counts_workflow(ctx: inngest.Context) -> dict:
 
 # Step Functions for Scrape Queue Tasks
 
-def cleanup_stale_sessions_step() -> int:
-    """Cleanup stale scrape sessions"""
+def cleanup_stale_sessions_step() -> dict:
+    """Cleanup stale scrape sessions and reset stuck RoleLocationQueue entries"""
     from app.services.scrape_queue_service import ScrapeQueueService
-    return ScrapeQueueService.cleanup_stale_sessions()
+    
+    # Cleanup stale sessions (also resets associated RoleLocationQueue entries)
+    session_result = ScrapeQueueService.cleanup_stale_sessions()
+    
+    # Also reset any stuck RoleLocationQueue entries (processing without active session, or completed)
+    queue_result = ScrapeQueueService.reset_stuck_role_location_queue()
+    
+    return {
+        "sessions_timed_out": session_result.get("timed_out", 0),
+        "role_location_from_sessions": session_result.get("role_location_reset", 0),
+        "role_location_stuck_reset": queue_result.get("total_reset", 0)
+    }
 
 
 def reset_completed_roles_step() -> dict:

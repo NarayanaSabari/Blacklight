@@ -11,7 +11,9 @@ External API endpoints for job scrapers to:
 Authentication: X-Scraper-API-Key header
 """
 import logging
+import math
 from functools import wraps
+from typing import List, Any
 from uuid import UUID
 from flask import Blueprint, request, jsonify, g
 import inngest
@@ -374,28 +376,46 @@ def post_jobs():
                 "progress": _get_session_progress(session)
             }
         else:
-            # Trigger async job import workflow for this platform
-            inngest_client.send_sync(
-                inngest.Event(
-                    name="jobs/scraper.platform-import",
-                    data={
-                        "session_id": session_id,
-                        "scraper_key_id": g.scraper_key.id,
-                        "platform_name": platform_name,
-                        "platform_status_id": platform_status.id,
-                        "jobs": jobs,
-                        "jobs_count": len(jobs)
-                    }
+            # Batch jobs to avoid Inngest payload size limits (256KB max)
+            # Each job can be ~5-10KB, so we use batches of 20 jobs (~100-200KB safe margin)
+            BATCH_SIZE = 20
+            total_jobs = len(jobs)
+            total_batches = max(1, math.ceil(total_jobs / BATCH_SIZE))
+            
+            # Send batched events
+            for batch_index in range(total_batches):
+                start_idx = batch_index * BATCH_SIZE
+                end_idx = min(start_idx + BATCH_SIZE, total_jobs)
+                batch_jobs = jobs[start_idx:end_idx]
+                
+                inngest_client.send_sync(
+                    inngest.Event(
+                        name="jobs/scraper.platform-import",
+                        data={
+                            "session_id": session_id,
+                            "scraper_key_id": g.scraper_key.id,
+                            "platform_name": platform_name,
+                            "platform_status_id": platform_status.id,
+                            "jobs": batch_jobs,
+                            "jobs_count": len(batch_jobs),
+                            # Batch metadata for tracking
+                            "batch_index": batch_index,
+                            "total_batches": total_batches,
+                            "total_jobs_in_platform": total_jobs
+                        }
+                    )
                 )
-            )
             
             # Mark platform as in_progress (will be completed by workflow)
             platform_status.mark_in_progress()
+            # Store total batches for tracking completion
+            platform_status.total_batches = total_batches
+            platform_status.completed_batches = 0
             db.session.commit()
             
             logger.info(
                 f"Triggered job import for platform {platform_name} "
-                f"with {len(jobs)} jobs (session: {session_id})"
+                f"with {total_jobs} jobs in {total_batches} batch(es) (session: {session_id})"
             )
             
             result = {
@@ -403,7 +423,8 @@ def post_jobs():
                 "session_id": session_id,
                 "platform": platform_name,
                 "platform_status": "processing",
-                "jobs_count": len(jobs),
+                "jobs_count": total_jobs,
+                "batches": total_batches,
                 "progress": _get_session_progress(session)
             }
         

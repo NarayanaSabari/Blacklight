@@ -58,6 +58,10 @@ class SessionPlatformStatus(db.Model):
     jobs_imported = db.Column(Integer, default=0)
     jobs_skipped = db.Column(Integer, default=0)
     
+    # Batch Tracking (for handling large job lists split across multiple Inngest events)
+    total_batches = db.Column(Integer, default=1)  # Total number of batches for this platform
+    completed_batches = db.Column(Integer, default=0)  # Number of batches completed
+    
     # Error Tracking
     error_message = db.Column(Text, nullable=True)
     
@@ -96,6 +100,8 @@ class SessionPlatformStatus(db.Model):
             'jobs_found': self.jobs_found,
             'jobs_imported': self.jobs_imported,
             'jobs_skipped': self.jobs_skipped,
+            'total_batches': self.total_batches,
+            'completed_batches': self.completed_batches,
             'error_message': self.error_message,
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,

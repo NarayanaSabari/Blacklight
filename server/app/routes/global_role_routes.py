@@ -722,13 +722,15 @@ def cleanup_queue():
     {
         "reset_completed": false,  // Set to true to reset completed roles to pending
         "force_reset": false,      // Set to true to force reset ALL completed roles immediately
-        "hours_threshold": 24      // Optional: hours after which roles are considered stale
+        "hours_threshold": 24,     // Optional: hours after which roles are considered stale
+        "reset_role_locations": true  // Reset stuck RoleLocationQueue entries (default: true)
     }
     """
     data = request.get_json() or {}
     reset_completed = data.get('reset_completed', False)
     force_reset = data.get('force_reset', False)
     hours_threshold = data.get('hours_threshold', 24)
+    reset_role_locations = data.get('reset_role_locations', True)
     
     try:
         # Cleanup stale sessions
@@ -737,7 +739,8 @@ def cleanup_queue():
         result = {
             "stale_sessions_cleaned": stale_cleaned,
             "completed_roles_reset": 0,
-            "reset_details": None
+            "reset_details": None,
+            "role_location_queue_reset": None
         }
         
         if reset_completed or force_reset:
@@ -747,6 +750,11 @@ def cleanup_queue():
             )
             result["completed_roles_reset"] = reset_result.get("reset_count", 0)
             result["reset_details"] = reset_result
+        
+        # Reset stuck RoleLocationQueue entries
+        if reset_role_locations:
+            role_location_result = ScrapeQueueService.reset_stuck_role_location_queue()
+            result["role_location_queue_reset"] = role_location_result
         
         return jsonify(result), 200
         
