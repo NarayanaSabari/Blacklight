@@ -85,6 +85,7 @@ class ScrapeSession(db.Model):
     # Status
     status = db.Column(String(20), default='in_progress', index=True)
     # in_progress: Scraper is working on this role
+    # pending_completion: Scraper finished, waiting for batches to complete in Inngest
     # completed: Session finished successfully
     # failed: Session ended with error
     # timeout: Session timed out (no response from scraper)

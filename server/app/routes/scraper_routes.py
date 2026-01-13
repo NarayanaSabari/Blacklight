@@ -516,15 +516,15 @@ def complete_session_endpoint():
         }), 400
     
     try:
-        # Trigger session completion workflow
-        inngest_client.send_sync(
-            inngest.Event(
-                name="jobs/scraper.complete",
-                data={
-                    "session_id": session_id,
-                    "scraper_key_id": g.scraper_key.id
-                }
-            )
+        # Mark session as pending_completion - the last batch to complete will trigger
+        # the actual session completion workflow via Inngest
+        # This avoids race condition where complete is called before batches finish processing
+        session.status = 'pending_completion'
+        db.session.commit()
+        
+        logger.info(
+            f"Session {session_id} marked as pending_completion. "
+            f"Completion will be triggered when all platform batches finish."
         )
         
         # Get current stats for response

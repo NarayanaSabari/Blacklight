@@ -168,20 +168,10 @@ async def complete_scrape_session_fn(ctx: inngest.Context) -> dict:
     
     logger.info(f"[JOB-IMPORT] Completing session {session_id}")
     
-    # Step 1: Wait for all platform batches to complete
-    # This is critical because batch imports run async and may not be done yet
-    wait_result = await ctx.step.run(
-        "wait-for-batches",
-        lambda: wait_for_platform_batches_complete(session_id, max_wait_seconds=120)
-    )
+    # NOTE: This function is now triggered by the last batch to complete (not by HTTP endpoint)
+    # So all batches should already be done - no need to wait
     
-    if not wait_result.get("all_complete"):
-        logger.warning(
-            f"[JOB-IMPORT] Session {session_id} timed out waiting for batches. "
-            f"Proceeding with partial results. Status: {wait_result}"
-        )
-    
-    # Step 2: Aggregate platform results
+    # Step 1: Aggregate platform results (fresh read from DB)
     session_stats = await ctx.step.run(
         "aggregate-stats",
         lambda: aggregate_session_stats(session_id)
@@ -708,6 +698,8 @@ def update_platform_batch_status(
     # Check if all batches are complete
     all_batches_complete = platform_status.completed_batches >= platform_status.total_batches
     
+    should_trigger_session_complete = False
+    
     if all_batches_complete:
         # Mark platform as completed
         platform_status.status = "completed"
@@ -724,6 +716,27 @@ def update_platform_batch_status(
             session.jobs_found = (session.jobs_found or 0) + platform_status.jobs_found
             session.jobs_imported = (session.jobs_imported or 0) + platform_status.jobs_imported
             session.jobs_skipped = (session.jobs_skipped or 0) + platform_status.jobs_skipped
+            
+            # Check if session is pending_completion and ALL platforms are now done
+            # This triggers session completion from the last batch to finish
+            if session.status == 'pending_completion':
+                # Get all platform statuses for this session
+                all_platform_statuses = SessionPlatformStatus.query.filter_by(
+                    session_id=session.session_id
+                ).all()
+                
+                all_platforms_done = all(
+                    ps.status in ('completed', 'failed', 'skipped') or
+                    (ps.completed_batches or 0) >= (ps.total_batches or 1)
+                    for ps in all_platform_statuses
+                )
+                
+                if all_platforms_done:
+                    should_trigger_session_complete = True
+                    logger.info(
+                        f"[JOB-IMPORT] All platforms done for session {session_id}. "
+                        f"Triggering session completion."
+                    )
         
         logger.info(
             f"[JOB-IMPORT] Platform {platform_status_id} fully completed "
@@ -738,12 +751,29 @@ def update_platform_batch_status(
     
     db.session.commit()
     
+    # Trigger session completion AFTER commit (so the state is persisted)
+    if should_trigger_session_complete:
+        try:
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="jobs/scraper.complete",
+                    data={
+                        "session_id": session_id,
+                        "scraper_key_id": scraper_key_id
+                    }
+                )
+            )
+            logger.info(f"[JOB-IMPORT] Session complete event sent for {session_id}")
+        except Exception as e:
+            logger.error(f"[JOB-IMPORT] Failed to send session complete event: {e}")
+    
     return {
         "platform_completed": all_batches_complete,
         "completed_batches": platform_status.completed_batches,
         "total_batches": platform_status.total_batches,
         "total_imported": platform_status.jobs_imported,
-        "total_skipped": platform_status.jobs_skipped
+        "total_skipped": platform_status.jobs_skipped,
+        "session_complete_triggered": should_trigger_session_complete
     }
 
 
