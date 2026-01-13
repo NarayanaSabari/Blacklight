@@ -243,10 +243,20 @@ class ExportFormat(str, Enum):
     MARKDOWN = "markdown"
 
 
+class ResumeTemplate(str, Enum):
+    """Available resume templates for export"""
+    MODERN = "modern"
+    CLASSIC = "classic"
+
+
 class ExportResumeRequest(BaseModel):
     """Schema for exporting tailored resume"""
     tailor_id: str = Field(..., description="UUID of the tailored resume to export")
     format: ExportFormat = Field(default=ExportFormat.PDF, description="Export format")
+    template: ResumeTemplate = Field(
+        default=ResumeTemplate.MODERN,
+        description="Resume template to use for export"
+    )
     include_cover_letter: Optional[bool] = Field(
         default=False,
         description="Include AI-generated cover letter"
@@ -262,6 +272,20 @@ class ExportResumeResponse(BaseModel):
     download_url: str = Field(..., description="URL to download the exported file")
     filename: str = Field(..., description="Generated filename")
     expires_at: datetime = Field(..., description="URL expiration timestamp")
+
+
+class TemplateInfoResponse(BaseModel):
+    """Schema for template information"""
+    id: str = Field(..., description="Template identifier")
+    name: str = Field(..., description="Template display name")
+    description: str = Field(..., description="Template description")
+    is_default: bool = Field(default=False, description="Whether this is the default template")
+
+
+class TemplateListResponse(BaseModel):
+    """Schema for list of available templates"""
+    templates: List[TemplateInfoResponse] = Field(..., description="List of available templates")
+    default_template: str = Field(..., description="ID of the default template")
 
 
 # ============================================================================

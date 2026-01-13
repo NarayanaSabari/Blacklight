@@ -12,6 +12,7 @@ from app.models.job_posting import JobPosting
 from app.models.candidate_job_match import CandidateJobMatch
 from app.models.tailored_resume import TailoredResume, TailoredResumeStatus
 from app.services.resume_tailor import ResumeTailorOrchestrator
+from app.services.export import ResumeExportService
 from app.schemas.tailored_resume_schema import (
     TailorResumeRequest,
     TailorResumeFromMatchRequest,
@@ -20,10 +21,14 @@ from app.schemas.tailored_resume_schema import (
     TailoredResumeDetailResponse,
     TailoredResumeListResponse,
     ExportResumeRequest,
-    ExportFormat
+    ExportFormat,
+    ResumeTemplate
 )
 from app.middleware.portal_auth import require_portal_auth, require_permission
 from app.middleware.tenant_context import with_tenant_context
+
+# Initialize export service
+export_service = ResumeExportService()
 
 logger = logging.getLogger(__name__)
 
@@ -517,12 +522,13 @@ def compare_resumes(tailor_id: str):
 @require_permission('candidates.view')
 def export_tailored_resume(tailor_id: str):
     """
-    Export tailored resume in specified format.
+    Export tailored resume in specified format with template selection.
     
-    GET /api/resume-tailor/:tailor_id/export?format=pdf
+    GET /api/resume-tailor/:tailor_id/export?format=pdf&template=modern
     
     Query params:
         format: pdf | docx | markdown (default: pdf)
+        template: modern | classic (default: modern)
     
     Returns:
         File download
@@ -550,46 +556,36 @@ def export_tailored_resume(tailor_id: str):
         
         # Parse query params
         export_format = request.args.get('format', 'pdf')
+        template = request.args.get('template', 'modern')
         
         try:
             format_enum = ExportFormat(export_format)
         except ValueError:
             return error_response(f"Invalid format: {export_format}. Use: pdf, docx, markdown", 400)
         
-        # Generate filename - sanitize to ASCII-safe characters only
-        import re as filename_re
+        try:
+            template_enum = ResumeTemplate(template)
+        except ValueError:
+            return error_response(f"Invalid template: {template}. Use: modern, classic", 400)
         
-        def sanitize_filename(text: str) -> str:
-            """Remove non-ASCII and special characters from filename."""
-            if not text:
-                return ""
-            # Replace common unicode dashes/quotes with ASCII equivalents
-            text = text.replace("–", "-").replace("—", "-").replace("'", "").replace("'", "")
-            text = text.replace(""", "").replace(""", "").replace("\"", "")
-            # Keep only alphanumeric, underscore, hyphen, and space
-            text = filename_re.sub(r'[^a-zA-Z0-9_\- ]', '', text)
-            # Replace spaces with underscores
-            text = text.replace(" ", "_")
-            # Remove multiple consecutive underscores
-            text = filename_re.sub(r'_+', '_', text)
-            return text.strip("_")
-        
+        # Generate filename
         candidate_name = "resume"
         if tailored_resume.candidate:
-            first = sanitize_filename(tailored_resume.candidate.first_name or "")
-            last = sanitize_filename(tailored_resume.candidate.last_name or "")
+            first = export_service.sanitize_filename(tailored_resume.candidate.first_name or "")
+            last = export_service.sanitize_filename(tailored_resume.candidate.last_name or "")
             candidate_name = f"{first}_{last}" if first and last else (first or last or "resume")
         
         job_title = "tailored"
         if tailored_resume.job_title:
-            job_title = sanitize_filename(tailored_resume.job_title)[:30] or "tailored"
+            job_title = export_service.sanitize_filename(tailored_resume.job_title)[:30] or "tailored"
         
         filename = f"{candidate_name}_{job_title}_tailored"
+        content = tailored_resume.tailored_resume_content
         
         if format_enum == ExportFormat.MARKDOWN:
             # Return markdown directly
             return Response(
-                tailored_resume.tailored_resume_content,
+                content,
                 mimetype='text/markdown',
                 headers={
                     'Content-Disposition': f'attachment; filename="{filename}.md"'
@@ -597,194 +593,9 @@ def export_tailored_resume(tailor_id: str):
             )
         
         elif format_enum == ExportFormat.PDF:
-            # Convert markdown to PDF using weasyprint
             try:
-                from weasyprint import HTML, CSS
-                import markdown
-                import re
-                
-                logger.info(f"Starting PDF generation for tailor_id={tailor_id}")
-                
-                # Validate content exists
-                content = tailored_resume.tailored_resume_content
-                if not content:
-                    logger.error(f"No tailored content for tailor_id={tailor_id}")
-                    return error_response("No tailored content available for PDF export", 400)
-                
-                logger.info(f"Content length: {len(content)} chars")
-                
-                # ============================================================
-                # CLEANUP: Fix common AI output issues
-                # ============================================================
-                
-                # Remove duplicate sections (AI sometimes outputs same section twice)
-                # Find all section headers and keep only the last occurrence of each
-                section_pattern = r'^(#{1,3})\s+(.+?)$'
-                lines = content.split('\n')
-                seen_sections = {}
-                section_ranges = []
-                current_section_start = None
-                current_section_header = None
-                
-                for i, line in enumerate(lines):
-                    match = re.match(section_pattern, line.strip())
-                    if match:
-                        # Save previous section range
-                        if current_section_header is not None:
-                            section_ranges.append((current_section_start, i - 1, current_section_header))
-                        current_section_start = i
-                        current_section_header = match.group(2).strip().lower()
-                
-                # Don't forget the last section
-                if current_section_header is not None:
-                    section_ranges.append((current_section_start, len(lines) - 1, current_section_header))
-                
-                # Keep only the last occurrence of each section (which tends to be properly formatted)
-                section_last_occurrence = {}
-                for start, end, header in section_ranges:
-                    # Normalize header for comparison (e.g., "Experience" and "## Experience" should match)
-                    normalized_header = header.replace('#', '').strip().lower()
-                    section_last_occurrence[normalized_header] = (start, end)
-                
-                # Build cleaned content by keeping only non-duplicate sections
-                if section_ranges and len(section_ranges) > len(section_last_occurrence):
-                    # There are duplicates - keep only last occurrences
-                    lines_to_keep = set()
-                    for header, (start, end) in section_last_occurrence.items():
-                        for i in range(start, end + 1):
-                            lines_to_keep.add(i)
-                    
-                    # Also keep any lines before the first section (name, contact info)
-                    if section_ranges:
-                        first_section_start = section_ranges[0][0]
-                        for i in range(first_section_start):
-                            lines_to_keep.add(i)
-                    
-                    # Rebuild content
-                    cleaned_lines = [lines[i] for i in sorted(lines_to_keep)]
-                    content = '\n'.join(cleaned_lines)
-                    logger.info(f"Removed duplicate sections, new length: {len(content)} chars")
-                
-                # ============================================================
-                # FIX FORMATTING: Ensure proper line breaks for markdown
-                # ============================================================
-                
-                # 1. Ensure bullet points are on their own lines
-                content = re.sub(r'([^\n])(\s*[-*]\s+)', r'\1\n\2', content)
-                # 2. Ensure headers are on their own lines
-                content = re.sub(r'([^\n])(#{1,3}\s+)', r'\1\n\n\2', content)
-                # 3. Ensure there's a newline after headers before content
-                content = re.sub(r'(#{1,3}\s+[^\n]+)(\n)([^#\n\-*])', r'\1\n\n\3', content)
-                # 4. Fix inline bullet points that should be list items (e.g., "text - item - item")
-                # Split lines that have multiple " - " patterns indicating inline bullets
-                lines = content.split('\n')
-                processed_lines = []
-                for line in lines:
-                    # Skip if already a proper bullet or header
-                    if line.strip().startswith('-') or line.strip().startswith('*') or line.strip().startswith('#'):
-                        processed_lines.append(line)
-                    # Check for inline bullets pattern: " - " appearing multiple times
-                    elif line.count(' - ') >= 2 and not line.strip().startswith('*'):
-                        # This looks like inline bullet points, split them
-                        # But first check if it's a header line like "Title | Company"
-                        if ' | ' not in line:
-                            parts = re.split(r'\s+-\s+', line)
-                            if len(parts) > 1:
-                                # First part might be a header/intro, rest are bullets
-                                if parts[0].strip():
-                                    processed_lines.append(parts[0].strip())
-                                for part in parts[1:]:
-                                    if part.strip():
-                                        processed_lines.append(f"- {part.strip()}")
-                            else:
-                                processed_lines.append(line)
-                        else:
-                            processed_lines.append(line)
-                    else:
-                        processed_lines.append(line)
-                
-                content = '\n'.join(processed_lines)
-                
-                # Convert markdown to HTML
-                html_content = markdown.markdown(
-                    content,
-                    extensions=['tables', 'fenced_code', 'nl2br']
-                )
-                
-                logger.info(f"HTML content generated, length: {len(html_content)} chars")
-                
-                # Wrap with basic styling - 1 inch margins on all sides
-                styled_html = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <style>
-                        @page {{
-                            size: letter;
-                            margin: 1in;
-                        }}
-                        body {{
-                            font-family: 'Helvetica Neue', Arial, sans-serif;
-                            font-size: 11pt;
-                            line-height: 1.4;
-                            color: #333;
-                            margin: 0;
-                            padding: 0;
-                        }}
-                        h1 {{
-                            font-size: 22pt;
-                            margin-bottom: 5px;
-                            margin-top: 0;
-                            color: #1a1a1a;
-                        }}
-                        h1 + p {{
-                            margin-top: 5px;
-                            color: #555;
-                        }}
-                        h2 {{
-                            font-size: 13pt;
-                            border-bottom: 1.5px solid #2563eb;
-                            padding-bottom: 4px;
-                            margin-top: 18px;
-                            margin-bottom: 8px;
-                            color: #1a1a1a;
-                            text-transform: uppercase;
-                            letter-spacing: 0.5px;
-                        }}
-                        h3 {{
-                            font-size: 11pt;
-                            margin-bottom: 2px;
-                            margin-top: 12px;
-                            color: #333;
-                            font-weight: 600;
-                        }}
-                        ul {{
-                            margin: 5px 0;
-                            padding-left: 18px;
-                        }}
-                        li {{
-                            margin-bottom: 3px;
-                        }}
-                        p {{
-                            margin: 4px 0;
-                        }}
-                        em {{
-                            color: #555;
-                            font-style: italic;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    {html_content}
-                </body>
-                </html>
-                """
-                
-                # Generate PDF
-                logger.info(f"Starting WeasyPrint PDF generation for tailor_id={tailor_id}")
-                pdf_bytes = HTML(string=styled_html).write_pdf()
-                logger.info(f"PDF generated successfully, size: {len(pdf_bytes)} bytes")
+                logger.info(f"Generating PDF with template '{template}' for tailor_id={tailor_id}")
+                pdf_bytes = export_service.export_pdf(content, template=template_enum.value)
                 
                 return Response(
                     pdf_bytes,
@@ -794,110 +605,119 @@ def export_tailored_resume(tailor_id: str):
                     }
                 )
                 
-            except ImportError as import_err:
-                logger.error(f"WeasyPrint import failed: {import_err}")
-                return error_response(
-                    "PDF export not available. Install weasyprint: pip install weasyprint markdown",
-                    501
-                )
             except Exception as pdf_error:
                 logger.error(f"PDF generation failed for tailor_id={tailor_id}: {pdf_error}", exc_info=True)
                 return error_response(f"PDF generation failed: {str(pdf_error)}", 500)
         
         elif format_enum == ExportFormat.DOCX:
-            # Convert to DOCX using python-docx
             try:
-                from docx import Document
-                from docx.shared import Pt, Inches
-                from docx.enum.text import WD_ALIGN_PARAGRAPH
-                from io import BytesIO
-                import re
-                
-                doc = Document()
-                
-                # Set 1-inch margins on all sides
-                for section in doc.sections:
-                    section.top_margin = Inches(1)
-                    section.bottom_margin = Inches(1)
-                    section.left_margin = Inches(1)
-                    section.right_margin = Inches(1)
-                
-                # Process markdown content
-                lines = tailored_resume.tailored_resume_content.split('\n')
-                is_first_line = True
-                
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    
-                    # Headers
-                    if line.startswith('# '):
-                        p = doc.add_heading(line[2:], level=1)
-                        # Style the main name header
-                        if is_first_line:
-                            for run in p.runs:
-                                run.font.size = Pt(22)
-                                run.font.bold = True
-                        is_first_line = False
-                    elif line.startswith('## '):
-                        p = doc.add_heading(line[3:], level=2)
-                        for run in p.runs:
-                            run.font.size = Pt(13)
-                    elif line.startswith('### '):
-                        p = doc.add_heading(line[4:], level=3)
-                        for run in p.runs:
-                            run.font.size = Pt(11)
-                    # Bullet points
-                    elif line.startswith('- ') or line.startswith('* '):
-                        p = doc.add_paragraph(line[2:], style='List Bullet')
-                        for run in p.runs:
-                            run.font.size = Pt(11)
-                    # Regular paragraphs
-                    else:
-                        # Handle italic (dates)
-                        if line.startswith('*') and line.endswith('*'):
-                            p = doc.add_paragraph()
-                            run = p.add_run(line.strip('*'))
-                            run.italic = True
-                            run.font.size = Pt(10)
-                        # Contact info line (pipe separated)
-                        elif ' | ' in line and is_first_line == False and not line.startswith('#'):
-                            p = doc.add_paragraph(line)
-                            for run in p.runs:
-                                run.font.size = Pt(10)
-                        else:
-                            p = doc.add_paragraph(line)
-                            for run in p.runs:
-                                run.font.size = Pt(11)
-                    
-                    is_first_line = False
-                
-                # Save to bytes
-                docx_buffer = BytesIO()
-                doc.save(docx_buffer)
-                docx_buffer.seek(0)
+                logger.info(f"Generating DOCX with template '{template}' for tailor_id={tailor_id}")
+                docx_bytes = export_service.export_docx(content, template=template_enum.value)
                 
                 return Response(
-                    docx_buffer.getvalue(),
+                    docx_bytes,
                     mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     headers={
                         'Content-Disposition': f'attachment; filename="{filename}.docx"'
                     }
                 )
                 
-            except ImportError:
-                return error_response(
-                    "DOCX export not available. Install python-docx: pip install python-docx",
-                    501
-                )
             except Exception as docx_error:
                 logger.error(f"DOCX generation failed: {docx_error}")
                 return error_response(f"DOCX generation failed: {str(docx_error)}", 500)
         
+        return error_response(f"Unsupported format: {export_format}", 400)
+        
     except Exception as e:
         logger.error(f"Export failed: {e}")
         return error_response("Failed to export resume", 500)
+
+
+@resume_tailor_bp.route('/<string:tailor_id>/preview', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def preview_tailored_resume(tailor_id: str):
+    """
+    Get HTML preview of tailored resume with specified template.
+    
+    GET /api/resume-tailor/:tailor_id/preview?template=modern
+    
+    Query params:
+        template: modern | classic (default: modern)
+    
+    Returns:
+        HTML content for preview
+    
+    Permissions: candidates.view
+    """
+    try:
+        tenant_id = g.tenant_id
+        
+        # Get tailored resume
+        orchestrator = ResumeTailorOrchestrator()
+        tailored_resume = orchestrator.get_tailored_resume(tailor_id)
+        
+        if not tailored_resume:
+            return error_response(f"Tailored resume {tailor_id} not found", 404)
+        
+        if tailored_resume.tenant_id != tenant_id:
+            return error_response("Access denied", 403)
+        
+        if not tailored_resume.tailored_resume_content:
+            return error_response("No tailored content available", 400)
+        
+        # Parse template param
+        template = request.args.get('template', 'modern')
+        
+        try:
+            template_enum = ResumeTemplate(template)
+        except ValueError:
+            return error_response(f"Invalid template: {template}. Use: modern, classic", 400)
+        
+        # Get preview HTML
+        html_content = export_service.get_preview_html(
+            tailored_resume.tailored_resume_content,
+            template=template_enum.value
+        )
+        
+        return Response(
+            html_content,
+            mimetype='text/html',
+            headers={
+                'Content-Type': 'text/html; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Preview failed: {e}")
+        return error_response("Failed to generate preview", 500)
+
+
+@resume_tailor_bp.route('/templates', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+def list_templates():
+    """
+    List available resume templates.
+    
+    GET /api/resume-tailor/templates
+    
+    Returns:
+        List of available templates with metadata
+    """
+    try:
+        templates = export_service.get_templates_info()
+        default_template = "modern"
+        
+        return jsonify({
+            'templates': templates,
+            'default_template': default_template
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Failed to list templates: {e}")
+        return error_response("Failed to list templates", 500)
 
 
 # ============================================================================

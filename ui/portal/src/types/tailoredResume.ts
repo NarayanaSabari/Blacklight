@@ -7,6 +7,20 @@ export type TailorStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export type ExportFormat = 'pdf' | 'docx' | 'markdown';
 
+export type ResumeTemplate = 'modern' | 'classic';
+
+export interface TemplateInfo {
+  id: ResumeTemplate;
+  name: string;
+  description: string;
+  is_default: boolean;
+}
+
+export interface TemplateListResponse {
+  templates: TemplateInfo[];
+  default_template: ResumeTemplate;
+}
+
 export interface TailoredResume {
   id: number;
   tailor_id: string;  // UUID for API calls
@@ -77,6 +91,7 @@ export interface TailorFromMatchRequest {
 
 export interface ExportResumeRequest {
   format: ExportFormat;
+  template?: ResumeTemplate;
 }
 
 /**

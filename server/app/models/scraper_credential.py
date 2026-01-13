@@ -178,11 +178,13 @@ class ScraperCredential(db.Model):
         self.assigned_to_session_id = None
         self.assigned_at = None
         
+        # Always set status to AVAILABLE when releasing
+        # (If failure occurred, mark_failed should be called instead)
+        self.status = CredentialStatus.AVAILABLE.value
+        
         if success:
-            self.status = CredentialStatus.AVAILABLE.value
             self.success_count += 1
             self.last_success_at = datetime.utcnow()
-        # If not success, status should already be set to FAILED
     
     def mark_failed(self, error_message: str) -> None:
         """Mark credential as failed with error message."""

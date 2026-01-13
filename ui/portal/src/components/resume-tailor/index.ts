@@ -6,3 +6,4 @@
 export { TailorDialog } from './TailorDialog';
 export { ResumeCompareDialog } from './ResumeCompareDialog';
 export { ExportMenu } from './ExportMenu';
+export { ExportDialog } from './ExportDialog';

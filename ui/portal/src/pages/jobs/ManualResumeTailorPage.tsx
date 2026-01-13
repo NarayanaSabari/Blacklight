@@ -18,7 +18,6 @@ import {
   Plus,
   TrendingUp,
   Download,
-  FileType,
   Eye,
   Code,
   Loader2,
@@ -45,12 +44,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -61,7 +54,8 @@ import {
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
 import { apiRequest } from '@/lib/api-client';
 import { candidateApi } from '@/lib/candidateApi';
-import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
+import { ExportDialog } from '@/components/resume-tailor';
+import type { TailoredResume } from '@/types/tailoredResume';
 import type { CandidateInfo } from '@/types';
 import type { CandidateResume } from '@/types/candidate';
 
@@ -383,6 +377,7 @@ export function ManualResumeTailorPage() {
   const [viewMode, setViewMode] = useState<'rendered' | 'raw' | 'diff'>('diff');
   const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   // Fetch recruiter's assigned candidates (same pattern as TeamJobsPage)
   const { data: candidatesData, isLoading: candidatesLoading } = useQuery({
@@ -464,18 +459,6 @@ export function ManualResumeTailorPage() {
     },
   });
 
-  // Export mutation
-  const exportMutation = useMutation({
-    mutationFn: ({ format }: { format: ExportFormat }) => 
-      resumeTailorApi.downloadResume(tailoredResume!.tailor_id, format),
-    onSuccess: (_, { format }) => {
-      toast.success(`Downloaded as ${format.toUpperCase()}`);
-    },
-    onError: () => {
-      toast.error('Export failed');
-    },
-  });
-
   // Start tailoring process
   const startTailoring = () => {
     // Validate inputs
@@ -552,28 +535,10 @@ export function ManualResumeTailorPage() {
         </div>
         
         {phase === 'complete' && tailoredResume && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'pdf' })}>
-                <FileText className="h-4 w-4 mr-2" />
-                Download PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'docx' })}>
-                <FileType className="h-4 w-4 mr-2" />
-                Download Word
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'markdown' })}>
-                <Code className="h-4 w-4 mr-2" />
-                Download Markdown
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button onClick={() => setExportDialogOpen(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
         )}
       </div>
 
@@ -1062,6 +1027,16 @@ export function ManualResumeTailorPage() {
           </Card>
         </div>
       </div>
+
+      {/* Export Dialog */}
+      {tailoredResume && (
+        <ExportDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          tailorId={tailoredResume.tailor_id}
+          candidateName={selectedCandidate ? `${selectedCandidate.first_name} ${selectedCandidate.last_name}` : undefined}
+        />
+      )}
     </div>
   );
 }

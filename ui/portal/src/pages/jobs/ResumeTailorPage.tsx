@@ -21,7 +21,6 @@ import {
   Plus,
   TrendingUp,
   Download,
-  FileType,
   Eye,
   Code,
   Loader2,
@@ -45,12 +44,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 import {
   Select,
@@ -63,7 +56,8 @@ import {
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { candidateApi } from '@/lib/candidateApi';
-import type { TailoredResume, ExportFormat } from '@/types/tailoredResume';
+import { ExportDialog } from '@/components/resume-tailor';
+import type { TailoredResume } from '@/types/tailoredResume';
 import type { CandidateResume } from '@/types/candidate';
 
 // ============================================================================
@@ -372,6 +366,7 @@ export function ResumeTailorPage() {
   const [tailoredResume, setTailoredResume] = useState<TailoredResume | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedResumeId, setSelectedResumeId] = useState<number | undefined>(undefined);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   
   const candidateIdNum = parseInt(candidateId || '0', 10);
   const jobIdNum = parseInt(jobId || '0', 10);
@@ -468,18 +463,6 @@ export function ResumeTailorPage() {
     },
   });
 
-  // Export mutation
-  const exportMutation = useMutation({
-    mutationFn: ({ format }: { format: ExportFormat }) => 
-      resumeTailorApi.downloadResume(tailoredResume!.tailor_id, format),
-    onSuccess: (_, { format }) => {
-      toast.success(`Downloaded as ${format.toUpperCase()}`);
-    },
-    onError: () => {
-      toast.error('Export failed');
-    },
-  });
-
   // Start tailoring process
   const startTailoring = () => {
     setPhase('processing');
@@ -562,28 +545,10 @@ export function ResumeTailorPage() {
         </div>
         
         {phase === 'complete' && tailoredResume && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'pdf' })}>
-                <FileText className="h-4 w-4 mr-2" />
-                Download PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'docx' })}>
-                <FileType className="h-4 w-4 mr-2" />
-                Download Word
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportMutation.mutate({ format: 'markdown' })}>
-                <Code className="h-4 w-4 mr-2" />
-                Download Markdown
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button onClick={() => setExportDialogOpen(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
         )}
       </div>
 
@@ -982,6 +947,18 @@ export function ResumeTailorPage() {
           </Card>
         </div>
       </div>
+
+      {/* Export Dialog */}
+      {tailoredResume && (
+        <ExportDialog
+          open={exportDialogOpen}
+          onOpenChange={setExportDialogOpen}
+          tailorId={tailoredResume.tailor_id}
+          candidateName={candidate?.first_name && candidate?.last_name 
+            ? `${candidate.first_name} ${candidate.last_name}` 
+            : undefined}
+        />
+      )}
     </div>
   );
 }

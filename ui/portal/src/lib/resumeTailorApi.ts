@@ -13,6 +13,8 @@ import type {
   TailorStatsResponse,
   CompareResponse,
   ExportFormat,
+  ResumeTemplate,
+  TemplateListResponse,
 } from '@/types/tailoredResume';
 
 const BASE_URL = '/api/resume-tailor';
@@ -122,11 +124,15 @@ export const resumeTailorApi = {
   },
 
   /**
-   * Export tailored resume in specified format
+   * Export tailored resume in specified format with template
    */
-  exportResume: async (tailorId: string, format: ExportFormat): Promise<Blob> => {
+  exportResume: async (
+    tailorId: string, 
+    format: ExportFormat,
+    template: ResumeTemplate = 'modern'
+  ): Promise<Blob> => {
     return apiRequest.getBlob(`${BASE_URL}/${tailorId}/export`, {
-      params: { format },
+      params: { format, template },
     });
   },
 
@@ -136,9 +142,10 @@ export const resumeTailorApi = {
   downloadResume: async (
     tailorId: string,
     format: ExportFormat,
+    template: ResumeTemplate = 'modern',
     filename?: string
   ): Promise<void> => {
-    const blob = await resumeTailorApi.exportResume(tailorId, format);
+    const blob = await resumeTailorApi.exportResume(tailorId, format, template);
     
     // Create download link
     const url = window.URL.createObjectURL(blob);
@@ -151,6 +158,24 @@ export const resumeTailorApi = {
     // Cleanup
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  },
+
+  /**
+   * Get list of available templates
+   */
+  getTemplates: async (): Promise<TemplateListResponse> => {
+    return apiRequest.get<TemplateListResponse>(`${BASE_URL}/templates`);
+  },
+
+  /**
+   * Get HTML preview of resume with specified template
+   */
+  getPreview: async (tailorId: string, template: ResumeTemplate = 'modern'): Promise<string> => {
+    const response = await apiRequest.get<string>(`${BASE_URL}/${tailorId}/preview`, {
+      params: { template },
+      headers: { Accept: 'text/html' },
+    });
+    return response;
   },
 
   /**
