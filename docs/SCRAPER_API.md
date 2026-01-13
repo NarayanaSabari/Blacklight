@@ -36,7 +36,16 @@ X-Scraper-API-Key: your-api-key-here
 │  1. GET /api/scraper/queue/next-role-location                          │
 │     └── Returns: session_id, role, location, platforms[]               │
 │                                                                         │
-│  2. For each platform, scrape jobs from job boards                     │
+│  2. For each platform:                                                  │
+│     a. If platform requires credentials (linkedin, glassdoor, etc.):   │
+│        GET /api/scraper-credentials/queue/{platform}/next              │
+│        └── Returns: email, password (or cookies for glassdoor)         │
+│                                                                         │
+│     b. Scrape jobs using credentials (if applicable)                   │
+│                                                                         │
+│     c. Report credential result:                                        │
+│        - POST .../queue/{id}/success  (success - release credential)   │
+│        - POST .../queue/{id}/failure  (failed - mark as failed)        │
 │                                                                         │
 │  3. POST /api/scraper/queue/jobs (once per platform)                   │
 │     └── Submit jobs for: linkedin, indeed, monster, etc.               │
@@ -425,21 +434,64 @@ curl -X GET "https://blacklight-backend-kko63bb3aa-el.a.run.app/api/scraper/queu
 ```python
 import requests
 import time
+from typing import Optional
 
 BASE_URL = "https://blacklight-backend-kko63bb3aa-el.a.run.app"
 API_KEY = "your-api-key-here"
 
-headers = {
+HEADERS = {
     "X-Scraper-API-Key": API_KEY,
     "Content-Type": "application/json"
 }
+
+# Platforms that require login credentials
+PLATFORMS_REQUIRING_CREDENTIALS = {"linkedin", "glassdoor", "techfetch"}
+
+
+def get_credential(platform: str, session_id: str) -> Optional[dict]:
+    """
+    Fetch credentials for platforms that require authentication.
+    Returns None if no credentials available.
+    """
+    response = requests.get(
+        f"{BASE_URL}/api/scraper-credentials/queue/{platform}/next",
+        headers=HEADERS,
+        params={"session_id": session_id}
+    )
+    
+    if response.status_code == 204:
+        return None
+    
+    return response.json()
+
+
+def report_credential_success(credential_id: int):
+    """Report successful use of a credential."""
+    requests.post(
+        f"{BASE_URL}/api/scraper-credentials/queue/{credential_id}/success",
+        headers=HEADERS
+    )
+
+
+def report_credential_failure(credential_id: int, error: str, cooldown_minutes: int = None):
+    """Report credential failure."""
+    payload = {"error_message": error}
+    if cooldown_minutes:
+        payload["cooldown_minutes"] = cooldown_minutes
+    
+    requests.post(
+        f"{BASE_URL}/api/scraper-credentials/queue/{credential_id}/failure",
+        headers=HEADERS,
+        json=payload
+    )
+
 
 def scrape_jobs():
     while True:
         # 1. Get next role+location
         response = requests.get(
             f"{BASE_URL}/api/scraper/queue/next-role-location",
-            headers=headers
+            headers=HEADERS
         )
         
         if response.status_code == 204:
@@ -466,14 +518,42 @@ def scrape_jobs():
             platform_name = platform["name"]
             print(f"  Scraping {platform_name}...")
             
+            credential = None
+            credential_id = None
+            
             try:
+                # Get credentials if needed
+                if platform_name in PLATFORMS_REQUIRING_CREDENTIALS:
+                    credential = get_credential(platform_name, session_id)
+                    if not credential:
+                        print(f"    No credentials available for {platform_name}, skipping...")
+                        requests.post(
+                            f"{BASE_URL}/api/scraper/queue/jobs",
+                            headers=HEADERS,
+                            json={
+                                "session_id": session_id,
+                                "platform": platform_name,
+                                "status": "failed",
+                                "error_message": "No credentials available",
+                                "jobs": []
+                            }
+                        )
+                        continue
+                    
+                    credential_id = credential["id"]
+                    print(f"    Using credential: {credential.get('email') or credential.get('name')}")
+                
                 # Your scraping logic here
-                jobs = scrape_platform(platform_name, role_name, location)
+                jobs = scrape_platform(platform_name, role_name, location, credential)
+                
+                # Report credential success if used
+                if credential_id:
+                    report_credential_success(credential_id)
                 
                 # Submit jobs
                 response = requests.post(
                     f"{BASE_URL}/api/scraper/queue/jobs",
-                    headers=headers,
+                    headers=HEADERS,
                     json={
                         "session_id": session_id,
                         "platform": platform_name,
@@ -484,11 +564,53 @@ def scrape_jobs():
                 result = response.json()
                 print(f"    Submitted {result.get('jobs_count', 0)} jobs")
                 
-            except Exception as e:
-                # Report platform failure
+            except RateLimitError as e:
+                # Rate limited - put credential on cooldown
+                if credential_id:
+                    report_credential_failure(credential_id, str(e), cooldown_minutes=60)
+                
                 requests.post(
                     f"{BASE_URL}/api/scraper/queue/jobs",
-                    headers=headers,
+                    headers=HEADERS,
+                    json={
+                        "session_id": session_id,
+                        "platform": platform_name,
+                        "status": "failed",
+                        "error_message": str(e),
+                        "jobs": []
+                    }
+                )
+                print(f"    Rate limited: {e}")
+                
+            except LoginError as e:
+                # Login failed - mark credential as failed
+                if credential_id:
+                    report_credential_failure(credential_id, str(e))
+                
+                requests.post(
+                    f"{BASE_URL}/api/scraper/queue/jobs",
+                    headers=HEADERS,
+                    json={
+                        "session_id": session_id,
+                        "platform": platform_name,
+                        "status": "failed",
+                        "error_message": str(e),
+                        "jobs": []
+                    }
+                )
+                print(f"    Login failed: {e}")
+                
+            except Exception as e:
+                # General error - release credential without marking as failed
+                if credential_id:
+                    requests.post(
+                        f"{BASE_URL}/api/scraper-credentials/queue/{credential_id}/release",
+                        headers=HEADERS
+                    )
+                
+                requests.post(
+                    f"{BASE_URL}/api/scraper/queue/jobs",
+                    headers=HEADERS,
                     json={
                         "session_id": session_id,
                         "platform": platform_name,
@@ -502,7 +624,7 @@ def scrape_jobs():
         # 3. Complete session
         response = requests.post(
             f"{BASE_URL}/api/scraper/queue/complete",
-            headers=headers,
+            headers=HEADERS,
             json={"session_id": session_id}
         )
         
@@ -513,20 +635,188 @@ def scrape_jobs():
         time.sleep(5)
 
 
-def scrape_platform(platform_name: str, role: str, location: str) -> list:
+def scrape_platform(platform_name: str, role: str, location: str, credential: dict = None) -> list:
     """
     Your platform-specific scraping logic here.
     Returns list of job objects.
+    
+    Args:
+        platform_name: Name of the platform (linkedin, indeed, etc.)
+        role: Job role to search for
+        location: Location to search in
+        credential: Optional dict with login credentials
+                   - LinkedIn/Techfetch: {"email": "...", "password": "..."}
+                   - Glassdoor: {"credentials": {"cookie": "...", "csrf_token": "..."}}
     """
-    # Example implementation
     jobs = []
+    
+    if platform_name == "linkedin" and credential:
+        # Use credential["email"] and credential["password"] to login
+        pass
+    elif platform_name == "glassdoor" and credential:
+        # Use credential["credentials"]["cookie"] for authenticated requests
+        pass
+    
     # ... scraping code ...
     return jobs
+
+
+# Custom exceptions for credential handling
+class RateLimitError(Exception):
+    """Raised when the platform rate limits the scraper."""
+    pass
+
+class LoginError(Exception):
+    """Raised when login fails."""
+    pass
 
 
 if __name__ == "__main__":
     scrape_jobs()
 ```
+
+---
+
+---
+
+## Platform Credentials
+
+Some platforms (LinkedIn, Glassdoor, Techfetch) require authentication credentials to scrape. The API provides endpoints to fetch and manage credentials for these platforms.
+
+### Get Credentials for a Platform
+
+Fetch the next available credential before scraping a platform that requires login.
+
+```
+GET /api/scraper-credentials/queue/{platform}/next
+```
+
+#### Request
+```bash
+curl -X GET "https://blacklight-backend-kko63bb3aa-el.a.run.app/api/scraper-credentials/queue/linkedin/next?session_id=9405a3de-904a-46dd-84fb-02464f872cb0" \
+  -H "X-Scraper-API-Key: your-api-key"
+```
+
+#### Response - LinkedIn/Techfetch (200 OK)
+```json
+{
+  "id": 1,
+  "platform": "linkedin",
+  "name": "Account 1",
+  "email": "user@example.com",
+  "password": "secret123"
+}
+```
+
+#### Response - Glassdoor (200 OK)
+```json
+{
+  "id": 1,
+  "platform": "glassdoor",
+  "name": "Cookie Set 1",
+  "credentials": {
+    "cookie": "session_id=abc123",
+    "csrf_token": "xyz789"
+  }
+}
+```
+
+#### No Credentials Available (204 No Content)
+No body - all credentials are either in use, failed, or on cooldown.
+
+---
+
+### Report Credential Success
+
+After successfully using a credential, report success to release it back to the pool.
+
+```
+POST /api/scraper-credentials/queue/{credential_id}/success
+```
+
+#### Request
+```bash
+curl -X POST "https://blacklight-backend-kko63bb3aa-el.a.run.app/api/scraper-credentials/queue/1/success" \
+  -H "X-Scraper-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Scraped 50 jobs successfully"}'
+```
+
+#### Response (200 OK)
+```json
+{
+  "message": "Credential released successfully",
+  "status": "available"
+}
+```
+
+---
+
+### Report Credential Failure
+
+If a credential fails (e.g., invalid password, account locked), report the failure.
+
+```
+POST /api/scraper-credentials/queue/{credential_id}/failure
+```
+
+#### Request
+```bash
+curl -X POST "https://blacklight-backend-kko63bb3aa-el.a.run.app/api/scraper-credentials/queue/1/failure" \
+  -H "X-Scraper-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "error_message": "Login failed: Invalid credentials"
+  }'
+```
+
+#### Request with Cooldown (Rate Limited)
+```bash
+curl -X POST "https://blacklight-backend-kko63bb3aa-el.a.run.app/api/scraper-credentials/queue/1/failure" \
+  -H "X-Scraper-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "error_message": "Rate limited by LinkedIn",
+    "cooldown_minutes": 60
+  }'
+```
+
+#### Response (200 OK)
+```json
+{
+  "message": "Credential failure recorded",
+  "status": "failed",
+  "failure_count": 3
+}
+```
+
+---
+
+### Credential Statuses
+
+| Status | Description |
+|--------|-------------|
+| `available` | Credential is ready to be used |
+| `in_use` | Credential is currently assigned to a scraper |
+| `failed` | Credential has failed (e.g., invalid password, account locked) |
+| `disabled` | Credential is manually disabled by admin |
+| `cooldown` | Credential is temporarily unavailable (rate limited) |
+
+---
+
+### Platforms Requiring Credentials
+
+| Platform | Auth Type | Fields Returned |
+|----------|-----------|-----------------|
+| `linkedin` | Email/Password | `email`, `password` |
+| `glassdoor` | Cookies/JSON | `credentials` (object with cookies, tokens) |
+| `techfetch` | Email/Password | `email`, `password` |
+| `indeed` | None | No credentials needed |
+| `monster` | None | No credentials needed |
+| `ziprecruiter` | None | No credentials needed |
+| `dice` | None | No credentials needed |
+
+> **Full Credentials API Documentation:** See [SCRAPER_CREDENTIALS_API.md](./SCRAPER_CREDENTIALS_API.md) for complete CRUD operations and admin endpoints.
 
 ---
 

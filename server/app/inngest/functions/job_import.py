@@ -241,7 +241,9 @@ def validate_session_for_platform(
         logger.error(f"Session {session_id} not found")
         return None
     
-    if session.status not in ("in_progress", "pending"):
+    # Allow in_progress, pending, or pending_completion status
+    # pending_completion is set when /queue/complete is called but batches are still processing
+    if session.status not in ("in_progress", "pending", "pending_completion"):
         logger.error(f"Session {session_id} has invalid status: {session.status}")
         return None
     
