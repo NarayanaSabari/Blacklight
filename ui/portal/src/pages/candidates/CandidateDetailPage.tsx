@@ -120,6 +120,21 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   ready_for_assignment: { color: 'bg-cyan-500 text-white', label: 'Ready' },
 };
 
+const VISA_TYPES = [
+  'US Citizen',
+  'Green Card',
+  'H1B',
+  'H4 EAD',
+  'L1',
+  'L2 EAD',
+  'OPT',
+  'CPT',
+  'TN',
+  'O1',
+  'E2',
+  'Other',
+] as const;
+
 export function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -568,6 +583,7 @@ export function CandidateDetailPage() {
       total_experience_years: candidate.total_experience_years,
       notice_period: candidate.notice_period || '',
       expected_salary: candidate.expected_salary || '',
+      visa_type: candidate.visa_type || '',
       professional_summary: candidate.professional_summary || '',
       preferred_locations: candidate.preferred_locations || [],
       skills: candidate.skills || [],
@@ -1508,6 +1524,24 @@ export function CandidateDetailPage() {
                       className="border-2 border-black"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="visa_type">Visa / Work Authorization</Label>
+                    <Select
+                      value={formData?.visa_type || ''}
+                      onValueChange={(value) => updateField('visa_type', value)}
+                    >
+                      <SelectTrigger id="visa_type" className="border-2 border-black">
+                        <SelectValue placeholder="Select visa status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {VISA_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               ) : (
                 <>
@@ -1538,6 +1572,17 @@ export function CandidateDetailPage() {
                       </span>
                       <span className="text-sm font-bold text-green-700">
                         {candidate.expected_salary}
+                      </span>
+                    </div>
+                  )}
+                  {candidate.visa_type && (
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded border-2 border-blue-500">
+                      <span className="text-sm font-medium text-blue-700 flex items-center gap-1">
+                        <FileText className="h-3 w-3" />
+                        Visa / Work Authorization
+                      </span>
+                      <span className="text-sm font-bold text-blue-700">
+                        {candidate.visa_type}
                       </span>
                     </div>
                   )}

@@ -126,6 +126,7 @@ export interface Candidate {
   total_experience_years?: number;
   notice_period?: string;
   expected_salary?: string;
+  visa_type?: string;
   professional_summary?: string;
 
   // Arrays
@@ -197,6 +198,7 @@ export interface CandidateCreateInput {
   total_experience_years?: number;
   notice_period?: string;
   expected_salary?: string;
+  visa_type?: string;
   professional_summary?: string;
   preferred_locations?: string[];
   skills?: string[];
@@ -221,6 +223,7 @@ export interface CandidateUpdateInput {
   total_experience_years?: number;
   notice_period?: string;
   expected_salary?: string;
+  visa_type?: string;
   professional_summary?: string;
   preferred_locations?: string[];
   skills?: string[];

@@ -95,6 +95,9 @@ class Candidate(BaseModel):
     notice_period = db.Column(String(100))
     expected_salary = db.Column(String(100))
     professional_summary = db.Column(Text)
+    
+    # Visa/Work Authorization
+    visa_type = db.Column(String(50))  # US Citizen, Green Card, H1B, H4 EAD, L1, L2 EAD, OPT, CPT, TN, O1, E2, Other
 
     # Structured Arrays (PostgreSQL ARRAY columns)
     preferred_locations = db.Column(ARRAY(String))  # ["San Francisco", "Remote"]
@@ -231,6 +234,7 @@ class Candidate(BaseModel):
             "total_experience_years": self.total_experience_years,
             "notice_period": self.notice_period,
             "expected_salary": self.expected_salary,
+            "visa_type": self.visa_type,
             "professional_summary": self.professional_summary,
             "preferred_locations": self.preferred_locations,
             "skills": self.skills,

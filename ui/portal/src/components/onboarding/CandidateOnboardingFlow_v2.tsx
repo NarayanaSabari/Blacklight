@@ -62,6 +62,13 @@ import { WorkExperienceEditor } from '@/components/candidates/WorkExperienceEdit
 import { EducationEditor } from '@/components/candidates/EducationEditor';
 import { Label } from '@/components/ui/label';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -71,6 +78,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+
+// Visa type options
+const VISA_TYPES = [
+  'US Citizen',
+  'Green Card',
+  'H1B',
+  'H4 EAD',
+  'L1',
+  'L2 EAD',
+  'OPT',
+  'CPT',
+  'TN',
+  'O1',
+  'E2',
+  'Other',
+] as const;
 
 const personalInfoSchema = z.object({
   first_name: z.string().min(2, 'First name must be at least 2 characters'),
@@ -87,6 +110,7 @@ const professionalInfoSchema = z.object({
   position: z.string().optional(),
   experience_years: z.number().min(0).max(50).optional(),
   expected_salary: z.string().min(1, 'Expected pay rate is required'),
+  visa_type: z.string().optional(),
   skills: z.string().optional(),
   education: z.string().optional(),
   work_experience: z.string().optional(),
@@ -173,6 +197,7 @@ export function CandidateOnboardingFlow({
       position: '',
       experience_years: 0,
       expected_salary: '',
+      visa_type: '',
       skills: '',
       education: '',
       work_experience: '',
@@ -544,6 +569,7 @@ export function CandidateOnboardingFlow({
           position: professionalData.position,
           experience_years: professionalData.experience_years,
           expected_salary: professionalData.expected_salary,
+          visa_type: professionalData.visa_type,
           skills,
           preferred_roles: preferredRoles,
           preferred_locations: preferredLocations,
@@ -1165,6 +1191,30 @@ export function CandidateOnboardingFlow({
                           </FormItem>
                         )}
                       />
+                      <FormField
+                        control={professionalForm.control}
+                        name="visa_type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Visa / Work Authorization</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                                <SelectTrigger className="h-11 bg-white">
+                                  <SelectValue placeholder="Select your visa status" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {VISA_TYPES.map((type) => (
+                                  <SelectItem key={type} value={type}>
+                                    {type}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </div>
 
@@ -1609,6 +1659,12 @@ export function CandidateOnboardingFlow({
                       <p className="text-xs text-slate-500 uppercase">Expected Pay Rate</p>
                       <p className="text-slate-900">
                         {professionalForm.getValues('expected_salary') || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase">Visa / Work Authorization</p>
+                      <p className="text-slate-900">
+                        {professionalForm.getValues('visa_type') || '-'}
                       </p>
                     </div>
                   </div>

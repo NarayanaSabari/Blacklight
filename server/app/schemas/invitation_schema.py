@@ -71,6 +71,7 @@ class InvitationSubmitSchema(BaseModel):
     
     # Work Authorization (optional for initial submission)
     work_authorization_status: Optional[str] = Field(None, description="US Citizen, Green Card, H1B, etc.")
+    visa_type: Optional[str] = Field(None, max_length=50, description="Visa type: US Citizen, Green Card, H1B, H4 EAD, L1, L2 EAD, OPT, CPT, TN, O1, E2, Other")
     requires_sponsorship: Optional[bool] = Field(False)
     
     # Additional

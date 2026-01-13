@@ -41,6 +41,21 @@ const STATUS_OPTIONS: { value: CandidateStatus; label: string }[] = [
   { value: 'withdrawn', label: 'Withdrawn' },
 ];
 
+const VISA_TYPES = [
+  'US Citizen',
+  'Green Card',
+  'H1B',
+  'H4 EAD',
+  'L1',
+  'L2 EAD',
+  'OPT',
+  'CPT',
+  'TN',
+  'O1',
+  'E2',
+  'Other',
+] as const;
+
 export function CandidateForm({
   candidate,
   parsedData,
@@ -61,6 +76,7 @@ export function CandidateForm({
     total_experience_years: undefined,
     notice_period: '',
     expected_salary: '',
+    visa_type: '',
     professional_summary: '',
     skills: [],
     certifications: [],
@@ -91,6 +107,7 @@ export function CandidateForm({
         total_experience_years: candidate.total_experience_years,
         notice_period: candidate.notice_period,
         expected_salary: candidate.expected_salary,
+        visa_type: candidate.visa_type,
         professional_summary: candidate.professional_summary,
         skills: candidate.skills || [],
         certifications: candidate.certifications || [],
@@ -309,6 +326,25 @@ export function CandidateForm({
               onChange={(e) => handleInputChange('expected_salary', e.target.value)}
               placeholder="e.g., $120,000 - $150,000"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="visa_type">Visa / Work Authorization</Label>
+            <Select
+              value={formData.visa_type || ''}
+              onValueChange={(value) => handleInputChange('visa_type', value)}
+            >
+              <SelectTrigger id="visa_type">
+                <SelectValue placeholder="Select visa status" />
+              </SelectTrigger>
+              <SelectContent>
+                {VISA_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

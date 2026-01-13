@@ -68,6 +68,7 @@ export const candidateUpdateSchema = z.object({
         .nullable(),
     notice_period: z.string().max(100).optional(),
     expected_salary: z.string().max(100).optional(),
+    visa_type: z.string().max(50).optional(),
     professional_summary: z.string().optional(),
 
     // Arrays

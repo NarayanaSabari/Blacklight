@@ -1006,6 +1006,9 @@ class InvitationService:
             preferred_roles = preferred_roles[:10]
         candidate.preferred_roles = preferred_roles
         
+        # Visa type
+        candidate.visa_type = get_field('visa_type')
+        
         # Set status to ready_for_assignment (approval means ready for job matching)
         candidate.status = 'ready_for_assignment'
         

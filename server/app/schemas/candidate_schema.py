@@ -30,6 +30,7 @@ class CandidateCreateSchema(BaseModel):
     total_experience_years: Optional[int] = Field(None, ge=0, le=70)
     notice_period: Optional[str] = Field(None, max_length=100)
     expected_salary: Optional[str] = Field(None, max_length=100)
+    visa_type: Optional[str] = Field(None, max_length=50)  # US Citizen, Green Card, H1B, etc.
     professional_summary: Optional[str] = None
     
     # Arrays
@@ -78,6 +79,7 @@ class CandidateUpdateSchema(BaseModel):
     total_experience_years: Optional[int] = Field(None, ge=0, le=70)
     notice_period: Optional[str] = Field(None, max_length=100)
     expected_salary: Optional[str] = Field(None, max_length=100)
+    visa_type: Optional[str] = Field(None, max_length=50)
     professional_summary: Optional[str] = None
     preferred_locations: Optional[List[str]] = None
     skills: Optional[List[str]] = None
@@ -179,6 +181,7 @@ class CandidateResponseSchema(BaseModel):
     total_experience_years: Optional[int] = None
     notice_period: Optional[str] = None
     expected_salary: Optional[str] = None
+    visa_type: Optional[str] = None
     professional_summary: Optional[str] = None
     
     # Arrays - handle None from database
