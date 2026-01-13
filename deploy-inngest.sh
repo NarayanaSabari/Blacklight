@@ -28,16 +28,35 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Detect docker compose command (v2 plugin vs v1 standalone)
+DOCKER_COMPOSE=""
+
+detect_compose() {
+    if docker compose version &> /dev/null; then
+        DOCKER_COMPOSE="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE="docker-compose"
+    else
+        return 1
+    fi
+    return 0
+}
+
 check_prerequisites() {
     if ! command -v docker &> /dev/null; then
         log_error "Docker is not installed."
+        log_info "Install with: sudo apt update && sudo apt install -y docker.io"
         exit 1
     fi
 
-    if ! docker compose version &> /dev/null; then
+    if ! detect_compose; then
         log_error "Docker Compose is not available."
+        log_info "Install with: sudo apt install -y docker-compose"
+        log_info "Or install Docker Compose v2 plugin: sudo apt install -y docker-compose-plugin"
         exit 1
     fi
+    
+    log_info "Using: $DOCKER_COMPOSE"
 
     if [ ! -f "$ENV_FILE" ]; then
         log_error ".env.inngest file not found!"
@@ -49,12 +68,12 @@ check_prerequisites() {
 start_services() {
     check_prerequisites
     log_info "Starting Inngest server..."
-    docker compose -f $COMPOSE_FILE --env-file $ENV_FILE up -d --build
+    $DOCKER_COMPOSE -f $COMPOSE_FILE --env-file $ENV_FILE up -d --build
     
     log_info "Waiting for services to be healthy..."
     sleep 15
     
-    docker compose -f $COMPOSE_FILE ps
+    $DOCKER_COMPOSE -f $COMPOSE_FILE ps
     
     log_info ""
     log_info "Inngest server started!"
@@ -64,23 +83,27 @@ start_services() {
 }
 
 stop_services() {
+    detect_compose
     log_info "Stopping Inngest server..."
-    docker compose -f $COMPOSE_FILE down
+    $DOCKER_COMPOSE -f $COMPOSE_FILE down
     log_info "Services stopped."
 }
 
 restart_services() {
+    check_prerequisites
     log_info "Restarting Inngest server..."
-    docker compose -f $COMPOSE_FILE --env-file $ENV_FILE restart
+    $DOCKER_COMPOSE -f $COMPOSE_FILE --env-file $ENV_FILE restart
     log_info "Services restarted."
 }
 
 show_logs() {
-    docker compose -f $COMPOSE_FILE logs -f inngest
+    detect_compose
+    $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f inngest
 }
 
 show_status() {
-    docker compose -f $COMPOSE_FILE ps
+    detect_compose
+    $DOCKER_COMPOSE -f $COMPOSE_FILE ps
     echo ""
     log_info "Health check:"
     curl -s http://localhost:8288/health && echo " - Inngest is healthy" || echo " - Inngest is not responding"
@@ -104,10 +127,11 @@ sync_functions() {
 }
 
 clean_all() {
+    detect_compose
     log_warn "This will remove ALL containers, volumes, and data!"
     read -p "Are you sure? (yes/no): " confirm
     if [ "$confirm" = "yes" ]; then
-        docker compose -f $COMPOSE_FILE down -v --remove-orphans
+        $DOCKER_COMPOSE -f $COMPOSE_FILE down -v --remove-orphans
         log_info "Cleanup complete."
     else
         log_info "Cleanup cancelled."
