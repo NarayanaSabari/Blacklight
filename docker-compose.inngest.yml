@@ -1,0 +1,113 @@
+# =============================================================================
+# Inngest Server - Standalone VM Deployment
+# =============================================================================
+# This runs ONLY the Inngest server + its dependencies (PostgreSQL, Redis)
+# Backend and frontends run on Cloud Run separately.
+#
+# Usage:
+#   1. Copy .env.inngest.example to .env.inngest and configure
+#   2. Run: docker-compose -f docker-compose.inngest.yml up -d
+#
+# Architecture:
+#   Cloud Run (Backend) <---> VM (Inngest Server)
+#                              ├── PostgreSQL (for Inngest state)
+#                              └── Redis (for Inngest queues)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database (Inngest state storage)
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:15-alpine
+    container_name: inngest-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inngest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inngest_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-inngest}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"  # Only localhost, not exposed externally
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inngest} -d ${POSTGRES_DB:-inngest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - inngest-network
+
+  # ---------------------------------------------------------------------------
+  # Redis (Inngest queue management)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: inngest-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"  # Only localhost, not exposed externally
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inngest-network
+
+  # ---------------------------------------------------------------------------
+  # Inngest Server
+  # ---------------------------------------------------------------------------
+  inngest:
+    image: inngest/inngest:latest
+    container_name: inngest-server
+    restart: unless-stopped
+    command: "inngest start"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8288:8288"   # Inngest API & Dashboard
+      - "8289:8289"   # Inngest internal
+    environment:
+      # Inngest keys (MUST match your Cloud Run backend config)
+      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY}
+      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY}
+      
+      # Storage backends
+      - INNGEST_POSTGRES_URI=postgresql://${POSTGRES_USER:-inngest}:${POSTGRES_PASSWORD:-inngest_secure_password}@db:5432/${POSTGRES_DB:-inngest}
+      - INNGEST_REDIS_URI=redis://redis:6379
+      
+      # CRITICAL: URL where Inngest will discover your backend's functions
+      # This is your Cloud Run backend URL
+      - INNGEST_DEV_SERVER_URL=${BACKEND_URL}/api/inngest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8288/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - inngest-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  inngest-network:
+    driver: bridge
