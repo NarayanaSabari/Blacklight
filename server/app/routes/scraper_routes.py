@@ -382,7 +382,19 @@ def post_jobs():
             total_jobs = len(jobs)
             total_batches = max(1, math.ceil(total_jobs / BATCH_SIZE))
             
-            # Send batched events
+            # CRITICAL: Set batch tracking BEFORE sending events to avoid race condition
+            # Inngest processes events async - batches might complete before we set total_batches
+            platform_status.mark_in_progress()
+            platform_status.total_batches = total_batches
+            platform_status.completed_batches = 0
+            db.session.commit()
+            
+            logger.info(
+                f"Starting job import for platform {platform_name} "
+                f"with {total_jobs} jobs in {total_batches} batch(es) (session: {session_id})"
+            )
+            
+            # Now send batched events (safe because total_batches is already committed)
             for batch_index in range(total_batches):
                 start_idx = batch_index * BATCH_SIZE
                 end_idx = min(start_idx + BATCH_SIZE, total_jobs)
@@ -406,16 +418,8 @@ def post_jobs():
                     )
                 )
             
-            # Mark platform as in_progress (will be completed by workflow)
-            platform_status.mark_in_progress()
-            # Store total batches for tracking completion
-            platform_status.total_batches = total_batches
-            platform_status.completed_batches = 0
-            db.session.commit()
-            
             logger.info(
-                f"Triggered job import for platform {platform_name} "
-                f"with {total_jobs} jobs in {total_batches} batch(es) (session: {session_id})"
+                f"All {total_batches} batch events sent for platform {platform_name} (session: {session_id})"
             )
             
             result = {

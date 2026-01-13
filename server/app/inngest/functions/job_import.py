@@ -168,7 +168,20 @@ async def complete_scrape_session_fn(ctx: inngest.Context) -> dict:
     
     logger.info(f"[JOB-IMPORT] Completing session {session_id}")
     
-    # Step 1: Aggregate platform results
+    # Step 1: Wait for all platform batches to complete
+    # This is critical because batch imports run async and may not be done yet
+    wait_result = await ctx.step.run(
+        "wait-for-batches",
+        lambda: wait_for_platform_batches_complete(session_id, max_wait_seconds=120)
+    )
+    
+    if not wait_result.get("all_complete"):
+        logger.warning(
+            f"[JOB-IMPORT] Session {session_id} timed out waiting for batches. "
+            f"Proceeding with partial results. Status: {wait_result}"
+        )
+    
+    # Step 2: Aggregate platform results
     session_stats = await ctx.step.run(
         "aggregate-stats",
         lambda: aggregate_session_stats(session_id)
@@ -795,6 +808,97 @@ def mark_platform_failed(
 # HELPER FUNCTIONS - Session Aggregation
 # ============================================================================
 
+def wait_for_platform_batches_complete(session_id: str, max_wait_seconds: int = 120) -> Dict[str, Any]:
+    """
+    Wait for all platform batches to complete before aggregating stats.
+    
+    This is necessary because:
+    1. POST /queue/jobs sends batch events to Inngest
+    2. POST /queue/complete is called immediately after
+    3. Batches might still be processing when complete_session runs
+    
+    We poll the database every 2 seconds to check if all platforms
+    have completed_batches >= total_batches.
+    
+    Args:
+        session_id: Session UUID string
+        max_wait_seconds: Maximum time to wait (default 120s)
+    
+    Returns:
+        Dict with all_complete flag and status details
+    """
+    import time
+    
+    poll_interval = 2  # seconds
+    elapsed = 0
+    
+    while elapsed < max_wait_seconds:
+        # Expire cached data to get fresh reads
+        db.session.expire_all()
+        
+        session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
+        if not session:
+            logger.error(f"[JOB-IMPORT] Session {session_id} not found during wait")
+            return {"all_complete": False, "error": "Session not found"}
+        
+        platform_statuses = SessionPlatformStatus.query.filter_by(
+            session_id=session.session_id
+        ).all()
+        
+        if not platform_statuses:
+            logger.warning(f"[JOB-IMPORT] No platform statuses found for session {session_id}")
+            return {"all_complete": True, "platforms": 0}
+        
+        all_done = True
+        pending_platforms = []
+        
+        for ps in platform_statuses:
+            # A platform is done if:
+            # 1. status is 'completed' or 'failed', OR
+            # 2. completed_batches >= total_batches
+            is_terminal_status = ps.status in ('completed', 'failed', 'skipped')
+            batches_done = (ps.completed_batches or 0) >= (ps.total_batches or 1)
+            
+            if not is_terminal_status and not batches_done:
+                all_done = False
+                pending_platforms.append({
+                    "platform": ps.platform_name,
+                    "status": ps.status,
+                    "completed_batches": ps.completed_batches or 0,
+                    "total_batches": ps.total_batches or 1
+                })
+        
+        if all_done:
+            logger.info(
+                f"[JOB-IMPORT] All {len(platform_statuses)} platforms completed "
+                f"for session {session_id} after {elapsed}s"
+            )
+            return {
+                "all_complete": True,
+                "platforms": len(platform_statuses),
+                "wait_time_seconds": elapsed
+            }
+        
+        logger.debug(
+            f"[JOB-IMPORT] Waiting for batches: {len(pending_platforms)} platforms pending. "
+            f"Elapsed: {elapsed}s. Pending: {pending_platforms}"
+        )
+        
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+    
+    # Timeout reached
+    logger.warning(
+        f"[JOB-IMPORT] Timeout waiting for batches after {max_wait_seconds}s. "
+        f"Session: {session_id}"
+    )
+    return {
+        "all_complete": False,
+        "timeout": True,
+        "wait_time_seconds": elapsed
+    }
+
+
 def aggregate_session_stats(session_id: str) -> Optional[Dict[str, Any]]:
     """
     Aggregate statistics from all platform statuses for a session.
@@ -809,6 +913,11 @@ def aggregate_session_stats(session_id: str) -> Optional[Dict[str, Any]]:
     - global_role_id: the role ID for this session
     - role_name: the role name
     """
+    # CRITICAL: Expire all cached objects to ensure we read fresh data from DB
+    # This is necessary because platform batches are processed async and may have
+    # updated the database after our session was loaded
+    db.session.expire_all()
+    
     session = ScrapeSession.query.filter_by(session_id=UUID(session_id)).first()
     
     if not session:
