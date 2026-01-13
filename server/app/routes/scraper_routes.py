@@ -530,6 +530,30 @@ def complete_session_endpoint():
         # Get current stats for response
         platform_statuses = session.platform_statuses
         
+        # FIX: Handle race condition where batches finish BEFORE /queue/complete is called
+        # Check if all platforms are already done
+        all_platforms_done = all(
+            ps.status in ('completed', 'failed', 'skipped') or
+            (ps.completed_batches or 0) >= (ps.total_batches or 1)
+            for ps in platform_statuses
+        )
+        
+        if all_platforms_done and len(platform_statuses) > 0:
+            # Batches already finished - trigger completion immediately
+            logger.info(
+                f"Session {session_id}: All {len(platform_statuses)} platforms already done. "
+                f"Triggering session completion immediately."
+            )
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="jobs/scraper.complete",
+                    data={
+                        "session_id": session_id,
+                        "scraper_key_id": g.scraper_key.id
+                    }
+                )
+            )
+        
         failed_platforms = [
             {"platform": ps.platform_name, "error": ps.error_message}
             for ps in platform_statuses if ps.status == 'failed'

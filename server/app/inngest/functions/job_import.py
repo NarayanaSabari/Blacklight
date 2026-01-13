@@ -961,27 +961,60 @@ def aggregate_session_stats(session_id: str) -> Optional[Dict[str, Any]]:
     
     total_imported = 0
     total_skipped = 0
+    total_found = 0
     successful_platforms = 0
     failed_platforms = 0
     
+    # FIX: Count jobs from ALL platforms, not just "completed" ones
+    # A platform is considered successful if it has completed all batches OR has status "completed"
     for ps in platform_statuses:
-        if ps.status == "completed":
-            successful_platforms += 1
-            total_imported += ps.jobs_imported or 0
-            total_skipped += ps.jobs_skipped or 0
-        elif ps.status == "failed":
+        is_done = (
+            ps.status in ("completed", "failed", "skipped") or
+            (ps.completed_batches or 0) >= (ps.total_batches or 1)
+        )
+        
+        if ps.status == "failed":
             failed_platforms += 1
-        # Note: "skipped" status means platform was skipped by scraper
+        elif is_done:
+            # Count as successful if done (regardless of exact status)
+            successful_platforms += 1
+        
+        # Always accumulate job counts from the platform status
+        # These are tracked in update_platform_batch_status as batches complete
+        total_imported += ps.jobs_imported or 0
+        total_skipped += ps.jobs_skipped or 0
+        total_found += ps.jobs_found or 0
     
-    # Get job IDs for matching
+    # Get job IDs for matching - this is the source of truth for imported jobs
     jobs = JobPosting.query.filter_by(
         scrape_session_id=session.session_id
     ).with_entities(JobPosting.id).all()
     job_ids = [j.id for j in jobs]
     
+    # Use actual job count from DB as the most reliable source
+    # This handles any edge cases where platform counters might be off
+    actual_imported_count = len(job_ids)
+    
+    # Log if there's a mismatch for debugging
+    if actual_imported_count != total_imported:
+        logger.warning(
+            f"[JOB-IMPORT] Session {session_id} count mismatch: "
+            f"platform_status says {total_imported} imported, "
+            f"but found {actual_imported_count} actual JobPosting records. "
+            f"Using actual count."
+        )
+        total_imported = actual_imported_count
+    
+    logger.info(
+        f"[JOB-IMPORT] Aggregated stats for session {session_id}: "
+        f"{total_imported} imported, {total_skipped} skipped, "
+        f"{successful_platforms}/{len(platform_statuses)} platforms successful"
+    )
+    
     return {
         "total_imported": total_imported,
         "total_skipped": total_skipped,
+        "total_found": total_found,
         "successful_platforms": successful_platforms,
         "failed_platforms": failed_platforms,
         "total_platforms": len(platform_statuses),
@@ -1013,7 +1046,7 @@ def finalize_session(
     # Update session with final stats
     session.status = "completed"
     session.completed_at = datetime.utcnow()
-    session.jobs_found = session_stats["total_imported"] + session_stats["total_skipped"]
+    session.jobs_found = session_stats.get("total_found") or (session_stats["total_imported"] + session_stats["total_skipped"])
     session.jobs_imported = session_stats["total_imported"]
     session.jobs_skipped = session_stats["total_skipped"]
     session.platforms_completed = session_stats["successful_platforms"]
