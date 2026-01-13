@@ -724,6 +724,8 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
             candidate.notice_period = parsed_data['notice_period']
         if parsed_data.get('expected_salary'):
             candidate.expected_salary = parsed_data['expected_salary']
+        if parsed_data.get('visa_type'):
+            candidate.visa_type = parsed_data['visa_type']
         
         # Arrays
         if parsed_data.get('skills'):

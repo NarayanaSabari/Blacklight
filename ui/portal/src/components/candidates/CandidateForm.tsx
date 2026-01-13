@@ -132,6 +132,7 @@ export function CandidateForm({
         current_title: parsedData.current_title as string,
         total_experience_years: parsedData.total_experience_years as number,
         professional_summary: parsedData.professional_summary as string,
+        visa_type: parsedData.visa_type as string || '',
         skills: (parsedData.skills as string[]) || [],
         certifications: (parsedData.certifications as string[]) || [],
         languages: (parsedData.languages as string[]) || [],

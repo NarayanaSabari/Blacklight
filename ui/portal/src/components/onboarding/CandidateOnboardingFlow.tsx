@@ -32,6 +32,13 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
@@ -60,10 +67,26 @@ const professionalInfoSchema = z.object({
   position: z.string().optional(),
   experience_years: z.number().min(0).max(50).optional(),
   expected_salary: z.string().min(1, 'Expected pay rate is required'),
+  visa_type: z.string().optional(),
   skills: z.string().optional(),
   education: z.string().optional(),
   summary: z.string().min(50, 'Summary must be at least 50 characters').optional().or(z.literal('')),
 });
+
+const VISA_TYPES = [
+  'US Citizen',
+  'Green Card',
+  'H1B',
+  'H4 EAD',
+  'L1',
+  'L2 EAD',
+  'OPT',
+  'CPT',
+  'TN',
+  'O1',
+  'E2',
+  'Other',
+] as const;
 
 type PersonalInfoValues = z.infer<typeof personalInfoSchema>;
 type ProfessionalInfoValues = z.infer<typeof professionalInfoSchema>;
@@ -106,6 +129,7 @@ export function CandidateOnboardingFlow({
       position: '',
       experience_years: 0,
       expected_salary: '',
+      visa_type: '',
       skills: '',
       education: '',
       summary: '',
@@ -452,6 +476,30 @@ export function CandidateOnboardingFlow({
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={professionalForm.control}
+                    name="visa_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Work Authorization</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ''}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select work authorization" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {VISA_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </form>
               </Form>
             </div>
@@ -550,6 +598,7 @@ export function CandidateOnboardingFlow({
                 <ReviewSection title="Professional Information">
                   <ReviewItem label="Position" value={professionalForm.getValues('position') || 'Not provided'} />
                   <ReviewItem label="Experience" value={`${professionalForm.getValues('experience_years') || 0} years`} />
+                  <ReviewItem label="Work Authorization" value={professionalForm.getValues('visa_type') || 'Not provided'} />
                   <ReviewItem label="Skills" value={professionalForm.getValues('skills') || 'Not provided'} />
                   <ReviewItem label="Education" value={professionalForm.getValues('education') || 'Not provided'} />
                 </ReviewSection>
