@@ -222,6 +222,7 @@ def parse_resume_public():
                 # Additional fields
                 "notice_period": parsed_data.get('notice_period'),
                 "expected_salary": parsed_data.get('expected_salary'),
+                "visa_type": parsed_data.get('visa_type'),
                 "preferred_locations": parsed_data.get('preferred_locations', []),
             },
             "metadata": {

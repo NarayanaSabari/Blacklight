@@ -82,6 +82,7 @@ def create_candidate():
             total_experience_years=data.total_experience_years,
             notice_period=data.notice_period,
             expected_salary=data.expected_salary,
+            visa_type=data.visa_type,
             professional_summary=data.professional_summary,
             preferred_locations=data.preferred_locations or [],
             skills=data.skills or [],

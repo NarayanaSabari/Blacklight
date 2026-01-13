@@ -507,7 +507,7 @@ class CandidateService:
         allowed_fields = [
             'first_name', 'last_name', 'email', 'phone', 'full_name',
             'location', 'linkedin_url', 'portfolio_url', 'current_title',
-            'total_experience_years', 'notice_period', 'expected_salary',
+            'total_experience_years', 'notice_period', 'expected_salary', 'visa_type',
             'professional_summary', 'status', 'source',
             'skills', 'certifications', 'languages', 'preferred_locations',
             'education', 'work_experience', 'preferred_roles', 'suggested_roles',

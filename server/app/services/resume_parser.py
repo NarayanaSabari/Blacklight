@@ -60,6 +60,7 @@ class ResumeData(BaseModel):
     languages: List[str] = Field(default_factory=list, description="Languages spoken")
     notice_period: Optional[str] = Field(None, description="Notice period")
     expected_salary: Optional[str] = Field(None, description="Expected salary")
+    visa_type: Optional[str] = Field(None, description="Visa type / Work authorization")
     preferred_locations: List[str] = Field(default_factory=list, description="Preferred work locations")
 
 
@@ -432,6 +433,7 @@ OUTPUT REQUIREMENTS:
             'languages': [],
             'notice_period': None,
             'expected_salary': None,
+            'visa_type': None,
             'preferred_locations': [],
             'confidence_scores': {}
         }
@@ -520,6 +522,7 @@ OUTPUT REQUIREMENTS:
         merged['professional_summary'] = ai_data.get('professional_summary')
         merged['notice_period'] = ai_data.get('notice_period')
         merged['expected_salary'] = ai_data.get('expected_salary')
+        merged['visa_type'] = ai_data.get('visa_type')
         
         # Structured data (AI preferred)
         merged['skills'] = ai_data.get('skills', [])

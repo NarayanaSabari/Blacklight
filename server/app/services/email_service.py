@@ -455,6 +455,7 @@ class EmailService:
             exp_text = f"{exp_years} year{'s' if exp_years != 1 else ''}"
             professional_info += format_field("Experience", exp_text, 'total_experience_years')
         professional_info += format_field("Expected Salary", candidate_data.get('expected_salary'), 'expected_salary')
+        professional_info += format_field("Visa / Work Authorization", candidate_data.get('visa_type'), 'visa_type')
         
         # Summary
         summary_section = ""
