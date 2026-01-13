@@ -32,12 +32,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { resumeTailorApi } from '@/lib/resumeTailorApi';
-import type { ExportFormat, ResumeTemplate, TemplateInfo } from '@/types/tailoredResume';
+import type { ExportFormat, ResumeTemplate } from '@/types/tailoredResume';
 
 interface ExportDialogProps {
   open: boolean;

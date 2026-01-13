@@ -64,7 +64,7 @@ export function ExportMenu({ tailorId, candidateName, disabled }: ExportMenuProp
         ? `${candidateName.replace(/\s+/g, '_')}_tailored_resume.${FORMAT_CONFIG[format].extension}`
         : `tailored_resume.${FORMAT_CONFIG[format].extension}`;
       
-      await resumeTailorApi.downloadResume(tailorId, format, filename);
+      await resumeTailorApi.downloadResume(tailorId, format, 'modern', filename);
     },
     onSuccess: (_, format) => {
       toast.success(`Resume exported as ${FORMAT_CONFIG[format].label}`);
