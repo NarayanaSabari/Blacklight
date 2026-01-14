@@ -55,11 +55,15 @@ import {
   Filter,
   Database,
   Inbox,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { jobPostingApi, type JobSourceFilter, type JobPostingWithSource } from '@/lib/jobPostingApi';
 import { format } from 'date-fns';
 
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+
+type ViewMode = 'list' | 'grid';
 
 export function AllJobsPage() {
   const navigate = useNavigate();
@@ -77,6 +81,7 @@ export function AllJobsPage() {
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [page, setPage] = useState(initialPage);
   const [perPage, setPerPage] = useState(24);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // Update URL when filters change
   const updateUrl = (newParams: Record<string, string | undefined>) => {
@@ -289,19 +294,47 @@ export function AllJobsPage() {
                       </SelectContent>
                     </Select>
                   )}
+
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center border rounded-md bg-white">
+                    <Button
+                      variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-9 w-9 rounded-r-none"
+                      onClick={() => setViewMode('list')}
+                    >
+                      <List className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      className="h-9 w-9 rounded-l-none"
+                      onClick={() => setViewMode('grid')}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </CardHeader>
 
           <CardContent className="p-6">
-            {/* Jobs Grid */}
+            {/* Jobs Display */}
             {jobsLoading ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Skeleton key={i} className="h-56 w-full rounded-lg" />
-                ))}
-              </div>
+              viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} className="h-56 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                  ))}
+                </div>
+              )
             ) : jobs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="p-4 rounded-full bg-slate-100 mb-4">
@@ -318,64 +351,67 @@ export function AllJobsPage() {
               </div>
             ) : (
               <>
-                {/* Job Cards Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {jobs.map((job) => (
-                    <Card
-                      key={job.id}
-                      className="cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 group border"
-                      onClick={() => navigate(`/jobs/${job.id}`)}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-base line-clamp-2 group-hover:text-primary transition-colors">
-                              {job.title}
-                            </h3>
-                            <div className="flex items-center gap-2 mt-1.5">
-                              <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <span className="text-sm text-muted-foreground font-medium truncate">
-                                {job.company || 'Unknown Company'}
-                              </span>
+                {/* List View */}
+                {viewMode === 'list' ? (
+                  <div className="space-y-3">
+                    {jobs.map((job) => (
+                      <div
+                        key={job.id}
+                        className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:shadow-md hover:border-primary/50 transition-all bg-white group"
+                        onClick={() => navigate(`/jobs/${job.id}`)}
+                      >
+                        {/* Job Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-base group-hover:text-primary transition-colors truncate">
+                                {job.title}
+                              </h3>
+                              <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <Building2 className="h-4 w-4 flex-shrink-0" />
+                                  {job.company || 'Unknown Company'}
+                                </span>
+                                <span className="flex items-center gap-1.5 truncate">
+                                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                                  {job.location || 'Not specified'}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <DollarSign className="h-4 w-4 flex-shrink-0" />
+                                  {formatSalary(job)}
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                  <Clock className="h-4 w-4 flex-shrink-0" />
+                                  {formatDate(job.posted_date || job.created_at)}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            {getStatusBadge(job.status)}
-                            {getSourceBadge(job)}
-                          </div>
-                        </div>
-                      </CardHeader>
 
-                      <CardContent className="pt-0 space-y-3">
-                        {/* Job Details Grid */}
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{job.location || 'Not specified'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{formatSalary(job)}</span>
-                          </div>
-                          {job.is_remote && (
-                            <Badge variant="secondary" className="text-xs w-fit">
-                              Remote
-                            </Badge>
+                          {/* Skills Row */}
+                          {job.skills && job.skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {job.skills.slice(0, 6).map((skill, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs font-normal">
+                                  {skill}
+                                </Badge>
+                              ))}
+                              {job.skills.length > 6 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{job.skills.length - 6}
+                                </Badge>
+                              )}
+                            </div>
                           )}
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="truncate">{formatDate(job.posted_date || job.created_at)}</span>
-                          </div>
                         </div>
 
-                        {/* Sourced By (for email jobs) */}
+                        {/* Email Sourced Info */}
                         {job.is_email_sourced && job.sourced_by && (
-                          <div className="flex items-center gap-2 pt-2 border-t text-sm">
-                            <User className="h-4 w-4 text-purple-500 flex-shrink-0" />
-                            <span className="text-muted-foreground">Sourced by:</span>
+                          <div className="hidden md:flex items-center gap-2 text-sm px-3 py-1.5 bg-purple-50 rounded-md">
+                            <User className="h-4 w-4 text-purple-500" />
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <span className="font-medium text-purple-700 truncate">
+                                <span className="font-medium text-purple-700 truncate max-w-[120px]">
                                   {job.sourced_by.first_name || job.sourced_by.last_name 
                                     ? `${job.sourced_by.first_name || ''} ${job.sourced_by.last_name || ''}`.trim()
                                     : job.sourced_by.email}
@@ -388,50 +424,157 @@ export function AllJobsPage() {
                           </div>
                         )}
 
-                        {/* Skills */}
-                        {job.skills && job.skills.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-2 border-t">
-                            {job.skills.slice(0, 4).map((skill, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs font-normal">
-                                {skill}
-                              </Badge>
-                            ))}
-                            {job.skills.length > 4 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{job.skills.length - 4}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
+                        {/* Badges */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {job.is_remote && (
+                            <Badge variant="secondary" className="text-xs">
+                              Remote
+                            </Badge>
+                          )}
+                          {getStatusBadge(job.status)}
+                          {getSourceBadge(job)}
+                        </div>
 
-                        {/* Footer */}
-                        <div className="flex items-center justify-between pt-2 border-t">
-                          <div className="text-xs text-muted-foreground">
-                            {job.job_type || 'Full-time'}
-                          </div>
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {job.job_url && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 px-2"
+                                  className="h-8 w-8 p-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     window.open(job.job_url!, '_blank');
                                   }}
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <ExternalLink className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Open original posting</TooltipContent>
                             </Tooltip>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Grid View */
+                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {jobs.map((job) => (
+                      <Card
+                        key={job.id}
+                        className="cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 group border"
+                        onClick={() => navigate(`/jobs/${job.id}`)}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-base line-clamp-2 group-hover:text-primary transition-colors">
+                                {job.title}
+                              </h3>
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <span className="text-sm text-muted-foreground font-medium truncate">
+                                  {job.company || 'Unknown Company'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                              {getStatusBadge(job.status)}
+                              {getSourceBadge(job)}
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                        <CardContent className="pt-0 space-y-3">
+                          {/* Job Details Grid */}
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">{job.location || 'Not specified'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">{formatSalary(job)}</span>
+                            </div>
+                            {job.is_remote && (
+                              <Badge variant="secondary" className="text-xs w-fit">
+                                Remote
+                              </Badge>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">{formatDate(job.posted_date || job.created_at)}</span>
+                            </div>
+                          </div>
+
+                          {/* Sourced By (for email jobs) */}
+                          {job.is_email_sourced && job.sourced_by && (
+                            <div className="flex items-center gap-2 pt-2 border-t text-sm">
+                              <User className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">Sourced by:</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-medium text-purple-700 truncate">
+                                    {job.sourced_by.first_name || job.sourced_by.last_name 
+                                      ? `${job.sourced_by.first_name || ''} ${job.sourced_by.last_name || ''}`.trim()
+                                      : job.sourced_by.email}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {job.sourced_by.email}
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          )}
+
+                          {/* Skills */}
+                          {job.skills && job.skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-2 border-t">
+                              {job.skills.slice(0, 4).map((skill, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs font-normal">
+                                  {skill}
+                                </Badge>
+                              ))}
+                              {job.skills.length > 4 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{job.skills.length - 4}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Footer */}
+                          <div className="flex items-center justify-between pt-2 border-t">
+                            <div className="text-xs text-muted-foreground">
+                              {job.job_type || 'Full-time'}
+                            </div>
+                            {job.job_url && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(job.job_url!, '_blank');
+                                    }}
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Open original posting</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
 
                 {/* Pagination */}
                 {totalPages > 1 && (

@@ -44,6 +44,10 @@ logger = logging.getLogger(__name__)
 # Redis cache TTL for tenant roles (1 hour)
 TENANT_ROLES_CACHE_TTL = 3600
 
+# Gmail Batch API limit is 1000 requests per batch
+# Using 100 for safety margin, better error isolation, and lower memory pressure
+GMAIL_BATCH_SIZE = 100
+
 
 class EmailSyncService:
     """Service for syncing and filtering job-related emails.
@@ -513,10 +517,11 @@ class EmailSyncService:
         message_ids: list[str],
     ) -> list[dict]:
         """
-        Fetch multiple Gmail messages using batch API.
+        Fetch multiple Gmail messages using batch API with chunking.
         
-        Phase 2: Batch requests reduce N API calls to 1.
+        Phase 2: Batch requests reduce N API calls to ceil(N/GMAIL_BATCH_SIZE).
         Phase 7: Protected by circuit breaker for fault tolerance.
+        Phase 8: Chunked batches to avoid Google's 1000 request limit.
         
         Args:
             service: Gmail API service
@@ -527,43 +532,65 @@ class EmailSyncService:
         """
         from googleapiclient.http import BatchHttpRequest
         
-        emails = []
-        errors = []
+        all_emails = []
+        all_errors = []
+        total_messages = len(message_ids)
+        total_chunks = (total_messages + GMAIL_BATCH_SIZE - 1) // GMAIL_BATCH_SIZE
         
-        def handle_message(request_id, response, exception):
-            """Callback for batch request."""
-            if exception:
-                errors.append({"id": request_id, "error": str(exception)})
-                return
+        logger.info(f"Fetching {total_messages} messages in {total_chunks} batch(es) of up to {GMAIL_BATCH_SIZE}")
+        
+        # Process message_ids in chunks to avoid Google's 1000 request limit
+        for chunk_index in range(0, total_messages, GMAIL_BATCH_SIZE):
+            chunk = message_ids[chunk_index:chunk_index + GMAIL_BATCH_SIZE]
+            chunk_num = (chunk_index // GMAIL_BATCH_SIZE) + 1
+            chunk_emails = []
+            chunk_errors = []
             
-            try:
-                email = self._parse_gmail_message(response)
-                if email:
-                    emails.append(email)
-            except Exception as e:
-                errors.append({"id": request_id, "error": str(e)})
-        
-        # Create batch request
-        batch = service.new_batch_http_request(callback=handle_message)
-        
-        for msg_id in message_ids:
-            batch.add(
-                service.users().messages().get(
-                    userId="me",
-                    id=msg_id,
-                    format="full",
-                ),
-                request_id=msg_id,
+            def make_callback(emails_list, errors_list):
+                """Create a callback closure for this chunk."""
+                def handle_message(request_id, response, exception):
+                    if exception:
+                        errors_list.append({"id": request_id, "error": str(exception)})
+                        return
+                    try:
+                        email = self._parse_gmail_message(response)
+                        if email:
+                            emails_list.append(email)
+                    except Exception as e:
+                        errors_list.append({"id": request_id, "error": str(e)})
+                return handle_message
+            
+            # Create batch request for this chunk
+            batch = service.new_batch_http_request(
+                callback=make_callback(chunk_emails, chunk_errors)
+            )
+            
+            for msg_id in chunk:
+                batch.add(
+                    service.users().messages().get(
+                        userId="me",
+                        id=msg_id,
+                        format="full",
+                    ),
+                    request_id=msg_id,
+                )
+            
+            # Execute this chunk's batch request
+            batch.execute()
+            
+            all_emails.extend(chunk_emails)
+            all_errors.extend(chunk_errors)
+            
+            logger.info(
+                f"Batch {chunk_num}/{total_chunks}: fetched {len(chunk_emails)} emails "
+                f"from {len(chunk)} IDs ({len(chunk_errors)} errors)"
             )
         
-        # Execute batch request
-        batch.execute()
+        if all_errors:
+            logger.warning(f"Batch fetch had {len(all_errors)} total errors: {all_errors[:5]}")
         
-        if errors:
-            logger.warning(f"Batch fetch had {len(errors)} errors: {errors[:3]}")
-        
-        logger.info(f"Batch fetched {len(emails)} emails from {len(message_ids)} IDs")
-        return emails
+        logger.info(f"Batch fetched {len(all_emails)} emails from {total_messages} IDs total")
+        return all_emails
     
     def _parse_gmail_message(self, message: dict) -> Optional[dict]:
         """Parse Gmail message into email dictionary."""
