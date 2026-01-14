@@ -20,6 +20,7 @@ from typing import Dict, List, Any, Optional
 from uuid import UUID
 import inngest
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models.scrape_session import ScrapeSession
@@ -334,6 +335,10 @@ def import_jobs_batch_for_platform(
         return value
     
     for idx, job_data in enumerate(jobs_data):
+        # Use a savepoint for each job so failures don't rollback previous jobs
+        # This is critical - without this, one bad job rolls back ALL jobs in the batch
+        savepoint = db.session.begin_nested()
+        
         # Create job log entry for tracking
         job_log = SessionJobLog.log_job(
             session_id=UUID(session_data["session_id"]),
@@ -370,6 +375,7 @@ def import_jobs_batch_for_platform(
                     reason="missing_required",
                     detail=f"Missing required field: {'title' if not title else 'company'}"
                 )
+                savepoint.commit()  # Commit the skip log entry
                 skipped_count += 1
                 skip_reasons["missing_required"] += 1
                 continue
@@ -391,6 +397,7 @@ def import_jobs_batch_for_platform(
                         reason="duplicate_in_batch",
                         detail=f"Duplicate within same batch: platform '{platform}' and external_job_id '{external_id}'"
                     )
+                    savepoint.commit()  # Commit the skip log entry
                     skipped_count += 1
                     skip_reasons["duplicate_in_batch"] += 1
                     continue
@@ -409,6 +416,7 @@ def import_jobs_batch_for_platform(
                         detail=f"Exact duplicate: same platform '{platform}' and external_job_id '{external_id}'",
                         duplicate_job_id=existing.id
                     )
+                    savepoint.commit()  # Commit the skip log entry
                     skipped_count += 1
                     skip_reasons["duplicate_platform_id"] += 1
                     continue
@@ -429,6 +437,7 @@ def import_jobs_batch_for_platform(
                     reason="duplicate_in_batch",
                     detail=f"Duplicate within same batch: '{title}' at '{company}' in '{location}'"
                 )
+                savepoint.commit()  # Commit the skip log entry
                 skipped_count += 1
                 skip_reasons["duplicate_in_batch"] += 1
                 continue
@@ -468,6 +477,7 @@ def import_jobs_batch_for_platform(
                     detail=f"Duplicate by title+company+location: '{title}' at '{company}' in '{location}'",
                     duplicate_job_id=existing_by_content.id
                 )
+                savepoint.commit()  # Commit the skip log entry
                 skipped_count += 1
                 skip_reasons["duplicate_title_company_location"] += 1
                 continue
@@ -493,6 +503,7 @@ def import_jobs_batch_for_platform(
                         detail=f"Duplicate by title+company+description: '{title}' at '{company}' - same description prefix",
                         duplicate_job_id=existing_similar.id
                     )
+                    savepoint.commit()  # Commit the skip log entry
                     skipped_count += 1
                     skip_reasons["duplicate_title_company_description"] += 1
                     continue
@@ -586,18 +597,96 @@ def import_jobs_batch_for_platform(
             job_ids.append(job.id)
             imported_count += 1
             
+            # Commit the savepoint (releases the savepoint, keeps changes)
+            savepoint.commit()
+            
             # Log progress every 10 jobs
             if (idx + 1) % 10 == 0:
                 logger.info(f"[JOB-IMPORT] Progress: {idx+1}/{len(jobs_data)} processed")
             
+        except IntegrityError as e:
+            # Handle race condition: parallel batches inserting the same job
+            # This happens when multiple Inngest batches try to insert jobs with
+            # the same external_job_id simultaneously - the check-then-insert fails
+            error_msg = str(e)
+            is_unique_violation = "unique" in error_msg.lower() or "duplicate" in error_msg.lower()
+            
+            # Rollback the savepoint
+            try:
+                savepoint.rollback()
+            except Exception:
+                db.session.rollback()
+            
+            if is_unique_violation:
+                # Treat as a duplicate skip, not an error
+                logger.info(
+                    f"[JOB-IMPORT] Race condition duplicate detected for job {idx+1}: "
+                    f"'{job_data.get('title', 'Unknown')}' - already inserted by parallel batch"
+                )
+                
+                # Log as skipped due to race condition duplicate
+                try:
+                    skip_savepoint = db.session.begin_nested()
+                    skip_job_log = SessionJobLog.log_job(
+                        session_id=UUID(session_data["session_id"]),
+                        platform_name=platform_name,
+                        job_index=idx,
+                        raw_job_data=job_data,
+                        platform_status_id=session_data.get("platform_status_id")
+                    )
+                    skip_job_log.mark_skipped(
+                        reason="duplicate_race_condition",
+                        detail=f"Duplicate detected via database constraint (parallel batch race): {job_data.get('title', 'Unknown')}"
+                    )
+                    skip_savepoint.commit()
+                except Exception as log_error:
+                    logger.warning(f"[JOB-IMPORT] Failed to log skip for job {idx+1}: {log_error}")
+                    try:
+                        skip_savepoint.rollback()
+                    except Exception:
+                        pass
+                
+                skipped_count += 1
+                skip_reasons["duplicate_race_condition"] = skip_reasons.get("duplicate_race_condition", 0) + 1
+            else:
+                # Other IntegrityError - log as error
+                logger.error(f"[JOB-IMPORT] IntegrityError for job {idx+1}: {error_msg}")
+                try:
+                    error_savepoint = db.session.begin_nested()
+                    error_job_log = SessionJobLog.log_job(
+                        session_id=UUID(session_data["session_id"]),
+                        platform_name=platform_name,
+                        job_index=idx,
+                        raw_job_data=job_data,
+                        platform_status_id=session_data.get("platform_status_id")
+                    )
+                    error_job_log.mark_error(error_msg)
+                    error_savepoint.commit()
+                except Exception as log_error:
+                    logger.warning(f"[JOB-IMPORT] Failed to log error for job {idx+1}: {log_error}")
+                    try:
+                        error_savepoint.rollback()
+                    except Exception:
+                        pass
+                
+                skipped_count += 1
+                skip_reasons["error"] += 1
+                
         except Exception as e:
             error_msg = str(e)
             logger.error(f"[JOB-IMPORT] Failed to import job {idx+1}: {error_msg}")
-            # Rollback the current transaction to clear the failed state
-            # This is critical - without this, subsequent operations will fail
-            db.session.rollback()
-            # Re-create job log since rollback detached the previous one
+            
+            # Rollback only the current savepoint, not the entire transaction
+            # This preserves all previously successful jobs
             try:
+                savepoint.rollback()
+            except Exception:
+                # Savepoint might already be invalid, try full rollback as fallback
+                db.session.rollback()
+            
+            # Create error log entry in a new savepoint
+            try:
+                error_savepoint = db.session.begin_nested()
                 error_job_log = SessionJobLog.log_job(
                     session_id=UUID(session_data["session_id"]),
                     platform_name=platform_name,
@@ -606,10 +695,14 @@ def import_jobs_batch_for_platform(
                     platform_status_id=session_data.get("platform_status_id")
                 )
                 error_job_log.mark_error(error_msg)
-                db.session.commit()
+                error_savepoint.commit()
             except Exception as log_error:
                 logger.warning(f"[JOB-IMPORT] Failed to log error for job {idx+1}: {log_error}")
-                db.session.rollback()
+                try:
+                    error_savepoint.rollback()
+                except Exception:
+                    pass
+            
             skipped_count += 1
             skip_reasons["error"] += 1
     

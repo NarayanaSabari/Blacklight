@@ -555,6 +555,20 @@ export function SessionDetailPage() {
                                 </p>
                               </TooltipContent>
                             </Tooltip>
+                          ) : job.status === 'error' ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="destructive" className="text-xs cursor-help">
+                                  Error
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-80">
+                                <p className="font-medium text-red-600">Import Error</p>
+                                <p className="text-xs text-muted-foreground mt-1 break-words">
+                                  {job.errorMessage || 'Unknown error occurred during import'}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
                           ) : job.status === 'imported' ? (
                             <span className="text-xs text-green-600">New job added</span>
                           ) : null}
@@ -669,6 +683,28 @@ export function SessionDetailPage() {
                         <p className="text-sm text-green-700 dark:text-green-300 mt-1">
                           This job was new and has been added to the database.
                         </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Banner */}
+                {selectedJobLog?.status === 'error' && (
+                  <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium text-red-800 dark:text-red-200">
+                          Import Failed
+                        </p>
+                        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                          This job could not be imported due to an error.
+                        </p>
+                        {selectedJobLog.errorMessage && (
+                          <div className="mt-2 p-2 bg-red-100 dark:bg-red-900 rounded text-xs font-mono text-red-800 dark:text-red-200 max-h-32 overflow-auto whitespace-pre-wrap break-words">
+                            {selectedJobLog.errorMessage}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
