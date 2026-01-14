@@ -252,7 +252,12 @@ class ScrapeQueueService:
                 f"Complete or terminate the current session before requesting a new role."
             )
         
-        # Find approved roles ready for scraping, prioritized by priority + candidate_count
+        # Find approved roles with round-robin rotation:
+        # 1. Priority (urgent > high > normal > low)
+        # 2. Last scraped (oldest/never scraped first) - enables rotation through all roles
+        # 3. Candidate count (higher = more demand)
+        # Use FOR UPDATE SKIP LOCKED to prevent race conditions when multiple scrapers
+        # call this endpoint simultaneously - each will get a different role
         role = GlobalRole.query.filter(
             GlobalRole.queue_status == "approved"
         ).order_by(
@@ -262,8 +267,10 @@ class ScrapeQueueService:
                 (GlobalRole.priority == "normal", 2),
                 (GlobalRole.priority == "low", 1),
             ).desc(),
+            # NULLS FIRST: roles never scraped get priority, then oldest scraped
+            GlobalRole.last_scraped_at.asc().nulls_first(),
             GlobalRole.candidate_count.desc()
-        ).first()
+        ).with_for_update(skip_locked=True).first()
         
         if not role:
             logger.info("Scrape queue is empty - no approved roles")
@@ -374,7 +381,12 @@ class ScrapeQueueService:
                 f"Complete or terminate the current session before requesting a new role."
             )
         
-        # Find approved role+location entries, prioritized by priority + candidate_count
+        # Find approved role+location entries with round-robin rotation:
+        # 1. Priority (urgent > high > normal > low)
+        # 2. Last scraped (oldest/never scraped first) - enables rotation through all entries
+        # 3. Candidate count (higher = more demand)
+        # Use FOR UPDATE SKIP LOCKED to prevent race conditions when multiple scrapers
+        # call this endpoint simultaneously - each will get a different entry
         queue_entry = db.session.query(RoleLocationQueue).filter(
             RoleLocationQueue.queue_status == "approved"
         ).order_by(
@@ -384,8 +396,10 @@ class ScrapeQueueService:
                 (RoleLocationQueue.priority == "normal", 2),
                 (RoleLocationQueue.priority == "low", 1),
             ).desc(),
+            # NULLS FIRST: entries never scraped get priority, then oldest scraped
+            RoleLocationQueue.last_scraped_at.asc().nulls_first(),
             RoleLocationQueue.candidate_count.desc()
-        ).first()
+        ).with_for_update(skip_locked=True).first()
         
         if not queue_entry:
             logger.info("Role+location queue is empty - no approved entries")
