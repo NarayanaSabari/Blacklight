@@ -841,76 +841,98 @@ def update_platform_batch_status(
     Returns:
         Dict with platform_completed flag and totals
     """
-    platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+    from sqlalchemy import text
     
-    if not platform_status:
+    # Use atomic SQL UPDATE to avoid race conditions with concurrent batches
+    # Multiple Inngest workers may process batches simultaneously
+    update_stmt = text("""
+        UPDATE session_platform_status 
+        SET 
+            jobs_found = COALESCE(jobs_found, 0) + :jobs_found,
+            jobs_imported = COALESCE(jobs_imported, 0) + :jobs_imported,
+            jobs_skipped = COALESCE(jobs_skipped, 0) + :jobs_skipped,
+            completed_batches = COALESCE(completed_batches, 0) + 1,
+            total_batches = GREATEST(COALESCE(total_batches, 0), :total_batches)
+        WHERE id = :platform_status_id
+        RETURNING id, jobs_found, jobs_imported, jobs_skipped, completed_batches, total_batches, status
+    """)
+    
+    result = db.session.execute(update_stmt, {
+        "platform_status_id": platform_status_id,
+        "jobs_found": jobs_found,
+        "jobs_imported": jobs_imported,
+        "jobs_skipped": jobs_skipped,
+        "total_batches": total_batches
+    })
+    
+    row = result.fetchone()
+    if not row:
         logger.error(f"[JOB-IMPORT] Platform status {platform_status_id} not found")
         return {"platform_completed": False, "error": "Platform status not found"}
     
-    # Accumulate job counts from this batch
-    platform_status.jobs_found = (platform_status.jobs_found or 0) + jobs_found
-    platform_status.jobs_imported = (platform_status.jobs_imported or 0) + jobs_imported
-    platform_status.jobs_skipped = (platform_status.jobs_skipped or 0) + jobs_skipped
+    # Unpack the returned values
+    _, current_jobs_found, current_jobs_imported, current_jobs_skipped, current_completed_batches, current_total_batches, current_status = row
     
-    # Increment completed batch counter
-    platform_status.completed_batches = (platform_status.completed_batches or 0) + 1
-    
-    # Ensure total_batches is set (in case of legacy events without batch info)
-    if not platform_status.total_batches or platform_status.total_batches < total_batches:
-        platform_status.total_batches = total_batches
+    logger.info(
+        f"[JOB-IMPORT] Batch update: platform_status={platform_status_id}, "
+        f"completed_batches={current_completed_batches}/{current_total_batches}, "
+        f"jobs_found={current_jobs_found}, imported={current_jobs_imported}, skipped={current_jobs_skipped}"
+    )
     
     # Check if all batches are complete
-    all_batches_complete = platform_status.completed_batches >= platform_status.total_batches
+    all_batches_complete = current_completed_batches >= current_total_batches
     
     should_trigger_session_complete = False
     
-    if all_batches_complete:
-        # Mark platform as completed
-        platform_status.status = "completed"
-        platform_status.completed_at = datetime.utcnow()
+    if all_batches_complete and current_status != 'completed':
+        # Mark platform as completed - need to fetch and update the object
+        platform_status = db.session.get(SessionPlatformStatus, platform_status_id)
+        if platform_status:
+            platform_status.status = "completed"
+            platform_status.completed_at = datetime.utcnow()
         
-        # Update session progress counters (only once when fully complete)
-        session = ScrapeSession.query.filter_by(
-            session_id=UUID(session_id),
-            scraper_key_id=scraper_key_id
-        ).first()
-        
-        if session:
-            session.platforms_completed = (session.platforms_completed or 0) + 1
-            session.jobs_found = (session.jobs_found or 0) + platform_status.jobs_found
-            session.jobs_imported = (session.jobs_imported or 0) + platform_status.jobs_imported
-            session.jobs_skipped = (session.jobs_skipped or 0) + platform_status.jobs_skipped
+            # Update session progress counters (only once when fully complete)
+            session = ScrapeSession.query.filter_by(
+                session_id=UUID(session_id),
+                scraper_key_id=scraper_key_id
+            ).first()
             
-            # Check if session is pending_completion and ALL platforms are now done
-            # This triggers session completion from the last batch to finish
-            if session.status == 'pending_completion':
-                # Get all platform statuses for this session
-                all_platform_statuses = SessionPlatformStatus.query.filter_by(
-                    session_id=session.session_id
-                ).all()
+            if session:
+                session.platforms_completed = (session.platforms_completed or 0) + 1
+                session.jobs_found = (session.jobs_found or 0) + current_jobs_found
+                session.jobs_imported = (session.jobs_imported or 0) + current_jobs_imported
+                session.jobs_skipped = (session.jobs_skipped or 0) + current_jobs_skipped
                 
-                all_platforms_done = all(
-                    ps.status in ('completed', 'failed', 'skipped') or
-                    (ps.completed_batches or 0) >= (ps.total_batches or 1)
-                    for ps in all_platform_statuses
-                )
-                
-                if all_platforms_done:
-                    should_trigger_session_complete = True
-                    logger.info(
-                        f"[JOB-IMPORT] All platforms done for session {session_id}. "
-                        f"Triggering session completion."
+                # Check if session is pending_completion and ALL platforms are now done
+                # This triggers session completion from the last batch to finish
+                if session.status == 'pending_completion':
+                    # Get all platform statuses for this session
+                    all_platform_statuses = SessionPlatformStatus.query.filter_by(
+                        session_id=session.session_id
+                    ).all()
+                    
+                    all_platforms_done = all(
+                        ps.status in ('completed', 'failed', 'skipped') or
+                        (ps.completed_batches or 0) >= (ps.total_batches or 1)
+                        for ps in all_platform_statuses
                     )
-        
-        logger.info(
-            f"[JOB-IMPORT] Platform {platform_status_id} fully completed "
-            f"({platform_status.completed_batches}/{platform_status.total_batches} batches): "
-            f"{platform_status.jobs_imported} imported, {platform_status.jobs_skipped} skipped"
-        )
+                    
+                    if all_platforms_done:
+                        should_trigger_session_complete = True
+                        logger.info(
+                            f"[JOB-IMPORT] All platforms done for session {session_id}. "
+                            f"Triggering session completion."
+                        )
+            
+            logger.info(
+                f"[JOB-IMPORT] Platform {platform_status_id} fully completed "
+                f"({current_completed_batches}/{current_total_batches} batches): "
+                f"{current_jobs_imported} imported, {current_jobs_skipped} skipped"
+            )
     else:
         logger.info(
             f"[JOB-IMPORT] Platform {platform_status_id} batch {batch_index + 1} complete "
-            f"({platform_status.completed_batches}/{platform_status.total_batches} batches done)"
+            f"({current_completed_batches}/{current_total_batches} batches done)"
         )
     
     db.session.commit()
@@ -933,10 +955,10 @@ def update_platform_batch_status(
     
     return {
         "platform_completed": all_batches_complete,
-        "completed_batches": platform_status.completed_batches,
-        "total_batches": platform_status.total_batches,
-        "total_imported": platform_status.jobs_imported,
-        "total_skipped": platform_status.jobs_skipped,
+        "completed_batches": current_completed_batches,
+        "total_batches": current_total_batches,
+        "total_imported": current_jobs_imported,
+        "total_skipped": current_jobs_skipped,
         "session_complete_triggered": should_trigger_session_complete
     }
 
