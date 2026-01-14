@@ -57,6 +57,8 @@ import {
   ArrowLeft,
   UserCog,
   Mail,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api-client';
 import { jobMatchApi } from '@/lib/jobMatchApi';
@@ -139,6 +141,7 @@ export function TeamJobsPage() {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
   const [selectedSource, setSelectedSource] = useState<'all' | 'email' | 'scraped'>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const AVAILABLE_GRADES = ['A+', 'A', 'B+', 'B', 'C+', 'C'] as const;
 
   // Submission dialog state
@@ -656,6 +659,161 @@ export function TeamJobsPage() {
     );
   };
 
+  // Render job match as list row (compact view)
+  const renderJobRow = (match: JobMatch) => {
+    const job = match.job || match.job_posting;
+    if (!job) return null;
+    
+    const grade = (match.match_grade as MatchGrade) || calculateGrade(match.match_score);
+    const gradeConfig = GRADE_CONFIG[grade] || GRADE_CONFIG['C'];
+    const matchedCount = match.matched_skills?.length || 0;
+
+    return (
+      <div
+        key={match.id ?? match.job_posting_id ?? job.id}
+        className="flex items-center gap-4 p-4 border-b hover:bg-muted/50 cursor-pointer transition-colors group"
+        onClick={() => handleRowClick(match)}
+      >
+        {/* Grade & Score */}
+        <div className="flex flex-col items-center gap-0.5 w-14 flex-shrink-0">
+          <Badge className={`${gradeConfig.bgClass} ${gradeConfig.colorClass} font-bold text-xs px-2 py-0.5`}>
+            {gradeConfig.label}
+          </Badge>
+          <span className={`text-sm font-semibold ${getScoreColor(match.match_score)}`}>
+            {Math.round(match.match_score)}%
+          </span>
+        </div>
+
+        {/* Job Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-2">
+            <h3 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
+              {job.title}
+            </h3>
+            {job.is_email_sourced && (
+              <Badge className="bg-purple-100 text-purple-700 text-xs px-1.5 py-0 flex-shrink-0">
+                <Mail className="h-3 w-3 mr-1" />
+                Email
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Building2 className="h-3 w-3" />
+              {job.company}
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {job.location || 'Not specified'}
+              {job.is_remote && <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">Remote</Badge>}
+            </span>
+            {job.platform && (
+              <span className="flex items-center gap-1">
+                <Globe className="h-3 w-3" />
+                {job.platform}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Salary */}
+        <div className="w-28 flex-shrink-0 text-right">
+          <div className="flex items-center justify-end gap-1 text-sm">
+            <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{formatSalary(job.salary_min, job.salary_max, job.salary_range)}</span>
+          </div>
+        </div>
+
+        {/* Skills Summary */}
+        <div className="w-24 flex-shrink-0 text-center">
+          {matchedCount > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center justify-center gap-1 text-sm text-green-600">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>{matchedCount} skills</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="max-w-xs">
+                  <p className="font-medium mb-1">Matched Skills:</p>
+                  <p className="text-xs">{match.matched_skills?.join(', ')}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+
+        {/* Posted Date */}
+        <div className="w-24 flex-shrink-0 text-xs text-muted-foreground text-right">
+          {job.posted_date && (
+            <span>{format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {job.job_url && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (job.job_url) window.open(job.job_url, '_blank');
+                  }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open job posting</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedJobForSubmission({
+                    jobId: job.id,
+                    jobTitle: job.title,
+                    company: job.company,
+                  });
+                  setSubmissionDialogOpen(true);
+                }}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Submit candidate</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/candidate/jobs/${selectedCandidateId}/job/${job.id}`);
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Tailor resume</TooltipContent>
+          </Tooltip>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+    );
+  };
+
   // ============ MAIN RENDER ============
 
   // Determine if we should show candidates column
@@ -910,6 +1068,36 @@ export function TeamJobsPage() {
                         }
                       </Badge>
 
+                      {/* View Toggle */}
+                      <div className="flex items-center border rounded-md">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+                              size="sm"
+                              className="h-8 px-2 rounded-r-none"
+                              onClick={() => setViewMode('grid')}
+                            >
+                              <LayoutGrid className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Grid View</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+                              size="sm"
+                              className="h-8 px-2 rounded-l-none border-l"
+                              onClick={() => setViewMode('list')}
+                            >
+                              <List className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>List View</TooltipContent>
+                        </Tooltip>
+                      </div>
+
                       {/* Filter Popover */}
                       <Popover>
                         <PopoverTrigger asChild>
@@ -1074,14 +1262,22 @@ export function TeamJobsPage() {
                   )}
                 </CardHeader>
 
-                {/* Job Cards */}
+                {/* Job Cards/List */}
                 <div className="flex-1 overflow-auto p-4">
                   {loadingMatches ? (
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} className="h-64 w-full rounded-lg" />
-                      ))}
-                    </div>
+                    viewMode === 'grid' ? (
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        {[1, 2, 3, 4].map((i) => (
+                          <Skeleton key={i} className="h-64 w-full rounded-lg" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Skeleton key={i} className="h-16 w-full border-b last:border-b-0" />
+                        ))}
+                      </div>
+                    )
                   ) : matchesError ? (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
@@ -1106,9 +1302,22 @@ export function TeamJobsPage() {
                         Jobs will appear here once they are matched to this candidate's roles
                       </p>
                     </div>
-                  ) : (
+                  ) : viewMode === 'grid' ? (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       {matches.map(renderJobCard)}
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg bg-background">
+                      {/* List Header */}
+                      <div className="flex items-center gap-4 px-4 py-2 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
+                        <div className="w-14 flex-shrink-0 text-center">Grade</div>
+                        <div className="flex-1">Job Details</div>
+                        <div className="w-28 flex-shrink-0 text-right">Salary</div>
+                        <div className="w-24 flex-shrink-0 text-center">Skills</div>
+                        <div className="w-24 flex-shrink-0 text-right">Posted</div>
+                        <div className="w-28 flex-shrink-0 text-right">Actions</div>
+                      </div>
+                      {matches.map(renderJobRow)}
                     </div>
                   )}
                 </div>
