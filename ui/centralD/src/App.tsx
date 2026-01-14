@@ -27,7 +27,12 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { AdminsPage } from '@/pages/AdminsPage';
 import { JobsPage } from '@/pages/JobsPage';
 import { SessionDetailPage } from '@/pages/SessionDetailPage';
-import { CredentialsPage } from '@/pages/CredentialsPage';
+import { 
+  CredentialsLayout, 
+  LinkedInCredentialsPage, 
+  GlassdoorCredentialsPage, 
+  TechfetchCredentialsPage 
+} from '@/pages/Credentials';
 import { env } from '@/lib/env';
 
 // Create React Query client
@@ -71,7 +76,12 @@ function App() {
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admins" element={<AdminsPage />} />
                 <Route path="/jobs" element={<JobsPage />} />
-                <Route path="/credentials" element={<CredentialsPage />} />
+                <Route path="/credentials" element={<CredentialsLayout />}>
+                  <Route index element={<Navigate to="/credentials/linkedin" replace />} />
+                  <Route path="linkedin" element={<LinkedInCredentialsPage />} />
+                  <Route path="glassdoor" element={<GlassdoorCredentialsPage />} />
+                  <Route path="techfetch" element={<TechfetchCredentialsPage />} />
+                </Route>
                 <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
               </Route>
             </Route>
