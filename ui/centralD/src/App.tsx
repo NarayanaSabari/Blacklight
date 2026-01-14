@@ -16,11 +16,14 @@ import {
   ApiKeysPage, 
   JobsOverviewPage, 
   QueuePage, 
-  PlatformsPage,
+  PlatformsPage
+} from '@/pages/Dashboard';
+import {
+  ScraperLayout,
   ActiveSessionsPage,
   RecentActivityPage,
   LocationAnalyticsPage
-} from '@/pages/Dashboard';
+} from '@/pages/Scraper';
 import { TenantsPage } from '@/pages/TenantsPage';
 import { CreateTenantPage } from '@/pages/CreateTenantPage';
 import { TenantDetailPage } from '@/pages/TenantDetailPage';
@@ -65,18 +68,20 @@ function App() {
                 {/* Dashboard with nested sub-routes */}
                 <Route path="/dashboard" element={<DashboardLayout />}>
                   <Route index element={<OverviewPage />} />
-                  {/* Scraper monitoring nested routes */}
-                  <Route path="scraper">
-                    <Route index element={<Navigate to="active" replace />} />
-                    <Route path="active" element={<ActiveSessionsPage />} />
-                    <Route path="recent" element={<RecentActivityPage />} />
-                    <Route path="locations" element={<LocationAnalyticsPage />} />
-                  </Route>
                   <Route path="api-keys" element={<ApiKeysPage />} />
                   <Route path="jobs" element={<JobsOverviewPage />} />
                   <Route path="queue" element={<QueuePage />} />
                   <Route path="platforms" element={<PlatformsPage />} />
                 </Route>
+
+                {/* Scraper monitoring with nested sub-routes */}
+                <Route path="/scraper" element={<ScraperLayout />}>
+                  <Route index element={<Navigate to="active" replace />} />
+                  <Route path="active" element={<ActiveSessionsPage />} />
+                  <Route path="recent" element={<RecentActivityPage />} />
+                  <Route path="locations" element={<LocationAnalyticsPage />} />
+                </Route>
+
                 <Route path="/tenants" element={<TenantsPage />} />
                 <Route path="/tenants/new" element={<CreateTenantPage />} />
                 <Route path="/tenants/:slug" element={<TenantDetailPage />} />

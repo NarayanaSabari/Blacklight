@@ -1,6 +1,6 @@
 /**
  * Application Layout with Sidebar Navigation
- * Features collapsible Dashboard dropdown with sub-navigation items
+ * Features collapsible dropdowns for Dashboard and Scraper sections
  */
 
 import { Link, Outlet, useLocation } from 'react-router-dom';
@@ -14,11 +14,12 @@ import {
   Key,
   ChevronDown,
   ChevronRight,
-  Clock,
   MapPin,
   Tags,
   Globe,
-  Zap
+  Zap,
+  Activity,
+  History
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserProfileMenu } from '@/components/layout/UserProfileMenu';
@@ -30,26 +31,54 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-// Dashboard sub-navigation items
+// Dashboard sub-navigation items (no scraper items)
 const dashboardSubItems = [
   { name: 'Overview', href: '/dashboard', icon: LayoutDashboard, exact: true },
-  { name: 'Active Sessions', href: '/dashboard/scraper/active', icon: Zap },
-  { name: 'Recent Activity', href: '/dashboard/scraper/recent', icon: Clock },
-  { name: 'Location Analytics', href: '/dashboard/scraper/locations', icon: MapPin },
   { name: 'API Keys', href: '/dashboard/api-keys', icon: Key },
   { name: 'Jobs Overview', href: '/dashboard/jobs', icon: Briefcase },
   { name: 'Scraper Queue', href: '/dashboard/queue', icon: Tags },
   { name: 'Platforms', href: '/dashboard/platforms', icon: Globe },
 ];
 
+// Scraper sub-navigation items
+const scraperSubItems = [
+  { name: 'Active Sessions', href: '/scraper/active', icon: Zap },
+  { name: 'Recent Activity', href: '/scraper/recent', icon: History },
+  { name: 'Location Analytics', href: '/scraper/locations', icon: MapPin },
+];
+
+// Navigation item type
+type NavItem = {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  hasDropdown?: boolean;
+  dropdownKey?: string;
+  subItems?: Array<{
+    name: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    exact?: boolean;
+  }>;
+};
+
 // Main navigation items
-const navigation = [
+const navigation: NavItem[] = [
   { 
     name: 'Dashboard', 
     href: '/dashboard', 
     icon: LayoutDashboard,
     hasDropdown: true,
+    dropdownKey: 'dashboard',
     subItems: dashboardSubItems
+  },
+  { 
+    name: 'Scraper', 
+    href: '/scraper', 
+    icon: Activity,
+    hasDropdown: true,
+    dropdownKey: 'scraper',
+    subItems: scraperSubItems
   },
   { name: 'Tenants', href: '/tenants', icon: Building2 },
   { name: 'Jobs', href: '/jobs', icon: Briefcase },
@@ -61,14 +90,24 @@ const navigation = [
 export function AppLayout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dashboardExpanded, setDashboardExpanded] = useState(true);
+  const [expandedDropdowns, setExpandedDropdowns] = useState<Record<string, boolean>>({
+    dashboard: true,
+    scraper: true,
+  });
 
-  // Auto-expand dashboard dropdown when on a dashboard page
+  // Auto-expand dropdowns when on their respective pages
   useEffect(() => {
     if (location.pathname.startsWith('/dashboard')) {
-      setDashboardExpanded(true);
+      setExpandedDropdowns(prev => ({ ...prev, dashboard: true }));
+    }
+    if (location.pathname.startsWith('/scraper')) {
+      setExpandedDropdowns(prev => ({ ...prev, scraper: true }));
     }
   }, [location.pathname]);
+
+  const toggleDropdown = (key: string) => {
+    setExpandedDropdowns(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="flex h-screen bg-background">
@@ -87,13 +126,15 @@ export function AppLayout() {
           {navigation.map((item) => {
             const isActive = location.pathname.startsWith(item.href);
             
-            // Render collapsible for dashboard
-            if (item.hasDropdown && item.subItems) {
+            // Render collapsible for items with dropdown
+            if (item.hasDropdown && item.subItems && item.dropdownKey) {
+              const isExpanded = expandedDropdowns[item.dropdownKey] ?? false;
+              
               return (
                 <Collapsible
                   key={item.name}
-                  open={dashboardExpanded}
-                  onOpenChange={setDashboardExpanded}
+                  open={isExpanded}
+                  onOpenChange={() => toggleDropdown(item.dropdownKey!)}
                 >
                   <CollapsibleTrigger asChild>
                     <button
@@ -108,7 +149,7 @@ export function AppLayout() {
                         <item.icon className="h-5 w-5" />
                         {item.name}
                       </div>
-                      {dashboardExpanded ? (
+                      {isExpanded ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
                         <ChevronRight className="h-4 w-4" />
