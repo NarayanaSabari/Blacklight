@@ -60,6 +60,18 @@ interface DeleteResponse {
   already_deleted?: boolean;
 }
 
+interface Submitter {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  submission_count: number;
+}
+
+interface SubmittersResponse {
+  submitters: Submitter[];
+}
+
 export const submissionApi = {
   // ==================== CRUD Operations ====================
 
@@ -274,6 +286,13 @@ export const submissionApi = {
     const url = queryString ? `/api/submissions/stats?${queryString}` : '/api/submissions/stats';
 
     return apiRequest.get<SubmissionStats>(url);
+  },
+
+  /**
+   * Get list of users who have made submissions (for filter dropdown)
+   */
+  getSubmitters: async (): Promise<SubmittersResponse> => {
+    return apiRequest.get<SubmittersResponse>('/api/submissions/submitters');
   },
 
   /**

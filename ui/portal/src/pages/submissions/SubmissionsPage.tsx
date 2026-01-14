@@ -113,6 +113,9 @@ export function SubmissionsPage() {
   const [isActiveFilter, setIsActiveFilter] = useState<boolean | undefined>(
     searchParams.get('active') === 'true' ? true : undefined
   );
+  const [submitterFilter, setSubmitterFilter] = useState<string>(
+    searchParams.get('submitter') || 'all'
+  );
   const [currentPage, setCurrentPage] = useState(
     parseInt(searchParams.get('page') || '1', 10)
   );
@@ -144,6 +147,7 @@ export function SubmissionsPage() {
       statusFilter,
       priorityFilter,
       isActiveFilter,
+      submitterFilter,
       currentPage,
       pageSize,
     ],
@@ -152,12 +156,20 @@ export function SubmissionsPage() {
         status: statusFilter !== 'all' ? statusFilter : undefined,
         priority: priorityFilter !== 'all' ? priorityFilter : undefined,
         is_active: isActiveFilter,
+        submitted_by_user_id: submitterFilter !== 'all' ? parseInt(submitterFilter, 10) : undefined,
         page: currentPage,
         per_page: pageSize,
         sort_by: 'submitted_at',
         sort_order: 'desc',
       }),
     staleTime: 0,
+  });
+
+  // Fetch submitters for filter dropdown
+  const { data: submittersData } = useQuery({
+    queryKey: ['submission-submitters'],
+    queryFn: () => submissionApi.getSubmitters(),
+    staleTime: 300000, // 5 minutes
   });
 
   // Fetch stats
@@ -218,6 +230,12 @@ export function SubmissionsPage() {
       active: newActive === true ? 'true' : newActive === false ? 'false' : undefined,
       page: '1' 
     });
+  };
+
+  const handleSubmitterFilterChange = (value: string) => {
+    setSubmitterFilter(value);
+    setCurrentPage(1);
+    updateFilters({ submitter: value, page: '1' });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -372,6 +390,29 @@ export function SubmissionsPage() {
                     <SelectItem value="closed">Closed</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Submitter/Recruiter Filter */}
+                {submittersData && submittersData.submitters.length > 0 && (
+                  <Select value={submitterFilter} onValueChange={handleSubmitterFilterChange}>
+                    <SelectTrigger className="w-[180px]">
+                      <User className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Submitted By" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Recruiters</SelectItem>
+                      {submittersData.submitters.map((submitter) => (
+                        <SelectItem key={submitter.id} value={submitter.id.toString()}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{submitter.first_name} {submitter.last_name}</span>
+                            <Badge variant="secondary" className="ml-2 text-xs">
+                              {submitter.submission_count}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -395,7 +436,7 @@ export function SubmissionsPage() {
                 <Send className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium mb-1">No Submissions Found</h3>
                 <p className="text-muted-foreground text-sm max-w-sm">
-                  {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
+                  {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all' || submitterFilter !== 'all'
                     ? 'Try adjusting your filters or search query'
                     : 'Submit candidates to jobs to see them here'}
                 </p>

@@ -665,6 +665,63 @@ def get_submission_stats():
         return error_response(f"Failed to get statistics: {str(e)}", 500)
 
 
+@submission_bp.route('/submitters', methods=['GET'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('submissions.view')
+def get_submitters():
+    """
+    Get list of users who have made submissions (for filter dropdown).
+    
+    Returns list of users with their submission counts.
+    
+    GET /api/submissions/submitters
+    
+    Returns:
+    - submitters: List of {id, first_name, last_name, email, submission_count}
+    """
+    from sqlalchemy import select, func
+    from app.models.submission import Submission
+    from app.models.portal_user import PortalUser
+    
+    try:
+        tenant_id = g.tenant_id
+        
+        # Get users who have made submissions in this tenant
+        query = (
+            select(
+                PortalUser.id,
+                PortalUser.first_name,
+                PortalUser.last_name,
+                PortalUser.email,
+                func.count(Submission.id).label('submission_count')
+            )
+            .join(Submission, Submission.submitted_by_user_id == PortalUser.id)
+            .where(Submission.tenant_id == tenant_id)
+            .group_by(PortalUser.id)
+            .order_by(func.count(Submission.id).desc())
+        )
+        
+        results = db.session.execute(query).all()
+        
+        submitters = [
+            {
+                'id': row.id,
+                'first_name': row.first_name,
+                'last_name': row.last_name,
+                'email': row.email,
+                'submission_count': row.submission_count
+            }
+            for row in results
+        ]
+        
+        return jsonify({'submitters': submitters}), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting submitters: {e}", exc_info=True)
+        return error_response(f"Failed to get submitters: {str(e)}", 500)
+
+
 @submission_bp.route('/follow-ups', methods=['GET'])
 @require_portal_auth
 @with_tenant_context
