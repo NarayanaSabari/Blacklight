@@ -63,11 +63,6 @@ export function JobDetailPage() {
   
   const jobIdNum = parseInt(jobId || '0', 10);
   const candidateIdNum = candidateId ? parseInt(candidateId, 10) : undefined;
-  
-  // Determine if coming from email-jobs page or all-jobs page
-  const isFromEmailJobs = location.pathname.startsWith('/email-jobs/');
-  const isFromAllJobs = location.pathname.startsWith('/all-jobs') || 
-                        (location.state as any)?.from === 'all-jobs';
 
   // Fetch job details
   const {
@@ -109,15 +104,8 @@ export function JobDetailPage() {
   const existingSubmission = duplicateCheck?.exists ? duplicateCheck.submission : null;
 
   const handleBack = () => {
-    if (candidateIdNum) {
-      navigate(`/candidate/jobs/${candidateIdNum}`);
-    } else if (isFromAllJobs) {
-      navigate('/all-jobs');
-    } else if (isFromEmailJobs) {
-      navigate('/all-jobs?source=email');
-    } else {
-      navigate('/jobs');
-    }
+    // Use browser history to go back to the previous page
+    navigate(-1);
   };
 
   const handleApply = () => {
