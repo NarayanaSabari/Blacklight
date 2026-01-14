@@ -214,7 +214,7 @@ export function JobDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <Button variant="ghost" onClick={handleBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to {candidateIdNum ? 'Matches' : isFromAllJobs || isFromEmailJobs ? 'Jobs Browser' : 'Jobs'}
+          Back
         </Button>
         <div className="flex gap-2">
           {(job as any)?.job_url && (
