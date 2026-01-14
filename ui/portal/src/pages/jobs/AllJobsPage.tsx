@@ -106,7 +106,7 @@ export function AllJobsPage() {
         search: searchQuery || undefined,
         page,
         per_page: perPage,
-        sort_by: 'created_at',
+        sort_by: 'date',  // Uses COALESCE: posted_date if available, else created_at
         sort_order: 'desc',
       }),
     staleTime: 0,

@@ -5,7 +5,8 @@ Includes both scraped jobs (global) and email-sourced jobs (tenant-specific).
 """
 import logging
 from flask import Blueprint, jsonify, request, g
-from sqlalchemy import select, or_, func, and_
+from sqlalchemy import select, or_, func, and_, case
+from sqlalchemy.sql.functions import coalesce
 
 from app import db
 from app.models.job_posting import JobPosting
@@ -186,7 +187,7 @@ def list_job_postings():
         search = request.args.get('search')
         location = request.args.get('location')
         is_remote = request.args.get('is_remote')
-        sort_by = request.args.get('sort_by', 'created_at')
+        sort_by = request.args.get('sort_by', 'date')  # Default: date (posted_date with created_at fallback)
         sort_order = request.args.get('sort_order', 'desc')
         
         # New filters for unified job view
@@ -248,15 +249,24 @@ def list_job_postings():
             query = query.where(search_filter)
         
         # Apply sorting
-        valid_sort_fields = {
-            'posted_date': JobPosting.posted_date,
-            'title': JobPosting.title,
-            'company': JobPosting.company,
-            'salary_min': JobPosting.salary_min,
-            'created_at': JobPosting.created_at
-        }
+        # 'date' uses COALESCE: prefer posted_date, fall back to created_at
+        # This ensures jobs are sorted by their actual post date when available
+        if sort_by == 'date':
+            # Cast posted_date (Date) to DateTime for COALESCE with created_at (DateTime)
+            sort_field = coalesce(
+                func.cast(JobPosting.posted_date, db.DateTime),
+                JobPosting.created_at
+            )
+        else:
+            valid_sort_fields = {
+                'posted_date': JobPosting.posted_date,
+                'title': JobPosting.title,
+                'company': JobPosting.company,
+                'salary_min': JobPosting.salary_min,
+                'created_at': JobPosting.created_at
+            }
+            sort_field = valid_sort_fields.get(sort_by, JobPosting.created_at)
         
-        sort_field = valid_sort_fields.get(sort_by, JobPosting.created_at)
         if sort_order.lower() == 'desc':
             query = query.order_by(sort_field.desc().nullslast())
         else:

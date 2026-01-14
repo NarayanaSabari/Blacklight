@@ -119,7 +119,7 @@ export const jobPostingApi = {
     source?: JobSourceFilter;
     platform?: string;
     sourced_by?: number;
-    sort_by?: 'posted_date' | 'title' | 'company' | 'salary_min' | 'created_at';
+    sort_by?: 'date' | 'posted_date' | 'title' | 'company' | 'salary_min' | 'created_at';
     sort_order?: 'asc' | 'desc';
   }): Promise<JobListResponse> => {
     const queryParams = new URLSearchParams();
