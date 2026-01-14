@@ -13,11 +13,13 @@ import { LoginPage } from '@/pages/LoginPage';
 import { 
   DashboardLayout, 
   OverviewPage, 
-  ScraperPage, 
   ApiKeysPage, 
   JobsOverviewPage, 
   QueuePage, 
-  PlatformsPage 
+  PlatformsPage,
+  ActiveSessionsPage,
+  RecentActivityPage,
+  LocationAnalyticsPage
 } from '@/pages/Dashboard';
 import { TenantsPage } from '@/pages/TenantsPage';
 import { CreateTenantPage } from '@/pages/CreateTenantPage';
@@ -63,7 +65,13 @@ function App() {
                 {/* Dashboard with nested sub-routes */}
                 <Route path="/dashboard" element={<DashboardLayout />}>
                   <Route index element={<OverviewPage />} />
-                  <Route path="scraper" element={<ScraperPage />} />
+                  {/* Scraper monitoring nested routes */}
+                  <Route path="scraper">
+                    <Route index element={<Navigate to="active" replace />} />
+                    <Route path="active" element={<ActiveSessionsPage />} />
+                    <Route path="recent" element={<RecentActivityPage />} />
+                    <Route path="locations" element={<LocationAnalyticsPage />} />
+                  </Route>
                   <Route path="api-keys" element={<ApiKeysPage />} />
                   <Route path="jobs" element={<JobsOverviewPage />} />
                   <Route path="queue" element={<QueuePage />} />

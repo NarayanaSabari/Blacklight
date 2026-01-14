@@ -13,7 +13,10 @@ export {
   ApiKeysPage, 
   JobsOverviewPage, 
   QueuePage, 
-  PlatformsPage 
+  PlatformsPage,
+  ActiveSessionsPage,
+  RecentActivityPage,
+  LocationAnalyticsPage
 } from './pages';
 
 // Legacy export for backwards compatibility (can be removed once App.tsx is updated)

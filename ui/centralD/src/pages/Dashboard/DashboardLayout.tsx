@@ -8,7 +8,6 @@ import { StatsCards } from './components';
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, 
-  Activity, 
   Key, 
   Briefcase, 
   Tags,
@@ -21,11 +20,6 @@ const dashboardNavItems = [
     href: '/dashboard', 
     icon: LayoutDashboard,
     end: true // Only match exact path
-  },
-  { 
-    name: 'Scraper Monitoring', 
-    href: '/dashboard/scraper', 
-    icon: Activity 
   },
   { 
     name: 'API Keys', 
