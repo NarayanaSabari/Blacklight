@@ -212,8 +212,7 @@ export function AddCredentialDialog({ platform, open, onOpenChange, onSuccess }:
                   placeholder='{"cookies": [...], "token": "..."}'
                   value={jsonData}
                   onChange={(e) => setJsonData(e.target.value)}
-                  rows={6}
-                  className="font-mono text-sm"
+                  className="font-mono text-sm h-64 max-h-80 overflow-y-auto resize-y"
                   required
                 />
               </div>
