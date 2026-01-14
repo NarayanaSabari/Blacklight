@@ -323,7 +323,7 @@ def get_candidate_matches(candidate_id: int):
     - page: Page number (default 1)
     - per_page: Matches per page (default 20, max 100)
     - min_score: Minimum match score filter (default 0)
-    - sort_by: Sort field (match_score, posted_date, default: match_score)
+    - sort_by: Sort field (created_at, match_score, posted_date, default: created_at)
     - sort_order: Sort order (asc, desc, default: desc)
     - platforms: Comma-separated list of platforms to filter by (e.g., "linkedin,glassdoor")
     - grades: Comma-separated list of grades to filter by (e.g., "A+,A,B")
@@ -350,7 +350,7 @@ def get_candidate_matches(candidate_id: int):
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 25, type=int)  # Default 25 for pagination
         min_score = request.args.get('min_score', 0, type=float)
-        sort_by = request.args.get('sort_by', 'match_score')
+        sort_by = request.args.get('sort_by', 'created_at')  # Default: latest first
         sort_order = request.args.get('sort_order', 'desc')
         platforms_param = request.args.get('platforms', '')
         grades_param = request.args.get('grades', '')
@@ -522,7 +522,13 @@ def get_candidate_matches(candidate_id: int):
         
         # Sort matches
         reverse_order = (sort_order != 'asc')
-        if sort_by == 'match_score':
+        if sort_by == 'created_at':
+            from datetime import datetime as dt
+            scored_matches.sort(
+                key=lambda x: x['job'].created_at or dt.min, 
+                reverse=reverse_order
+            )
+        elif sort_by == 'match_score':
             scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=reverse_order)
         elif sort_by == 'posted_date':
             from datetime import datetime as dt
@@ -531,7 +537,12 @@ def get_candidate_matches(candidate_id: int):
                 reverse=reverse_order
             )
         else:
-            scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=reverse_order)
+            # Default: sort by created_at (latest first)
+            from datetime import datetime as dt
+            scored_matches.sort(
+                key=lambda x: x['job'].created_at or dt.min, 
+                reverse=reverse_order
+            )
         
         # Total count (after filtering)
         total_matches = len(scored_matches)

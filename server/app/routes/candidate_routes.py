@@ -1237,11 +1237,11 @@ def get_candidate_job_matches(candidate_id: int):
     This endpoint calculates match scores between the candidate and jobs
     associated with their global roles. Scores are computed dynamically.
     
-    GET /api/candidates/:id/job-matches?min_score=0&sort_by=match_score&page=1&per_page=50
+    GET /api/candidates/:id/job-matches?min_score=0&sort_by=created_at&page=1&per_page=50
     
     Query params:
     - min_score: Minimum match score filter (default 0)
-    - sort_by: Sort field (match_score, posted_date, default: match_score)
+    - sort_by: Sort field (created_at, match_score, posted_date, default: created_at)
     - page: Page number (default 1)
     - per_page: Matches per page (default 50, max 100)
     
@@ -1269,7 +1269,7 @@ def get_candidate_job_matches(candidate_id: int):
         
         # Parse query parameters
         min_score = request.args.get('min_score', 0, type=float)
-        sort_by = request.args.get('sort_by', 'match_score')
+        sort_by = request.args.get('sort_by', 'created_at')  # Default: latest first
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
         
@@ -1341,10 +1341,15 @@ def get_candidate_job_matches(candidate_id: int):
                 continue
         
         # Sort matches
-        if sort_by == 'match_score':
+        if sort_by == 'created_at':
+            scored_matches.sort(key=lambda x: x['job'].created_at or datetime.min, reverse=True)
+        elif sort_by == 'match_score':
             scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=True)
         elif sort_by == 'posted_date':
             scored_matches.sort(key=lambda x: x['job'].posted_date or datetime.min, reverse=True)
+        else:
+            # Default: sort by created_at (latest first)
+            scored_matches.sort(key=lambda x: x['job'].created_at or datetime.min, reverse=True)
         
         # Total count (after filtering)
         total_matches = len(scored_matches)
