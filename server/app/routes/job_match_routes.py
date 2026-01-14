@@ -602,6 +602,7 @@ def get_candidate_matches(candidate_id: int):
                     'job_url': job.job_url,
                     'platform': job.platform,
                     'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                    'created_at': job.created_at.isoformat() if job.created_at else None,
                     'status': job.status,
                     # Email source info
                     'is_email_sourced': job.is_email_sourced,
@@ -995,6 +996,7 @@ def get_match_by_candidate_and_job(candidate_id: int, job_id: int):
                     'job_url': job.job_url,
                     'platform': job.platform,
                     'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                    'created_at': job.created_at.isoformat() if job.created_at else None,
                     'status': job.status,
                 }
             }), 200
@@ -1037,6 +1039,7 @@ def get_match_by_candidate_and_job(candidate_id: int, job_id: int):
                 'job_url': job.job_url,
                 'platform': job.platform,
                 'posted_date': job.posted_date.isoformat() if job.posted_date else None,
+                'created_at': job.created_at.isoformat() if job.created_at else None,
                 'status': job.status,
             }
         }), 200

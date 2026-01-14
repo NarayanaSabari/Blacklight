@@ -304,11 +304,13 @@ export function JobDetailPage() {
                   <Briefcase className="h-4 w-4 text-muted-foreground" />
                   <span>{formatExperience(job.experience_min, job.experience_max)}</span>
                 </div>
-                {job.posted_date && (
+                {(job.posted_date || (job as any).created_at) && (
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>Posted {(() => {
-                      const date = new Date(job.posted_date);
+                      // Prefer created_at for accurate timestamp, fall back to posted_date
+                      const dateStr = (job as any).created_at || job.posted_date;
+                      const date = new Date(dateStr);
                       const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
                       return hasTime 
                         ? format(date, 'MMM dd, yyyy h:mm a')
@@ -457,7 +459,7 @@ export function JobDetailPage() {
               </div>
             </div>
 
-            {job.posted_date && (
+            {(job.posted_date || (job as any).created_at) && (
               <div>
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
                   <Clock className="h-4 w-4" />
@@ -465,7 +467,9 @@ export function JobDetailPage() {
                 </h3>
                 <p className="text-muted-foreground">
                   {(() => {
-                    const date = new Date(job.posted_date);
+                    // Prefer created_at for accurate timestamp, fall back to posted_date
+                    const dateStr = (job as any).created_at || job.posted_date;
+                    const date = new Date(dateStr);
                     const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
                     return hasTime 
                       ? format(date, 'MMMM dd, yyyy h:mm a')

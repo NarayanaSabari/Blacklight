@@ -1375,7 +1375,8 @@ def get_candidate_job_matches(candidate_id: int):
                         'skills': m['job'].skills or [],
                         'job_url': m['job'].job_url,
                         'platform': m['job'].platform,
-                        'posted_date': m['job'].posted_date.isoformat() if m['job'].posted_date else None
+                        'posted_date': m['job'].posted_date.isoformat() if m['job'].posted_date else None,
+                        'created_at': m['job'].created_at.isoformat() if m['job'].created_at else None
                     },
                     'match_score': round(m['match_result'].overall_score, 2),
                     'match_grade': m['match_result'].match_grade,

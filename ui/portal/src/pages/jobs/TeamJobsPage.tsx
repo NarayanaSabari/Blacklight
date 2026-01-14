@@ -584,11 +584,14 @@ export function TeamJobsPage() {
 
           {/* Footer with date and actions */}
           <div className="flex items-center justify-between pt-2 border-t">
-            {job.posted_date ? (
+            {(job.posted_date || job.created_at) ? (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
                 <span>Posted {(() => {
-                  const date = new Date(job.posted_date);
+                  // Prefer created_at for accurate timestamp, fall back to posted_date
+                  const dateStr = job.created_at || job.posted_date;
+                  if (!dateStr) return '';
+                  const date = new Date(dateStr);
                   const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
                   return hasTime 
                     ? format(date, 'MMM dd, yyyy h:mm a')
@@ -746,8 +749,16 @@ export function TeamJobsPage() {
 
         {/* Posted Date */}
         <div className="w-24 flex-shrink-0 text-xs text-muted-foreground text-right">
-          {job.posted_date && (
-            <span>{format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
+          {(job.posted_date || job.created_at) && (
+            <span>{(() => {
+              const dateStr = job.created_at || job.posted_date;
+              if (!dateStr) return '';
+              const date = new Date(dateStr);
+              const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+              return hasTime 
+                ? format(date, 'MMM dd h:mm a')
+                : format(date, 'MMM dd, yyyy');
+            })()}</span>
           )}
         </div>
 
