@@ -8,9 +8,7 @@ with support for multiple templates.
 import logging
 import re
 import unicodedata
-from typing import Dict, List, Optional, Any
-
-from weasyprint import HTML
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
 from .base_template import BaseResumeTemplate, ResumeTemplateType, TemplateMetadata
 from .templates import ModernTemplate, ClassicTemplate
@@ -85,6 +83,17 @@ class ResumeExportService:
         
         # Render HTML
         html_content = template_obj.render_html(markdown_content)
+        
+        # Lazy import WeasyPrint to avoid startup crashes when system libs are missing
+        try:
+            from weasyprint import HTML
+        except OSError as e:
+            logger.error(f"WeasyPrint system libraries not available: {e}")
+            raise RuntimeError(
+                "PDF export requires system libraries (pango, glib). "
+                "On macOS: brew install pango glib gobject-introspection. "
+                "On Ubuntu: apt-get install libpango-1.0-0 libpangocairo-1.0-0"
+            ) from e
         
         # Generate PDF
         pdf_bytes = HTML(string=html_content).write_pdf()

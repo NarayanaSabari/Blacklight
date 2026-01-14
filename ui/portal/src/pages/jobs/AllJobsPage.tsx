@@ -153,7 +153,13 @@ export function AllJobsPage() {
   // Format helpers
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return '-';
-    return format(new Date(dateStr), 'MMM dd, yyyy');
+    const date = new Date(dateStr);
+    // Check if date has time component (not midnight UTC)
+    const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+    if (hasTime) {
+      return format(date, 'MMM dd, yyyy h:mm a');
+    }
+    return format(date, 'MMM dd, yyyy');
   };
 
   const formatSalary = (job: JobPostingWithSource) => {

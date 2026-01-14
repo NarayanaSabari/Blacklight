@@ -319,7 +319,13 @@ export function JobDetailPage() {
                 {job.posted_date && (
                   <div className="flex items-center gap-1.5">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>Posted {format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
+                    <span>Posted {(() => {
+                      const date = new Date(job.posted_date);
+                      const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+                      return hasTime 
+                        ? format(date, 'MMM dd, yyyy h:mm a')
+                        : format(date, 'MMM dd, yyyy');
+                    })()}</span>
                   </div>
                 )}
               </div>
@@ -470,7 +476,13 @@ export function JobDetailPage() {
                   Posted Date
                 </h3>
                 <p className="text-muted-foreground">
-                  {format(new Date(job.posted_date), 'MMMM dd, yyyy')}
+                  {(() => {
+                    const date = new Date(job.posted_date);
+                    const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+                    return hasTime 
+                      ? format(date, 'MMMM dd, yyyy h:mm a')
+                      : format(date, 'MMMM dd, yyyy');
+                  })()}
                 </p>
               </div>
             )}

@@ -274,6 +274,7 @@ def seed_roles_and_permissions():
             # Candidate assignment permissions
             'candidates.view', 'candidates.view_all', 'candidates.view_assigned',
             'candidates.assign', 'candidates.reassign', 'candidates.view_history',
+            'candidates.edit',  # Required for AI role suggestion and candidate editing
             # Job and interview management
             'jobs.view', 'jobs.edit', 'jobs.manage_applications',
             'interviews.view', 'interviews.create', 'interviews.edit', 'interviews.feedback',

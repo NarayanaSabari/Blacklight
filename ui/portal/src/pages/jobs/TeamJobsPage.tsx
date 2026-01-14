@@ -584,7 +584,13 @@ export function TeamJobsPage() {
             {job.posted_date ? (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
-                <span>Posted {format(new Date(job.posted_date), 'MMM dd, yyyy')}</span>
+                <span>Posted {(() => {
+                  const date = new Date(job.posted_date);
+                  const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+                  return hasTime 
+                    ? format(date, 'MMM dd, yyyy h:mm a')
+                    : format(date, 'MMM dd, yyyy');
+                })()}</span>
               </div>
             ) : (
               <div />
