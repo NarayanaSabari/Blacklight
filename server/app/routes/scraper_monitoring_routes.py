@@ -272,6 +272,7 @@ def get_recent_sessions():
             "status": s.status,
             "started_at": s.started_at.isoformat() if s.started_at else None,
             "completed_at": s.completed_at.isoformat() if s.completed_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
             "duration_seconds": s.duration_seconds,
             "jobs_found": s.jobs_found or 0,
             "jobs_imported": s.jobs_imported or 0,
@@ -279,7 +280,10 @@ def get_recent_sessions():
             "platforms_total": s.platforms_total or 0,
             "platforms_completed": s.platforms_completed or 0,
             "platforms_failed": s.platforms_failed or 0,
-            "error_message": s.error_message
+            "error_message": s.error_message,
+            # Batch progress: aggregate from platform statuses
+            "total_batches": sum(ps.total_batches or 1 for ps in s.platform_statuses) if s.platform_statuses else 0,
+            "completed_batches": sum(ps.completed_batches or 0 for ps in s.platform_statuses) if s.platform_statuses else 0
         } for s in pagination.items]
         
         return jsonify({
@@ -338,10 +342,13 @@ def get_session_details(session_id: str):
                 "jobs_found": ps.jobs_found or 0,
                 "jobs_imported": ps.jobs_imported or 0,
                 "jobs_skipped": ps.jobs_skipped or 0,
+                "total_batches": ps.total_batches or 1,
+                "completed_batches": ps.completed_batches or 0,
                 "started_at": ps.started_at.isoformat() if ps.started_at else None,
                 "completed_at": ps.completed_at.isoformat() if ps.completed_at else None,
                 "duration_seconds": ps.duration_seconds,
-                "error_message": ps.error_message
+                "error_message": ps.error_message,
+                "updated_at": ps.updated_at.isoformat() if ps.updated_at else None
             })
         
         # Build session response
@@ -357,6 +364,7 @@ def get_session_details(session_id: str):
             "status": session.status,
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+            "updated_at": session.updated_at.isoformat() if session.updated_at else None,
             "duration_seconds": session.duration_seconds,
             "jobs_found": session.jobs_found or 0,
             "jobs_imported": session.jobs_imported or 0,
@@ -365,7 +373,10 @@ def get_session_details(session_id: str):
             "platforms_completed": session.platforms_completed or 0,
             "platforms_failed": session.platforms_failed or 0,
             "error_message": session.error_message,
-            "platform_statuses": platforms
+            "platform_statuses": platforms,
+            # Aggregate batch progress from all platforms
+            "total_batches": sum(p.get("total_batches", 1) for p in platforms),
+            "completed_batches": sum(p.get("completed_batches", 0) for p in platforms)
         }
         
         return jsonify(session_data), 200

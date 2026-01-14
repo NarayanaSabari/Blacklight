@@ -33,8 +33,12 @@ export interface ScrapeSession {
   platformsTotal: number;
   platformsCompleted: number;
   platformsFailed: number;
+  // Batch progress tracking for real-time monitoring
+  totalBatches: number;
+  completedBatches: number;
   startedAt: string;
   completedAt: string | null;
+  updatedAt: string | null;  // Last update timestamp for activity tracking
   errorMessage: string | null;
   durationSeconds: number | null;
 }
@@ -51,8 +55,12 @@ export interface SessionPlatformStatus {
   jobsFound: number;
   jobsImported: number;
   jobsSkipped: number;
+  // Batch progress tracking for platforms with large job lists
+  totalBatches: number;
+  completedBatches: number;
   startedAt: string | null;
   completedAt: string | null;
+  updatedAt: string | null;
   durationSeconds: number | null;
   errorMessage: string | null;
 }
@@ -370,8 +378,11 @@ export const scraperMonitoringApi = {
         jobsFound: (ps.jobs_found ?? 0) as number,
         jobsImported: (ps.jobs_imported ?? 0) as number,
         jobsSkipped: (ps.jobs_skipped ?? 0) as number,
+        totalBatches: (ps.total_batches ?? 1) as number,
+        completedBatches: (ps.completed_batches ?? 0) as number,
         startedAt: ps.started_at as string | null,
         completedAt: ps.completed_at as string | null,
+        updatedAt: ps.updated_at as string | null,
         durationSeconds: ps.duration_seconds as number | null,
         errorMessage: ps.error_message as string | null,
       })
@@ -574,8 +585,12 @@ function mapSession(data: Record<string, unknown>): ScrapeSession {
     platformsTotal: (data.platforms_total ?? 0) as number,
     platformsCompleted: (data.platforms_completed ?? 0) as number,
     platformsFailed: (data.platforms_failed ?? 0) as number,
+    // Batch progress tracking
+    totalBatches: (data.total_batches ?? 0) as number,
+    completedBatches: (data.completed_batches ?? 0) as number,
     startedAt: data.started_at as string,
     completedAt: data.completed_at as string | null,
+    updatedAt: data.updated_at as string | null,
     errorMessage: data.error_message as string | null,
     durationSeconds: data.duration_seconds as number | null,
   };

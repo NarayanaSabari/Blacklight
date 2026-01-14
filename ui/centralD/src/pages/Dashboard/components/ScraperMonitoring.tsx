@@ -3,7 +3,7 @@
  * Shows active scraper sessions and recent activity with detailed stats
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,7 +53,8 @@ import {
   MapPin,
   Globe,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Package
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { toast } from "sonner";
@@ -226,6 +227,27 @@ function SessionDetailsDialog({ session }: { session: ScrapeSession }) {
                       <span className="text-yellow-600">Skipped: {platform.jobsSkipped}</span>
                     </div>
                     
+                    {/* Platform batch progress */}
+                    {platform.totalBatches > 0 && (
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Package className="h-3 w-3" />
+                            Batches
+                          </span>
+                          <span className={`font-medium tabular-nums ${
+                            platform.status === 'in_progress' ? 'text-blue-600' : 'text-muted-foreground'
+                          }`}>
+                            {platform.completedBatches}/{platform.totalBatches}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={Math.round((platform.completedBatches / platform.totalBatches) * 100)} 
+                          className="h-1.5" 
+                        />
+                      </div>
+                    )}
+                    
                     {/* Platform error */}
                     {platform.status === 'failed' && platform.errorMessage && (
                       <div className="mt-2 p-2 rounded bg-destructive/10">
@@ -261,6 +283,51 @@ function SessionCard({ session, onTerminate, isTerminating }: {
   const successRate = session.jobsFound > 0 
     ? Math.round((session.jobsImported / session.jobsFound) * 100) 
     : 0;
+  
+  // Live elapsed time for in_progress sessions
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  
+  useEffect(() => {
+    if (session.status !== 'in_progress') {
+      setElapsedSeconds(session.durationSeconds || 0);
+      return;
+    }
+    
+    // Calculate initial elapsed time
+    const startTime = new Date(session.startedAt).getTime();
+    const updateElapsed = () => {
+      const now = Date.now();
+      setElapsedSeconds(Math.floor((now - startTime) / 1000));
+    };
+    
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [session.startedAt, session.status, session.durationSeconds]);
+  
+  // Format elapsed time nicely
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}m ${secs}s`;
+    }
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return `${hrs}h ${mins}m`;
+  };
+  
+  // Batch progress calculation
+  const batchProgress = session.totalBatches > 0 
+    ? Math.round((session.completedBatches / session.totalBatches) * 100) 
+    : 0;
+  const hasBatchProgress = session.totalBatches > 0 && session.status === 'in_progress';
+  
+  // Last updated indicator (for detecting stale sessions)
+  const lastUpdatedAgo = session.updatedAt 
+    ? formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true })
+    : null;
   
   return (
     <div className="p-4 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
@@ -369,15 +436,38 @@ function SessionCard({ session, onTerminate, isTerminating }: {
           </div>
         </div>
         <div className="flex items-center gap-2 p-2 rounded bg-muted/50">
-          <Timer className="h-4 w-4 text-purple-500" />
+          <Timer className={`h-4 w-4 ${session.status === 'in_progress' ? 'text-blue-500 animate-pulse' : 'text-purple-500'}`} />
           <div>
-            <p className="text-xs text-muted-foreground">Duration</p>
-            <p className="font-semibold text-sm">
-              {session.durationSeconds ? `${session.durationSeconds}s` : '-'}
+            <p className="text-xs text-muted-foreground">
+              {session.status === 'in_progress' ? 'Elapsed' : 'Duration'}
+            </p>
+            <p className={`font-semibold text-sm ${session.status === 'in_progress' ? 'text-blue-600 tabular-nums' : ''}`}>
+              {formatDuration(elapsedSeconds)}
             </p>
           </div>
         </div>
       </div>
+
+      {/* Batch Progress for active sessions */}
+      {hasBatchProgress && (
+        <div className="mb-3 p-2 rounded bg-blue-50 border border-blue-200">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-blue-700 flex items-center gap-1">
+              <Package className="h-3 w-3" />
+              Batch Progress
+            </span>
+            <span className="text-blue-600 font-medium tabular-nums">
+              {session.completedBatches}/{session.totalBatches} batches ({batchProgress}%)
+            </span>
+          </div>
+          <Progress value={batchProgress} className="h-2" />
+          {lastUpdatedAgo && (
+            <p className="text-[10px] text-blue-500 mt-1">
+              Last activity: {lastUpdatedAgo}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Progress bar for import success rate */}
       {session.jobsFound > 0 && (
@@ -436,7 +526,7 @@ function ActiveSessionsList() {
   const { data: sessions, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['active-scraper-sessions'],
     queryFn: scraperMonitoringApi.getActiveSessions,
-    refetchInterval: 15000, // Refresh every 15 seconds for active sessions
+    refetchInterval: 5000, // Refresh every 5 seconds for active sessions
     enabled: !authLoading && isAuthenticated,
   });
 

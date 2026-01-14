@@ -317,8 +317,15 @@ def import_jobs_batch_for_platform(
         "duplicate_platform_id": 0,
         "duplicate_title_company_location": 0,
         "duplicate_title_company_description": 0,
+        "duplicate_in_batch": 0,
         "error": 0
     }
+    
+    # Track jobs added within this batch to prevent intra-batch duplicates
+    # Key: (platform, external_job_id), Value: True
+    batch_external_ids: Dict[tuple, bool] = {}
+    # Key: (title_lower, company_lower, location_lower), Value: True
+    batch_title_company_location: Dict[tuple, bool] = {}
     
     # Helper to truncate strings to fit database varchar limits
     def truncate_str(value, max_len):
@@ -374,7 +381,21 @@ def import_jobs_batch_for_platform(
             # 3. Same title + company + similar description = same job different platform
             # =================================================================
             
-            # Check 1: Exact duplicate by platform + external_job_id
+            # Check 0: Intra-batch duplicate by platform + external_job_id
+            # This catches duplicates within the same batch (before they're committed)
+            if external_id:
+                batch_key = (platform.lower(), str(external_id).lower())
+                if batch_key in batch_external_ids:
+                    logger.info(f"[JOB-IMPORT] Skipping intra-batch duplicate (platform+id): platform={platform}, id={external_id}")
+                    job_log.mark_skipped(
+                        reason="duplicate_in_batch",
+                        detail=f"Duplicate within same batch: platform '{platform}' and external_job_id '{external_id}'"
+                    )
+                    skipped_count += 1
+                    skip_reasons["duplicate_in_batch"] += 1
+                    continue
+            
+            # Check 1: Exact duplicate by platform + external_job_id (in database)
             if external_id:
                 existing = JobPosting.query.filter_by(
                     platform=platform,
@@ -392,7 +413,27 @@ def import_jobs_batch_for_platform(
                     skip_reasons["duplicate_platform_id"] += 1
                     continue
             
-            # Check 2: Duplicate by title + company + location (case-insensitive)
+            # Check 2a: Intra-batch duplicate by title + company + location
+            # This catches duplicates within the same batch (before they're committed)
+            batch_content_key = (
+                title.lower().strip(),
+                company.lower().strip(),
+                (location.lower().strip() if location else "")
+            )
+            if batch_content_key in batch_title_company_location:
+                logger.info(
+                    f"[JOB-IMPORT] Skipping intra-batch duplicate (title+company+location): "
+                    f"'{title}' at '{company}' in '{location}'"
+                )
+                job_log.mark_skipped(
+                    reason="duplicate_in_batch",
+                    detail=f"Duplicate within same batch: '{title}' at '{company}' in '{location}'"
+                )
+                skipped_count += 1
+                skip_reasons["duplicate_in_batch"] += 1
+                continue
+            
+            # Check 2b: Duplicate by title + company + location (case-insensitive, in database)
             # This catches the same job posted on different platforms
             # Build query filters dynamically to handle empty location correctly
             content_filters = [
@@ -527,6 +568,11 @@ def import_jobs_batch_for_platform(
             db.session.add(job)
             db.session.flush()  # Get the ID
             
+            # Track this job in batch dictionaries for intra-batch dedup
+            if external_id:
+                batch_external_ids[(platform.lower(), str(external_id).lower())] = True
+            batch_title_company_location[batch_content_key] = True
+            
             # Create role-job mapping
             role_mapping = RoleJobMapping(
                 global_role_id=session_data["global_role_id"],
@@ -545,12 +591,34 @@ def import_jobs_batch_for_platform(
                 logger.info(f"[JOB-IMPORT] Progress: {idx+1}/{len(jobs_data)} processed")
             
         except Exception as e:
-            logger.error(f"[JOB-IMPORT] Failed to import job {idx+1}: {e}")
-            job_log.mark_error(str(e))
+            error_msg = str(e)
+            logger.error(f"[JOB-IMPORT] Failed to import job {idx+1}: {error_msg}")
+            # Rollback the current transaction to clear the failed state
+            # This is critical - without this, subsequent operations will fail
+            db.session.rollback()
+            # Re-create job log since rollback detached the previous one
+            try:
+                error_job_log = SessionJobLog.log_job(
+                    session_id=UUID(session_data["session_id"]),
+                    platform_name=platform_name,
+                    job_index=idx,
+                    raw_job_data=job_data,
+                    platform_status_id=session_data.get("platform_status_id")
+                )
+                error_job_log.mark_error(error_msg)
+                db.session.commit()
+            except Exception as log_error:
+                logger.warning(f"[JOB-IMPORT] Failed to log error for job {idx+1}: {log_error}")
+                db.session.rollback()
             skipped_count += 1
             skip_reasons["error"] += 1
     
-    db.session.commit()
+    # Commit any remaining successful jobs
+    try:
+        db.session.commit()
+    except Exception as e:
+        logger.error(f"[JOB-IMPORT] Failed to commit batch: {e}")
+        db.session.rollback()
     
     # Log detailed skip reasons summary
     logger.info(
@@ -560,6 +628,7 @@ def import_jobs_batch_for_platform(
     if skipped_count > 0:
         logger.info(
             f"[JOB-IMPORT] Skip breakdown for {platform_name}: "
+            f"in_batch_dup={skip_reasons['duplicate_in_batch']}, "
             f"platform_id_dup={skip_reasons['duplicate_platform_id']}, "
             f"title_company_location_dup={skip_reasons['duplicate_title_company_location']}, "
             f"title_company_desc_dup={skip_reasons['duplicate_title_company_description']}, "
