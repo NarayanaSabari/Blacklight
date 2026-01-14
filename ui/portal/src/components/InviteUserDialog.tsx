@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Loader2, Mail, User, Phone, Lock, Shield, CheckCircle2, Users } from 'lucide-react';
+import { Loader2, Mail, User, Phone, Lock, Shield, CheckCircle2, Users, Eye, EyeOff } from 'lucide-react';
 import { createUser } from '@/lib/api/users';
 import { fetchRoles } from '@/lib/api/roles';
 import { useAvailableManagers } from '@/hooks/useTeam';
@@ -53,6 +53,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   // Fetch roles with permissions
   const { data: rolesData, isLoading: rolesLoading } = useQuery({
@@ -444,14 +445,29 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                 Temporary Password <span className="text-destructive">*</span>
               </Label>
             </div>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={(e) => handleChange('password', e.target.value)}
-              className={errors.password ? 'border-destructive' : ''}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={(e) => handleChange('password', e.target.value)}
+                className={`pr-10 ${errors.password ? 'border-destructive' : ''}`}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
             {errors.password && (
               <p className="text-sm text-destructive">{errors.password}</p>
             )}

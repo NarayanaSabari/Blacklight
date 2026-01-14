@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { resetUserPassword } from '@/lib/api/users';
 import type { PortalUserFull } from '@/types';
 
@@ -35,6 +35,8 @@ export function ResetPasswordDialog({
   const queryClient = useQueryClient();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
 
   const resetPasswordMutation = useMutation({
@@ -100,14 +102,29 @@ export function ResetPasswordDialog({
             <Label htmlFor="new_password">
               New Password <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="new_password"
-              type="password"
-              placeholder="••••••••"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className={error ? 'border-destructive' : ''}
-            />
+            <div className="relative">
+              <Input
+                id="new_password"
+                type={showNewPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={`pr-10 ${error ? 'border-destructive' : ''}`}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+              >
+                {showNewPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
             <p className="text-sm text-muted-foreground">
               Minimum 8 characters
             </p>
@@ -117,14 +134,29 @@ export function ResetPasswordDialog({
             <Label htmlFor="confirm_password">
               Confirm Password <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="confirm_password"
-              type="password"
-              placeholder="••••••••"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className={error ? 'border-destructive' : ''}
-            />
+            <div className="relative">
+              <Input
+                id="confirm_password"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`pr-10 ${error ? 'border-destructive' : ''}`}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

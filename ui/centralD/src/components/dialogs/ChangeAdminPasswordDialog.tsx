@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,8 @@ export function ChangeAdminPasswordDialog({ open, onOpenChange, admin }: ChangeA
     confirmPassword: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const queryClient = useQueryClient();
 
   const changePassword = useMutation({
@@ -109,14 +111,31 @@ export function ChangeAdminPasswordDialog({ open, onOpenChange, admin }: ChangeA
           {/* New Password */}
           <div className="space-y-2">
             <Label htmlFor="newPassword">New Password *</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              value={formData.newPassword}
-              onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-              placeholder="••••••••"
-              disabled={changePassword.isPending}
-            />
+            <div className="relative">
+              <Input
+                id="newPassword"
+                type={showNewPassword ? 'text' : 'password'}
+                value={formData.newPassword}
+                onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
+                placeholder="••••••••"
+                disabled={changePassword.isPending}
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                disabled={changePassword.isPending}
+              >
+                {showNewPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
             {errors.newPassword && (
               <p className="text-sm text-destructive">{errors.newPassword}</p>
             )}
@@ -125,14 +144,31 @@ export function ChangeAdminPasswordDialog({ open, onOpenChange, admin }: ChangeA
           {/* Confirm Password */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password *</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              placeholder="••••••••"
-              disabled={changePassword.isPending}
-            />
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                placeholder="••••••••"
+                disabled={changePassword.isPending}
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                disabled={changePassword.isPending}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
             {errors.confirmPassword && (
               <p className="text-sm text-destructive">{errors.confirmPassword}</p>
             )}

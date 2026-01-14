@@ -3,6 +3,7 @@
  * Used for creating and editing tenants
  */
 
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,7 +20,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Building2, CreditCard, UserPlus, AlertCircle } from 'lucide-react';
+import { Loader2, Building2, CreditCard, UserPlus, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { usePlans } from '@/hooks/api/usePlans';
 import type { BillingCycle } from '@/types';
 
@@ -55,6 +56,8 @@ interface TenantFormProps {
 
 export function TenantForm({ onSubmit, isSubmitting, defaultValues, mode = 'create' }: TenantFormProps) {
   const { data: plansData, isLoading: plansLoading } = usePlans();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const {
     register,
@@ -287,13 +290,30 @@ export function TenantForm({ onSubmit, isSubmitting, defaultValues, mode = 'crea
 
             <div className="space-y-2">
               <Label htmlFor="tenant_admin_password">Password *</Label>
-              <Input
-                id="tenant_admin_password"
-                type="password"
-                {...register('tenant_admin_password')}
-                placeholder="••••••••"
-                disabled={isSubmitting}
-              />
+              <div className="relative">
+                <Input
+                  id="tenant_admin_password"
+                  type={showPassword ? 'text' : 'password'}
+                  {...register('tenant_admin_password')}
+                  placeholder="••••••••"
+                  disabled={isSubmitting}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
               {errors.tenant_admin_password && (
                 <p className="text-sm text-destructive">{errors.tenant_admin_password.message}</p>
               )}
@@ -301,13 +321,30 @@ export function TenantForm({ onSubmit, isSubmitting, defaultValues, mode = 'crea
 
             <div className="space-y-2">
               <Label htmlFor="tenant_admin_confirm_password">Confirm Password *</Label>
-              <Input
-                id="tenant_admin_confirm_password"
-                type="password"
-                {...register('tenant_admin_confirm_password')}
-                placeholder="••••••••"
-                disabled={isSubmitting}
-              />
+              <div className="relative">
+                <Input
+                  id="tenant_admin_confirm_password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  {...register('tenant_admin_confirm_password')}
+                  placeholder="••••••••"
+                  disabled={isSubmitting}
+                  className="pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={isSubmitting}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
               {errors.tenant_admin_confirm_password && (
                 <p className="text-sm text-destructive">{errors.tenant_admin_confirm_password.message}</p>
               )}
