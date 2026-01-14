@@ -650,21 +650,35 @@ def get_assigned_candidates_matches():
         if limit < 1 or limit > 20:
             return error_response("limit must be between 1 and 20")
         
-        # Get candidates assigned to this user
+        # Get candidates assigned to this user (explicit assignments)
         assignments_query = select(CandidateAssignment).where(
             and_(
                 CandidateAssignment.assigned_to_user_id == user_id,
-                CandidateAssignment.status == 'ACTIVE'
+                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
             )
         )
         assignments = db.session.execute(assignments_query).scalars().all()
         candidate_ids = [assignment.candidate_id for assignment in assignments]
         
-        if not candidate_ids:
+        # Also include broadcast candidates (visible to all team)
+        broadcast_query = select(Candidate.id).where(
+            and_(
+                Candidate.tenant_id == tenant_id,
+                Candidate.is_visible_to_all_team == True
+            )
+        )
+        broadcast_candidate_ids = [row for row in db.session.execute(broadcast_query).scalars().all()]
+        
+        # Merge both sets of candidate IDs (avoiding duplicates)
+        all_candidate_ids = list(set(candidate_ids + broadcast_candidate_ids))
+        
+        if not all_candidate_ids:
             return jsonify({
                 'message': 'No candidates assigned to you',
                 'candidates': []
             }), 200
+        
+        candidate_ids = all_candidate_ids
         
         # Fetch matches for assigned candidates
         results = []

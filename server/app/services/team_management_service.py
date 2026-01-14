@@ -610,13 +610,15 @@ class TeamManagementService:
             role_name = member.roles[0].name if member.roles else 'USER'
             
             # Count candidates assigned to this member (via manager_id or recruiter_id)
+            # Also include broadcast candidates (is_visible_to_all_team=True)
             candidate_count = db.session.scalar(
                 select(func.count(distinct(Candidate.id)))
                 .where(
                     Candidate.tenant_id == tenant_id,
                     or_(
                         Candidate.manager_id == member.id,
-                        Candidate.recruiter_id == member.id
+                        Candidate.recruiter_id == member.id,
+                        Candidate.is_visible_to_all_team == True  # Include broadcast candidates
                     )
                 )
             ) or 0

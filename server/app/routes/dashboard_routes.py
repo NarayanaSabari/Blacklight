@@ -49,13 +49,26 @@ def get_dashboard_stats():
         thirty_days_ago = now - timedelta(days=30)
         
         # ========== MY CANDIDATES (assigned to current user) ==========
+        # Part 1: Explicitly assigned candidates
         my_candidates_query = select(func.count()).select_from(CandidateAssignment).where(
             and_(
                 CandidateAssignment.assigned_to_user_id == user_id,
-                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
             )
         )
-        my_candidates_count = db.session.scalar(my_candidates_query) or 0
+        my_assigned_count = db.session.scalar(my_candidates_query) or 0
+        
+        # Part 2: Broadcast candidates (visible to all team)
+        broadcast_candidates_query = select(func.count()).select_from(Candidate).where(
+            and_(
+                Candidate.tenant_id == tenant_id,
+                Candidate.is_visible_to_all_team == True
+            )
+        )
+        broadcast_count = db.session.scalar(broadcast_candidates_query) or 0
+        
+        # Total: explicit + broadcast (note: may have overlap but this is approximate for dashboard)
+        my_candidates_count = my_assigned_count + broadcast_count
         
         # My candidates by status
         my_candidates_by_status_query = select(
@@ -67,7 +80,7 @@ def get_dashboard_stats():
         ).where(
             and_(
                 CandidateAssignment.assigned_to_user_id == user_id,
-                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
             )
         ).group_by(Candidate.onboarding_status)
         
@@ -164,7 +177,7 @@ def get_dashboard_stats():
                 ).where(
                     and_(
                         Candidate.tenant_id == tenant_id,
-                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
                     )
                 )
                 team_candidates = db.session.scalar(team_candidates_query) or 0
@@ -188,7 +201,7 @@ def get_dashboard_stats():
                 ).where(
                     and_(
                         PortalUser.manager_id == user_id,
-                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED', 'ACTIVE'])
+                        CandidateAssignment.status.in_(['PENDING', 'ACCEPTED'])
                     )
                 )
                 team_candidates = db.session.scalar(team_candidates_query) or 0

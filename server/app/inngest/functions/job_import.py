@@ -349,8 +349,15 @@ def import_jobs_batch_for_platform(
         )
         
         try:
-            # Map your schema field names to our internal names
-            external_id = job_data.get("jobId") or job_data.get("job_id") or job_data.get("external_job_id") or job_data.get("external_id")
+            # Map various field names to our internal names (different scrapers use different conventions)
+            external_id = (
+                job_data.get("jobId") or 
+                job_data.get("job_id") or 
+                job_data.get("platform_job_id") or  # LinkedIn uses this
+                job_data.get("external_job_id") or 
+                job_data.get("external_id") or
+                job_data.get("id")  # Fallback to generic 'id'
+            )
             platform = job_data.get("platform", platform_name)
             
             # Truncate external_id if too long (VARCHAR(255) limit)
@@ -532,8 +539,8 @@ def import_jobs_batch_for_platform(
             )
             
             # Handle "N/A" values for URLs
-            # Check jobUrl, job_url, and source_url (scraper sends source_url)
-            job_url = job_data.get("jobUrl", job_data.get("job_url", job_data.get("source_url", "")))
+            # Check url, jobUrl, job_url, and source_url (different scrapers use different field names)
+            job_url = job_data.get("url", job_data.get("jobUrl", job_data.get("job_url", job_data.get("source_url", ""))))
             if job_url == "N/A":
                 job_url = ""
             

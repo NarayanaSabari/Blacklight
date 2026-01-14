@@ -62,6 +62,7 @@ class PortalUserResponseSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     permissions: List[str] = Field(default_factory=list) # Added permissions field
+    is_tenant_admin: bool = Field(default=False, description="Whether user has TENANT_ADMIN role")
     
     # Optional nested tenant data
     tenant: Optional[dict] = None

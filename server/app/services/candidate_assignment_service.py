@@ -109,8 +109,6 @@ class CandidateAssignmentService:
         if not candidate.onboarding_status or candidate.onboarding_status == 'PENDING_ASSIGNMENT':
             candidate.onboarding_status = 'ASSIGNED'
 
-        db.session.commit()
-
         # Create notification for assignee
         notification = AssignmentNotification(
             assignment_id=assignment.id,
@@ -119,6 +117,8 @@ class CandidateAssignmentService:
             is_read=False,
         )
         db.session.add(notification)
+        
+        # Single commit for the entire transaction (assignment + candidate update + notification)
         db.session.commit()
 
         # Log audit
@@ -246,8 +246,6 @@ class CandidateAssignmentService:
         if not candidate.onboarding_status or candidate.onboarding_status == 'PENDING_ASSIGNMENT':
             candidate.onboarding_status = 'ASSIGNED'
 
-        db.session.commit()
-
         # Create notification for new assignee
         notification = AssignmentNotification(
             assignment_id=new_assignment.id,
@@ -256,6 +254,8 @@ class CandidateAssignmentService:
             is_read=False,
         )
         db.session.add(notification)
+        
+        # Single commit for the entire transaction
         db.session.commit()
 
         # Log audit
@@ -356,8 +356,6 @@ class CandidateAssignmentService:
         if candidate.onboarding_status == 'ASSIGNED':
             candidate.onboarding_status = 'PENDING_ASSIGNMENT'
 
-        db.session.commit()
-
         # Create notification
         notification = AssignmentNotification(
             assignment_id=current_assignment.id,
@@ -366,6 +364,8 @@ class CandidateAssignmentService:
             is_read=False,
         )
         db.session.add(notification)
+        
+        # Single commit for the entire transaction
         db.session.commit()
 
         # Log audit
@@ -573,7 +573,9 @@ class CandidateAssignmentService:
     @staticmethod
     def get_assignment_history(
         tenant_id: int,
-        limit: int = 50
+        limit: int = 50,
+        assigned_to_user_id: Optional[int] = None,
+        assigned_by_user_id: Optional[int] = None
     ) -> List[Dict]:
         """
         Get recent assignment history for a tenant.
@@ -581,6 +583,8 @@ class CandidateAssignmentService:
         Args:
             tenant_id: Tenant ID
             limit: Maximum number of assignments to return
+            assigned_to_user_id: Optional filter by assigned user
+            assigned_by_user_id: Optional filter by assigning user
 
         Returns:
             List of assignment dictionaries ordered by date (newest first)
@@ -591,7 +595,16 @@ class CandidateAssignmentService:
             CandidateAssignment.candidate_id == Candidate.id
         ).where(
             Candidate.tenant_id == tenant_id
-        ).order_by(CandidateAssignment.assigned_at.desc()).limit(limit)
+        )
+        
+        # Apply optional filters
+        if assigned_to_user_id is not None:
+            query = query.where(CandidateAssignment.assigned_to_user_id == assigned_to_user_id)
+        
+        if assigned_by_user_id is not None:
+            query = query.where(CandidateAssignment.assigned_by_user_id == assigned_by_user_id)
+        
+        query = query.order_by(CandidateAssignment.assigned_at.desc()).limit(limit)
 
         assignments = list(db.session.scalars(query))
 

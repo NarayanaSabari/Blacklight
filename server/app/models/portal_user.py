@@ -136,6 +136,7 @@ class PortalUser(BaseModel):
             "is_locked": self.is_locked,
             "locked_until": self.locked_until.isoformat() if self.locked_until else None,
             "manager_id": self.manager_id,
+            "is_tenant_admin": self.is_tenant_admin,
         })
         
         if include_roles:
