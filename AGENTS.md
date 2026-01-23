@@ -1,35 +1,79 @@
-# AGENTS.md - Development Guide for AI Agents
+# BLACKLIGHT KNOWLEDGE BASE
 
-## 1. Project Overview
-**Blacklight** is a monorepo multi-tenant HR/Recruiting platform.
-- **Backend**: Flask (Python 3.11+), SQLAlchemy 2.0, PostgreSQL, Redis, Inngest (Async jobs).
-- **Frontend**: React (Vite), TypeScript, Tailwind CSS, shadcn/ui, TanStack Query.
-- **Structure**:
-  - `server/`: Flask backend
-  - `ui/portal/`: Main recruiter portal
-  - `ui/centralD/`: Super-admin dashboard
-- **Deployment**: Production deployment via `./deploy.sh` script with `.env.production` config.
+**Generated:** 2026-01-21 15:04  
+**Commit:** 674ffd0  
+**Branch:** main
 
-## 2. Production Deployment
+## OVERVIEW
+Multi-tenant HR/Recruiting platform. Flask backend + React dual-frontend (portal for recruiters, centralD for super-admin). Monorepo with Docker deployment, Inngest async jobs, multi-tenancy via tenant_id context.
 
-### Deploy to Production
-- **Deploy Script**: `./deploy.sh` (handles all deployment operations)
-- **Environment Config**: `.env.production` (copy from `.env.production.example`)
-- **Start Services**: `./deploy.sh start`
-- **View Logs**: `./deploy.sh logs [service]`
-- **Stop Services**: `./deploy.sh stop`
-- **Run Migrations**: `./deploy.sh migrate`
-- **Seed Database**: `./deploy.sh seed`
-- **Rebuild Backend**: `./deploy.sh rebuild-backend`
-- **Rebuild Frontend**: `./deploy.sh rebuild-frontend [portal|central]`
-- **Access Inngest Dashboard**: `http://localhost:8288` (after deployment)
+## STRUCTURE
+```
+Blacklight/
+├── server/               # Flask backend (see server/AGENTS.md)
+│   ├── app/             # Application factory pattern
+│   ├── config/          # Environment-based configs
+│   ├── migrations/      # Alembic DB migrations
+│   └── tests/           # Pytest suite
+├── ui/
+│   ├── portal/          # Main recruiter interface (see ui/portal/AGENTS.md)
+│   └── centralD/        # Super-admin dashboard (see ui/centralD/AGENTS.md)
+├── docs/                # Technical specs (job matching, email sync)
+├── credentials/         # GCS service account JSON
+├── docker-compose.inngest.yml   # Inngest worker deployment
+├── deploy-inngest.sh    # Inngest deployment script
+└── .env.production      # Production env vars (NEVER commit)
+```
 
-### Environment Variables
-- All production env vars in `.env.production` (organized by container)
-- Use **SCREAMING_SNAKE_CASE** for all environment variable names
-- Credentials file: `./credentials/gcs-credentials.json` (GCS service account)
+## WHERE TO LOOK
+| Task | Location | Notes |
+|------|----------|-------|
+| Backend logic | `server/app/services/` | Business logic, DB commits happen here |
+| API routes | `server/app/routes/` | HTTP handling only, NO commits |
+| Data models | `server/app/models/` | SQLAlchemy ORM, inherit from BaseModel |
+| Validation | `server/app/schemas/` | Pydantic request/response schemas |
+| Async jobs | `server/app/inngest/functions/` | Email sending, cron jobs |
+| DB migrations | `python manage.py create-migration "msg"` | Always run after model changes |
+| Frontend portal | `ui/portal/src/` | Recruiter/HR interface |
+| Admin dashboard | `ui/centralD/src/` | PM_ADMIN interface |
+| Deployment | `deploy-inngest.sh` + `.env.production` | Inngest worker deployment |
 
-## 3. Build, Lint & Test Commands
+## PRODUCTION DEPLOYMENT
+**Inngest Worker**: `./deploy-inngest.sh` (uses `.env.production`)
+**Environment**: `.env.production` (copy from `.env.production.example`)
+**Credentials**: `./credentials/gcs-credentials.json` (GCS service account)
+**Env Var Naming**: SCREAMING_SNAKE_CASE only
+
+## COMMANDS
+
+### Backend (`/server`)
+Run from `server/` directory:
+```bash
+flask run                        # Dev server (port 5000)
+pytest                          # Run all tests
+pytest tests/test_X.py          # Single file
+pytest --cov=app                # With coverage
+flake8 . && black . && isort .  # Lint + format
+python manage.py create-migration "msg"  # After model changes
+```
+
+### Frontend (`/ui/portal` or `/ui/centralD`)
+Run from respective UI directory:
+```bash
+npm run dev                     # Dev server (5173/5174)
+npm run build                   # Production build
+npm run lint                    # ESLint
+tsc -b                          # Type check
+```
+
+### Inngest Deployment
+```bash
+./deploy-inngest.sh             # Deploy Inngest worker (uses .env.production)
+```
+
+## CONVENTIONS (Deviations Only)
+
+## CONVENTIONS (Deviations Only)
 
 ### Backend (`/server`)
 *Run commands from the `server` directory.*

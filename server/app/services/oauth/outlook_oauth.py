@@ -293,6 +293,58 @@ class OutlookOAuthService:
         data = response.json()
         return data.get("value", []), data.get("@odata.nextLink")
     
+    def get_messages_delta(
+        self,
+        access_token: str,
+        folder: str = "inbox",
+        delta_link: Optional[str] = None,
+        select_fields: Optional[list] = None,
+    ) -> tuple[list, Optional[str], Optional[str]]:
+        """
+        Fetch messages using delta query for incremental sync.
+        
+        Microsoft Graph delta query tracks changes since last sync, avoiding full mailbox scans.
+        On first call (no delta_link), returns all messages + deltaLink.
+        On subsequent calls, returns only new/changed messages since last deltaLink.
+        
+        Args:
+            access_token: Valid access token
+            folder: Mail folder ('inbox', 'sentitems', etc.)
+            delta_link: Delta link from previous sync (None for initial sync)
+            select_fields: Fields to include in response
+            
+        Returns:
+            Tuple of (messages, nextLink for pagination, deltaLink for next sync)
+        """
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        if delta_link:
+            url = delta_link
+        else:
+            url = f"{self.GRAPH_URL}/me/mailFolders/{folder}/messages/delta"
+            
+            params = {}
+            if select_fields:
+                params["$select"] = ",".join(select_fields)
+            else:
+                params["$select"] = "id,subject,body,from,receivedDateTime,hasAttachments"
+            
+            if params:
+                url = f"{url}?{urlencode(params)}"
+        
+        response = requests.get(url, headers=headers, timeout=60)
+        
+        if not response.ok:
+            logger.error(f"Failed to fetch messages delta: {response.text}")
+            raise ValueError(f"Failed to fetch messages delta: {response.status_code}")
+        
+        data = response.json()
+        messages = data.get("value", [])
+        next_link = data.get("@odata.nextLink")
+        new_delta_link = data.get("@odata.deltaLink")
+        
+        return messages, next_link, new_delta_link
+    
     def get_message_by_id(self, access_token: str, message_id: str) -> dict:
         """
         Fetch a single message by ID.

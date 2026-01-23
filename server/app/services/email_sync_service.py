@@ -687,15 +687,16 @@ class EmailSyncService:
         integration: UserEmailIntegration,
     ) -> list[dict]:
         """
-        Fetch emails from Outlook with time-based logic using proper @odata.nextLink pagination.
+        Fetch emails from Outlook using delta query for incremental sync (Phase 9A).
         
-        Time-based fetching strategy:
-        - First scan (no last_synced_at): Fetch ALL emails from past 2 days
-        - Subsequent syncs: Fetch ALL emails since last_synced_at
+        Phase 9A: Delta Query Strategy
+        - Uses Microsoft Graph delta query to track changes since last sync
+        - Avoids full mailbox scans by fetching only new/changed messages
+        - Stores deltaLink in integration.outlook_delta_link for next sync
         
-        Pagination:
-        - Uses Microsoft Graph's @odata.nextLink for reliable pagination
-        - Avoids $skip which may not work correctly for large datasets
+        Fallback Strategy:
+        - First sync (no delta_link): Use delta query initial sync
+        - Delta link expired: Fall back to time-based filter for past 2 days
         
         Args:
             access_token: Valid Outlook access token
@@ -704,81 +705,137 @@ class EmailSyncService:
         Returns:
             List of email dictionaries
         """
-        # Determine time boundary based on sync state
-        is_initial_sync = integration.last_synced_at is None
-        
-        if is_initial_sync:
-            # First scan: Look back 2 days
-            after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
-            logger.info(f"Initial Outlook sync for integration {integration.id}: fetching emails from past {self.initial_lookback_days} days")
-        else:
-            # Subsequent syncs: Fetch since last sync time (with 15 min buffer for safety)
-            after_date = integration.last_synced_at - timedelta(minutes=15)
-            logger.info(f"Incremental Outlook sync for integration {integration.id}: fetching emails since {after_date.isoformat()}")
-        
-        filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-        
-        # Fetch ALL messages using @odata.nextLink pagination (more reliable than $skip)
         all_emails = []
-        page_size = self.max_emails_per_page
-        next_link: Optional[str] = None
-        is_first_request = True
+        new_delta_link: Optional[str] = None
         
-        while True:
-            # Fetch messages - use initial request or follow nextLink
-            if is_first_request:
-                messages, next_link = outlook_oauth_service.get_messages(
-                    access_token=access_token,
-                    top=page_size,
-                    filter_query=filter_query,
-                )
-                is_first_request = False
-            else:
-                # Use the nextLink URL for pagination (includes all query params)
-                messages, next_link = outlook_oauth_service.get_messages_from_url(
-                    access_token=access_token,
-                    url=next_link,  # type: ignore - we check next_link before this branch
-                )
-            
-            if not messages:
-                break
-            
-            for msg in messages:
-                try:
-                    # Extract body
-                    body = ""
-                    if msg.get("body"):
-                        body = msg["body"].get("content", "")
-                        if msg["body"].get("contentType") == "html":
-                            body = re.sub(r"<[^>]+>", " ", body)
-                            body = re.sub(r"\s+", " ", body)
-                    
-                    # Extract sender
-                    sender = ""
-                    if msg.get("from", {}).get("emailAddress"):
-                        sender_info = msg["from"]["emailAddress"]
-                        sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
-                    
-                    all_emails.append({
-                        "id": msg["id"],
-                        "thread_id": msg.get("conversationId"),
-                        "subject": msg.get("subject", ""),
-                        "sender": sender,
-                        "body": body.strip()[:10000],
-                        "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
-                    })
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to process Outlook message: {e}")
-                    continue
-            
-            logger.debug(f"Fetched {len(all_emails)} Outlook emails so far, continuing...")
-            
-            # Check if there are more pages via nextLink
-            if not next_link:
-                break
+        has_delta_link = bool(integration.outlook_delta_link)
         
-        logger.info(f"Found {len(all_emails)} total Outlook emails since {after_date.strftime('%Y-%m-%d %H:%M')}")
+        if has_delta_link:
+            logger.info(f"Incremental Outlook delta sync for integration {integration.id}")
+        else:
+            logger.info(f"Initial Outlook delta sync for integration {integration.id}")
+        
+        try:
+            next_link: Optional[str] = None
+            is_first_request = True
+            
+            while True:
+                if is_first_request:
+                    messages, next_link, new_delta_link = outlook_oauth_service.get_messages_delta(
+                        access_token=access_token,
+                        folder="inbox",
+                        delta_link=integration.outlook_delta_link,
+                    )
+                    is_first_request = False
+                else:
+                    messages, next_link, new_delta_link = outlook_oauth_service.get_messages_delta(
+                        access_token=access_token,
+                        folder="inbox",
+                        delta_link=next_link,
+                    )
+                
+                if not messages:
+                    break
+                
+                for msg in messages:
+                    try:
+                        body = ""
+                        if msg.get("body"):
+                            body = msg["body"].get("content", "")
+                            if msg["body"].get("contentType") == "html":
+                                body = re.sub(r"<[^>]+>", " ", body)
+                                body = re.sub(r"\s+", " ", body)
+                        
+                        sender = ""
+                        if msg.get("from", {}).get("emailAddress"):
+                            sender_info = msg["from"]["emailAddress"]
+                            sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
+                        
+                        all_emails.append({
+                            "id": msg["id"],
+                            "thread_id": msg.get("conversationId"),
+                            "subject": msg.get("subject", ""),
+                            "sender": sender,
+                            "body": body.strip()[:10000],
+                            "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to process Outlook message: {e}")
+                        continue
+                
+                logger.debug(f"Fetched {len(all_emails)} Outlook emails so far, continuing...")
+                
+                if not next_link:
+                    break
+            
+            if new_delta_link:
+                integration.outlook_delta_link = new_delta_link
+                integration.last_batch_processed_at = datetime.now(timezone.utc)
+                db.session.commit()
+                logger.info(f"Stored new Outlook delta link for integration {integration.id}")
+            
+        except Exception as e:
+            logger.warning(f"Delta query failed for integration {integration.id}: {e}. Falling back to time-based sync.")
+            
+            integration.outlook_delta_link = None
+            db.session.commit()
+            
+            after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
+            filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            
+            all_emails = []
+            next_link = None
+            is_first_request = True
+            
+            while True:
+                if is_first_request:
+                    messages, next_link = outlook_oauth_service.get_messages(
+                        access_token=access_token,
+                        top=self.max_emails_per_page,
+                        filter_query=filter_query,
+                    )
+                    is_first_request = False
+                else:
+                    messages, next_link = outlook_oauth_service.get_messages_from_url(
+                        access_token=access_token,
+                        url=next_link,  # type: ignore
+                    )
+                
+                if not messages:
+                    break
+                
+                for msg in messages:
+                    try:
+                        body = ""
+                        if msg.get("body"):
+                            body = msg["body"].get("content", "")
+                            if msg["body"].get("contentType") == "html":
+                                body = re.sub(r"<[^>]+>", " ", body)
+                                body = re.sub(r"\s+", " ", body)
+                        
+                        sender = ""
+                        if msg.get("from", {}).get("emailAddress"):
+                            sender_info = msg["from"]["emailAddress"]
+                            sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
+                        
+                        all_emails.append({
+                            "id": msg["id"],
+                            "thread_id": msg.get("conversationId"),
+                            "subject": msg.get("subject", ""),
+                            "sender": sender,
+                            "body": body.strip()[:10000],
+                            "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
+                        })
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to process Outlook message: {e}")
+                        continue
+                
+                if not next_link:
+                    break
+        
+        logger.info(f"Found {len(all_emails)} total Outlook emails")
         return all_emails
     
     def _get_tenant_roles(self, tenant_id: int) -> list[str]:

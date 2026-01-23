@@ -44,8 +44,9 @@ class UserEmailIntegration(BaseModel):
     last_error = db.Column(db.Text, nullable=True)
     consecutive_failures = db.Column(db.Integer, default=0)
     
-    # Incremental Sync Support (Gmail History API)
     gmail_history_id = db.Column(db.String(100), nullable=True)
+    outlook_delta_link = db.Column(db.Text, nullable=True)
+    last_batch_processed_at = db.Column(db.DateTime, nullable=True)
     
     # Sync Configuration
     sync_frequency_minutes = db.Column(db.Integer, default=15)
@@ -83,7 +84,9 @@ class UserEmailIntegration(BaseModel):
             "sync_frequency_minutes": self.sync_frequency_minutes,
             "emails_processed_count": self.emails_processed_count,
             "jobs_created_count": self.jobs_created_count,
-            "has_history_id": self.gmail_history_id is not None,  # Indicates incremental sync support
+            "has_gmail_history_id": self.gmail_history_id is not None,
+            "has_outlook_delta_link": self.outlook_delta_link is not None,
+            "last_batch_processed_at": self.last_batch_processed_at.isoformat() if self.last_batch_processed_at else None,
         })
         return data
     

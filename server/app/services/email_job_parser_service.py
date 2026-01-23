@@ -106,7 +106,6 @@ Important:
         body = email_data.get("body", "")
         
         try:
-            # Call AI to extract job details
             job_data = self._extract_job_details(subject, sender, body)
             
             if not job_data or not job_data.get("title"):
@@ -120,10 +119,8 @@ Important:
                 )
                 return None
             
-            # Log extracted data for debugging
             logger.info(f"Extracted job data from email {email_id}: {json.dumps(job_data, indent=2, default=str)}")
             
-            # Create job posting (or get existing if duplicate)
             job, is_new = self._create_job_posting(
                 integration=integration,
                 email_data=email_data,
@@ -134,9 +131,7 @@ Important:
                 logger.warning(f"Failed to create job from email {email_id}")
                 return None
             
-            # Only record and update stats for NEW jobs
             if is_new:
-                # Record processed email with success
                 self._record_processed_email(
                     integration=integration,
                     email_data=email_data,
@@ -145,7 +140,6 @@ Important:
                     confidence=job_data.get("confidence_score"),
                 )
                 
-                # Update integration stats
                 integration.emails_processed_count = (integration.emails_processed_count or 0) + 1
                 integration.jobs_created_count = (integration.jobs_created_count or 0) + 1
                 db.session.commit()
@@ -166,6 +160,101 @@ Important:
             )
             db.session.commit()
             return None
+    
+    def parse_emails_to_jobs_batch(
+        self,
+        integration: UserEmailIntegration,
+        emails_data: list[dict],
+    ) -> list[tuple[Optional[JobPosting], dict]]:
+        """
+        Parse multiple emails and create job postings in batch.
+        
+        Phase 8: Batch processing reduces Gemini API calls by 10x.
+        Instead of N individual API calls, makes 1 call per batch of 10 emails.
+        
+        Args:
+            integration: UserEmailIntegration that received the emails
+            emails_data: List of email dicts with (id, subject, body, sender, etc.)
+            
+        Returns:
+            List of tuples (JobPosting or None, email_data) for each input email
+        """
+        if not self.ai_model:
+            logger.error("AI model not configured")
+            return [(None, email_data) for email_data in emails_data]
+        
+        if not emails_data:
+            return []
+        
+        logger.info(f"Batch processing {len(emails_data)} emails for integration {integration.id}")
+        
+        try:
+            extracted_jobs = self._extract_job_details_batch(emails_data)
+            
+            results = []
+            jobs_created = 0
+            
+            for email_data, job_data in zip(emails_data, extracted_jobs):
+                email_id = email_data.get("email_id")
+                
+                if not job_data or not job_data.get("title"):
+                    logger.warning(f"Could not extract job from email {email_id} in batch")
+                    self._record_processed_email(
+                        integration=integration,
+                        email_data=email_data,
+                        result="failed",
+                        skip_reason="no_job_extracted",
+                        confidence=job_data.get("confidence_score") if job_data else None,
+                    )
+                    results.append((None, email_data))
+                    continue
+                
+                logger.debug(f"Batch extracted job from email {email_id}: {job_data.get('title')}")
+                
+                job, is_new = self._create_job_posting(
+                    integration=integration,
+                    email_data=email_data,
+                    job_data=job_data,
+                )
+                
+                if not job:
+                    logger.warning(f"Failed to create job from email {email_id} in batch")
+                    results.append((None, email_data))
+                    continue
+                
+                if is_new:
+                    self._record_processed_email(
+                        integration=integration,
+                        email_data=email_data,
+                        result="job_created",
+                        job_id=job.id,
+                        confidence=job_data.get("confidence_score"),
+                    )
+                    jobs_created += 1
+                    logger.info(f"Batch created job {job.id} from email {email_id}")
+                else:
+                    logger.info(f"Batch found existing job {job.id} for email {email_id}")
+                
+                results.append((job, email_data))
+            
+            integration.emails_processed_count = (integration.emails_processed_count or 0) + len(emails_data)
+            integration.jobs_created_count = (integration.jobs_created_count or 0) + jobs_created
+            db.session.commit()
+            
+            logger.info(f"Batch processing complete: {jobs_created} new jobs created from {len(emails_data)} emails")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Batch processing failed for integration {integration.id}: {e}", exc_info=True)
+            for email_data in emails_data:
+                self._record_processed_email(
+                    integration=integration,
+                    email_data=email_data,
+                    result="error",
+                    skip_reason=f"Batch error: {str(e)[:450]}",
+                )
+            db.session.commit()
+            return [(None, email_data) for email_data in emails_data]
     
     def _extract_job_details(
         self,
@@ -248,6 +337,167 @@ Important:
         except Exception as e:
             logger.error(f"AI extraction failed: {e}", exc_info=True)
             return None
+    
+    def _extract_job_details_batch(
+        self,
+        emails: list[dict],
+    ) -> list[Optional[dict]]:
+        """
+        Use AI to extract job details from multiple emails in a single API call.
+        
+        Phase 8: Batch processing to reduce Gemini API calls by 10x.
+        
+        Args:
+            emails: List of email dicts with 'subject', 'sender', 'body' keys
+            
+        Returns:
+            List of extracted job details (same length as input, None for failed extractions)
+        """
+        if not emails:
+            return []
+        
+        # Build batch prompt with all emails
+        batch_sections = []
+        for idx, email in enumerate(emails):
+            subject = email.get("subject", "")
+            sender = email.get("sender", "")
+            body = email.get("body", "")[:8000]  # Limit body size
+            
+            section = f"""
+=== EMAIL {idx + 1} ===
+Subject: {subject}
+Sender: {sender}
+Body:
+{body}
+"""
+            batch_sections.append(section)
+        
+        batch_prompt = f"""You are an expert at extracting job posting information from emails.
+
+Analyze the following {len(emails)} emails and extract job details from EACH one. Each email was identified as containing a job posting based on its subject line.
+
+{chr(10).join(batch_sections)}
+
+For EACH email above, extract the following information and return as a JSON array. The array must have EXACTLY {len(emails)} objects in the same order as the emails above.
+
+Use null for any field you cannot determine:
+
+[
+  {{
+    "email_index": 1,
+    "title": "Job title (e.g., 'Senior Python Developer')",
+    "company": "Company name if mentioned, or null",
+    "location": "Job location (city, state) or null",
+    "job_type": "One of: Full-time, Part-time, Contract, Contract-to-hire, or null",
+    "is_remote": true or false or null,
+    "salary_range": "Salary range as string (e.g., '$100k-$150k/year' or '$50-$70/hour'), or null",
+    "salary_min": "Minimum annual salary as integer (e.g., 100000), or null",
+    "salary_max": "Maximum annual salary as integer (e.g., 150000), or null",
+    "skills": ["List", "of", "all", "skills", "mentioned"],
+    "experience_required": "Experience requirement as string (e.g., '3-5 years'), or null",
+    "experience_min": "Minimum years of experience as integer (e.g., 3), or null",
+    "experience_max": "Maximum years of experience as integer (e.g., 5), or null",
+    "description": "Brief job description summarizing the role (max 1000 chars)",
+    "requirements": "Key requirements and qualifications as a single string, or null",
+    "snippet": "Short 1-2 sentence summary of the job, or null",
+    "confidence_score": "Your confidence in this extraction from 0.0 to 1.0"
+  }},
+  ... (repeat for all {len(emails)} emails)
+]
+
+Important:
+- Extract factual information only, do not invent details
+- For salary, convert hourly rates to annual (hourly * 2080) if only hourly is given
+- Parse ALL skills from the requirements/description into the skills array
+- is_remote should be true only if the job is fully remote, false for onsite/hybrid
+- MUST return exactly {len(emails)} objects in the array, in the same order
+- Include "email_index" field matching the email number above
+- Return ONLY the JSON array, no other text"""
+        
+        try:
+            # Phase 8: Batch call with circuit breaker
+            response = self._call_gemini_with_circuit_breaker(batch_prompt)
+            
+            if not response:
+                logger.warning(f"Batch extraction failed: No response from Gemini")
+                return [None] * len(emails)
+            
+            # Check if response has content
+            if not response.candidates:
+                logger.warning(f"Batch extraction: Gemini returned no candidates. Feedback: {response.prompt_feedback}")
+                return [None] * len(emails)
+            
+            # Check for blocked content
+            candidate = response.candidates[0]
+            if candidate.finish_reason.name == "SAFETY":
+                logger.warning(f"Batch extraction blocked: {candidate.safety_ratings}")
+                return [None] * len(emails)
+            
+            # Extract JSON array from response
+            response_text = response.text.strip() if response.text else ""
+            
+            if not response_text:
+                logger.warning("Batch extraction: Empty response from Gemini")
+                return [None] * len(emails)
+            
+            logger.debug(f"Batch extraction response: {response_text[:500]}")
+            
+            # Strip markdown code blocks if present
+            if response_text.startswith("```"):
+                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
+                response_text = re.sub(r"\s*```$", "", response_text)
+            
+            # Try to find JSON array in response
+            json_match = re.search(r"\[[\s\S]*\]", response_text)
+            if json_match:
+                results = json.loads(json_match.group())
+            else:
+                results = json.loads(response_text)
+            
+            # Validate array length
+            if not isinstance(results, list):
+                logger.error(f"Batch extraction: Expected array, got {type(results)}")
+                return [None] * len(emails)
+            
+            if len(results) != len(emails):
+                logger.warning(
+                    f"Batch extraction: Expected {len(emails)} results, got {len(results)}. "
+                    f"Padding with None values."
+                )
+                # Pad or truncate to match input length
+                while len(results) < len(emails):
+                    results.append(None)
+                results = results[:len(emails)]
+            
+            # Sort by email_index if present (ensure correct order)
+            sorted_results = [None] * len(emails)
+            for result in results:
+                if result and isinstance(result, dict):
+                    idx = result.get("email_index")
+                    if idx and 1 <= idx <= len(emails):
+                        sorted_results[idx - 1] = result
+                    else:
+                        # If no index or invalid, append in order
+                        for i, slot in enumerate(sorted_results):
+                            if slot is None:
+                                sorted_results[i] = result
+                                break
+            
+            logger.info(f"Batch extracted {sum(1 for r in sorted_results if r)} jobs from {len(emails)} emails")
+            return sorted_results
+            
+        except CircuitBreakerError as e:
+            logger.warning(f"Circuit breaker open for batch extraction: {e}")
+            return [None] * len(emails)
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse batch AI response as JSON: {e}")
+            logger.warning(f"Response was: {response_text[:500] if 'response_text' in locals() else 'N/A'}")
+            return [None] * len(emails)
+            
+        except Exception as e:
+            logger.error(f"Batch AI extraction failed: {e}", exc_info=True)
+            return [None] * len(emails)
     
     @gemini_circuit_breaker
     def _call_gemini_with_circuit_breaker(self, prompt: str):

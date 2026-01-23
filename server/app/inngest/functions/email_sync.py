@@ -193,12 +193,17 @@ async def sync_user_inbox_workflow(ctx: inngest.Context) -> dict:
     
     logger.info(f"[INNGEST] Processing {len(emails_to_process)} matched emails")
     
-    # Step 3: Parse each email into a job
     jobs_created = 0
-    created_job_ids = []  # Collect job IDs for matching
+    created_job_ids = []
     
-    for email_data in emails_to_process:
-        def parse_email(data=email_data):
+    from config.settings import settings
+    BATCH_SIZE = settings.email_job_parsing_batch_size
+    
+    for batch_idx in range(0, len(emails_to_process), BATCH_SIZE):
+        batch_emails = emails_to_process[batch_idx:batch_idx + BATCH_SIZE]
+        batch_num = (batch_idx // BATCH_SIZE) + 1
+        
+        def parse_email_batch(emails=batch_emails):
             from app import create_app
             app = create_app()
             with app.app_context():
@@ -210,25 +215,30 @@ async def sync_user_inbox_workflow(ctx: inngest.Context) -> dict:
                 if not integration:
                     return {"error": "Integration not found"}
                 
-                job = email_job_parser_service.parse_email_to_job(integration, data)
+                results = email_job_parser_service.parse_emails_to_jobs_batch(integration, emails)
                 
-                if job:
-                    db.session.commit()
-                    return {
-                        "job_id": job.id, 
-                        "title": job.title,
-                        "tenant_id": integration.tenant_id,
-                    }
+                batch_jobs = []
+                for job, email_data in results:
+                    if job:
+                        batch_jobs.append({
+                            "job_id": job.id,
+                            "title": job.title,
+                            "tenant_id": integration.tenant_id,
+                        })
                 
-                return {"skipped": True}
+                return {
+                    "jobs": batch_jobs,
+                    "batch_size": len(emails),
+                    "jobs_created": len(batch_jobs),
+                }
         
-        email_id = email_data.get("email_id", "unknown")
-        result = await ctx.step.run(f"parse-email-{email_id[:20]}", parse_email)
+        result = await ctx.step.run(f"parse-email-batch-{batch_num}", parse_email_batch)
         
-        if result.get("job_id"):
-            jobs_created += 1
-            created_job_ids.append(result["job_id"])
-            logger.info(f"[INNGEST] Created job {result['job_id']}: {result['title']}")
+        if result.get("jobs"):
+            for job_info in result["jobs"]:
+                jobs_created += 1
+                created_job_ids.append(job_info["job_id"])
+                logger.info(f"[INNGEST] Batch {batch_num} created job {job_info['job_id']}: {job_info['title']}")
     
     # Step 4: Trigger job matching for email-sourced jobs
     if created_job_ids:
