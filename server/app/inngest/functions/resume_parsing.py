@@ -694,9 +694,11 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
         # Personal info - support both flat and nested structure
         personal = parsed_data.get('personal_info', parsed_data)
         
-        if personal.get('full_name'):
-            candidate.full_name = personal['full_name']
-            if not candidate.first_name or candidate.first_name in ('Unknown', 'Processing'):
+        # Only update name fields if candidate doesn't have a real name yet
+        # (preserve user-provided names from resume upload)
+        if not candidate.first_name or candidate.first_name in ('Unknown', 'Processing'):
+            if personal.get('full_name'):
+                candidate.full_name = personal['full_name']
                 names = personal['full_name'].split()
                 if names:
                     candidate.first_name = names[0]
