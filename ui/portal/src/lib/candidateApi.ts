@@ -70,9 +70,12 @@ export const candidateApi = {
   /**
    * Upload resume and auto-create candidate
    */
-  uploadResume: async (file: File): Promise<UploadResumeResponse> => {
+  uploadResume: async (file: File, candidateName?: string): Promise<UploadResumeResponse> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (candidateName) {
+      formData.append('candidate_name', candidateName);
+    }
 
     return apiRequest.post<UploadResumeResponse>(
       '/api/candidates/upload',

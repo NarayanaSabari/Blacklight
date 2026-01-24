@@ -26,6 +26,7 @@ export function AddCandidatePage() {
   const navigate = useNavigate();
   const [addMethod, setAddMethod] = useState<AddMethod>('choice');
   const [parsedData, setParsedData] = useState<UploadResumeResponse | null>(null);
+  const [candidateName, setCandidateName] = useState('');
 
   // Email invite form state
   const [inviteEmail, setInviteEmail] = useState('');
@@ -76,7 +77,7 @@ export function AddCandidatePage() {
     } else {
       setAddMethod('choice');
       setParsedData(null);
-      // Reset invite form
+      setCandidateName('');
       setInviteEmail('');
       setInviteFirstName('');
       setInviteLastName('');
@@ -302,7 +303,11 @@ export function AddCandidatePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResumeUpload onUploadSuccess={handleUploadSuccess} />
+            <ResumeUpload 
+              onUploadSuccess={handleUploadSuccess}
+              candidateName={candidateName}
+              onCandidateNameChange={setCandidateName}
+            />
           </CardContent>
         </Card>
       ) : addMethod === 'manual' ? (

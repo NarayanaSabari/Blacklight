@@ -179,7 +179,7 @@ class EmailSyncService:
             if integration.provider == "gmail":
                 emails, new_history_id = self._fetch_gmail_emails_with_history(access_token, integration)
             else:
-                emails = self._fetch_outlook_emails_safe(access_token, integration)
+                emails = self._fetch_outlook_emails(access_token, integration)
                 new_history_id = None
             
             # Filter and process emails
@@ -365,30 +365,33 @@ class EmailSyncService:
         Returns:
             Tuple of (emails list, new history_id for next sync)
         """
+        logger.info(f"📬 Fetching Gmail emails for integration_id={integration.id}")
+        
         service = gmail_oauth_service.build_gmail_service(access_token)
         
-        # Get current profile to obtain latest history ID
         try:
             profile = service.users().getProfile(userId="me").execute()
             latest_history_id = profile.get("historyId")
+            logger.debug(f"Gmail profile fetched: email={profile.get('emailAddress')}, historyId={latest_history_id}")
         except Exception as e:
-            logger.warning(f"Failed to get Gmail profile: {e}")
+            logger.warning(f"❌ Failed to get Gmail profile: {e}")
             latest_history_id = None
         
-        # Try incremental sync if we have a history ID
         if integration.gmail_history_id and latest_history_id:
             try:
+                logger.info(f"🔄 Attempting incremental sync from historyId={integration.gmail_history_id}")
                 emails = self._fetch_gmail_emails_incremental(
                     service, integration.gmail_history_id
                 )
-                logger.info(f"Incremental sync: fetched {len(emails)} new emails")
+                logger.info(f"✅ Incremental sync successful: fetched {len(emails)} new emails")
                 return emails, latest_history_id
             except Exception as e:
-                # History ID expired or invalid, fall back to full sync
-                logger.info(f"Incremental sync failed, falling back to full: {e}")
+                logger.info(f"⚠️ Incremental sync failed (will fallback to full): {e}")
+        else:
+            logger.info(f"📥 No history ID available, performing full sync")
         
-        # Full sync with batch API
         emails = self._fetch_gmail_emails_batch(access_token, integration)
+        logger.info(f"✅ Full sync complete: fetched {len(emails)} emails")
         return emails, latest_history_id
     
     @gmail_circuit_breaker
@@ -662,41 +665,15 @@ class EmailSyncService:
             return None
     
     @outlook_circuit_breaker
-    def _fetch_outlook_emails_safe(
-        self,
-        access_token: str,
-        integration: UserEmailIntegration,
-    ) -> list[dict]:
-        """
-        Fetch emails from Outlook with circuit breaker protection.
-        
-        Phase 7: Wraps Outlook fetch with circuit breaker for fault tolerance.
-        
-        Args:
-            access_token: Valid Outlook access token
-            integration: UserEmailIntegration object
-            
-        Returns:
-            List of email dictionaries
-        """
-        return self._fetch_outlook_emails(access_token, integration)
-    
     def _fetch_outlook_emails(
         self,
         access_token: str,
         integration: UserEmailIntegration,
     ) -> list[dict]:
         """
-        Fetch emails from Outlook using delta query for incremental sync (Phase 9A).
+        Fetch Outlook emails using delta query for incremental sync.
         
-        Phase 9A: Delta Query Strategy
-        - Uses Microsoft Graph delta query to track changes since last sync
-        - Avoids full mailbox scans by fetching only new/changed messages
-        - Stores deltaLink in integration.outlook_delta_link for next sync
-        
-        Fallback Strategy:
-        - First sync (no delta_link): Use delta query initial sync
-        - Delta link expired: Fall back to time-based filter for past 2 days
+        Phase 6: Uses Outlook delta query API for incremental sync.
         
         Args:
             access_token: Valid Outlook access token
@@ -705,37 +682,19 @@ class EmailSyncService:
         Returns:
             List of email dictionaries
         """
+        logger.info(f"📬 Fetching Outlook emails for integration_id={integration.id}")
+        
         all_emails = []
-        new_delta_link: Optional[str] = None
         
-        has_delta_link = bool(integration.outlook_delta_link)
-        
-        if has_delta_link:
-            logger.info(f"Incremental Outlook delta sync for integration {integration.id}")
-        else:
-            logger.info(f"Initial Outlook delta sync for integration {integration.id}")
-        
-        try:
-            next_link: Optional[str] = None
-            is_first_request = True
-            
-            while True:
-                if is_first_request:
-                    messages, next_link, new_delta_link = outlook_oauth_service.get_messages_delta(
-                        access_token=access_token,
-                        folder="inbox",
-                        delta_link=integration.outlook_delta_link,
-                    )
-                    is_first_request = False
-                else:
-                    messages, next_link, new_delta_link = outlook_oauth_service.get_messages_delta(
-                        access_token=access_token,
-                        folder="inbox",
-                        delta_link=next_link,
-                    )
+        if integration.outlook_delta_link:
+            logger.info(f"🔄 Attempting delta sync with saved delta link")
+            try:
+                messages, new_delta_link = outlook_oauth_service.get_messages_delta(
+                    access_token=access_token,
+                    delta_link=integration.outlook_delta_link,
+                )
                 
-                if not messages:
-                    break
+                logger.info(f"✅ Delta sync successful: fetched {len(messages)} messages")
                 
                 for msg in messages:
                     try:
@@ -761,90 +720,153 @@ class EmailSyncService:
                         })
                         
                     except Exception as e:
-                        logger.warning(f"Failed to process Outlook message: {e}")
+                        logger.warning(f"❌ Failed to process Outlook message: {e}")
                         continue
                 
-                logger.debug(f"Fetched {len(all_emails)} Outlook emails so far, continuing...")
-                
-                if not next_link:
-                    break
-            
-            if new_delta_link:
                 integration.outlook_delta_link = new_delta_link
-                integration.last_batch_processed_at = datetime.now(timezone.utc)
                 db.session.commit()
-                logger.info(f"Stored new Outlook delta link for integration {integration.id}")
-            
-        except Exception as e:
-            logger.warning(f"Delta query failed for integration {integration.id}: {e}. Falling back to time-based sync.")
-            
-            integration.outlook_delta_link = None
-            db.session.commit()
-            
-            after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
-            filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
-            
-            all_emails = []
-            next_link = None
-            is_first_request = True
-            
-            while True:
-                if is_first_request:
-                    messages, next_link = outlook_oauth_service.get_messages(
-                        access_token=access_token,
-                        top=self.max_emails_per_page,
-                        filter_query=filter_query,
-                    )
-                    is_first_request = False
-                else:
-                    messages, next_link = outlook_oauth_service.get_messages_from_url(
-                        access_token=access_token,
-                        url=next_link,  # type: ignore
-                    )
                 
-                if not messages:
-                    break
+                logger.info(f"✅ Outlook delta sync complete: {len(all_emails)} emails processed")
+                return all_emails
                 
-                for msg in messages:
-                    try:
-                        body = ""
-                        if msg.get("body"):
-                            body = msg["body"].get("content", "")
-                            if msg["body"].get("contentType") == "html":
-                                body = re.sub(r"<[^>]+>", " ", body)
-                                body = re.sub(r"\s+", " ", body)
-                        
-                        sender = ""
-                        if msg.get("from", {}).get("emailAddress"):
-                            sender_info = msg["from"]["emailAddress"]
-                            sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
-                        
-                        all_emails.append({
-                            "id": msg["id"],
-                            "thread_id": msg.get("conversationId"),
-                            "subject": msg.get("subject", ""),
-                            "sender": sender,
-                            "body": body.strip()[:10000],
-                            "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
-                        })
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to process Outlook message: {e}")
-                        continue
+            except Exception as e:
+                logger.warning(f"⚠️ Delta query failed (will fallback to time-based): {e}")
                 
+                integration.outlook_delta_link = None
+                db.session.commit()
+        
+        logger.info(f"📥 Performing time-based sync (lookback: {self.initial_lookback_days} days)")
+        after_date = datetime.now(timezone.utc) - timedelta(days=self.initial_lookback_days)
+        filter_query = f"receivedDateTime ge {after_date.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        
+        all_emails = []
+        next_link = None
+        is_first_request = True
+        page_count = 0
+        
+        while True:
+            page_count += 1
+            logger.debug(f"Fetching Outlook page {page_count}")
+            
+            if is_first_request:
+                messages, next_link = outlook_oauth_service.get_messages(
+                    access_token=access_token,
+                    top=self.max_emails_per_page,
+                    filter_query=filter_query,
+                )
+                is_first_request = False
+            else:
                 if not next_link:
                     break
+                messages, next_link = outlook_oauth_service.get_messages_from_url(
+                    access_token=access_token,
+                    url=next_link,
+                )
+            
+            if not messages:
+                logger.debug(f"No more messages on page {page_count}")
+                break
+            
+            logger.debug(f"Processing {len(messages)} messages from page {page_count}")
+            
+            for msg in messages:
+                try:
+                    body = ""
+                    if msg.get("body"):
+                        body = msg["body"].get("content", "")
+                        if msg["body"].get("contentType") == "html":
+                            body = re.sub(r"<[^>]+>", " ", body)
+                            body = re.sub(r"\s+", " ", body)
+                    
+                    sender = ""
+                    if msg.get("from", {}).get("emailAddress"):
+                        sender_info = msg["from"]["emailAddress"]
+                        sender = f"{sender_info.get('name', '')} <{sender_info.get('address', '')}>"
+                    
+                    all_emails.append({
+                        "id": msg["id"],
+                        "thread_id": msg.get("conversationId"),
+                        "subject": msg.get("subject", ""),
+                        "sender": sender,
+                        "body": body.strip()[:10000],
+                        "received_at": datetime.fromisoformat(msg["receivedDateTime"].replace("Z", "+00:00")) if msg.get("receivedDateTime") else None,
+                    })
+                    
+                except Exception as e:
+                    logger.warning(f"❌ Failed to process Outlook message: {e}")
+                    continue
+            
+            if not next_link:
+                logger.debug(f"No next_link, ending pagination")
+                break
         
-        logger.info(f"Found {len(all_emails)} total Outlook emails")
+        logger.info(f"✅ Outlook time-based sync complete: {len(all_emails)} total emails, {page_count} pages")
         return all_emails
+    
+    def _normalize_role(self, role: str) -> str:
+        """
+        Normalize a role string by extracting the base role name.
+        
+        Examples:
+        - "senior python developer – backend & platform engineering" -> "python developer"
+        - "devops engineer with terraform" -> "devops engineer"
+        - "sr. devops engineer" -> "devops engineer"
+        - "lead/senior devops engineer with strong java exp." -> "devops engineer"
+        
+        Args:
+            role: Original role string
+            
+        Returns:
+            Normalized base role name
+        """
+        role_lower = role.lower().strip()
+        
+        # Remove common prefixes (seniority indicators)
+        prefixes_to_remove = [
+            r'^sr\.?\s+',  # sr., sr
+            r'^senior\s+',
+            r'^junior\s+',
+            r'^lead\s+',
+            r'^entry-level\s+',
+            r'^associate\s+',
+            r'^lead/senior\s+',
+        ]
+        
+        for prefix_pattern in prefixes_to_remove:
+            role_lower = re.sub(prefix_pattern, '', role_lower)
+        
+        # Remove everything after common separators
+        # (descriptions, qualifications, specializations)
+        separators = [
+            r'\s+with\s+',     # "with terraform", "with azure"
+            r'\s+w/d\s+',      # "w/d .net"
+            r'\s+–\s+',        # "– ci/cd & cloud platforms"
+            r'\s+-\s+',        # "- core automation"
+            r'\s+\(',          # "(azure)", "(aws & ab initio)"
+            r'\s+/',           # "/ cloud engineer"
+        ]
+        
+        for separator in separators:
+            parts = re.split(separator, role_lower, maxsplit=1)
+            if len(parts) > 1:
+                role_lower = parts[0].strip()
+                break  # Only split on first separator found
+        
+        # Remove trailing punctuation
+        role_lower = re.sub(r'[.,;:\-–]+$', '', role_lower).strip()
+        
+        return role_lower
     
     def _get_tenant_roles(self, tenant_id: int) -> list[str]:
         """
-        Get all roles to search for in this tenant.
+        Get all roles to search for in this tenant with normalization.
         
         Sources:
         1. Candidate.preferred_roles from all candidates in tenant
         2. GlobalRole.name for roles linked to candidates in tenant
+        3. GlobalRole.aliases for additional role variations
+        
+        All roles are normalized to extract base role names for better matching.
         
         Args:
             tenant_id: Tenant ID
@@ -854,6 +876,8 @@ class EmailSyncService:
         """
         roles = set()
         
+        logger.debug(f"Fetching roles for tenant_id={tenant_id}")
+        
         # Source 1: Candidate preferred_roles (ARRAY column)
         stmt = select(func.unnest(Candidate.preferred_roles)).where(
             Candidate.tenant_id == tenant_id,
@@ -861,9 +885,14 @@ class EmailSyncService:
         ).distinct()
         
         candidate_roles = list(db.session.scalars(stmt).all())
+        logger.debug(f"Found {len(candidate_roles)} candidate preferred_roles")
+        
         for role in candidate_roles:
             if role:
-                roles.add(role.strip().lower())
+                normalized = self._normalize_role(role)
+                if normalized:
+                    roles.add(normalized)
+                    logger.debug(f"Normalized '{role}' -> '{normalized}'")
         
         # Source 2: GlobalRoles linked to candidates in this tenant
         stmt = select(GlobalRole.name).join(
@@ -877,11 +906,16 @@ class EmailSyncService:
         ).distinct()
         
         global_roles = list(db.session.scalars(stmt).all())
+        logger.debug(f"Found {len(global_roles)} global roles")
+        
         for role in global_roles:
             if role:
-                roles.add(role.strip().lower())
+                normalized = self._normalize_role(role)
+                if normalized:
+                    roles.add(normalized)
+                    logger.debug(f"Normalized global role '{role}' -> '{normalized}'")
         
-        # Also add GlobalRole aliases
+        # Source 3: GlobalRole aliases
         stmt = select(func.unnest(GlobalRole.aliases)).join(
             CandidateGlobalRole,
             CandidateGlobalRole.global_role_id == GlobalRole.id
@@ -894,11 +928,61 @@ class EmailSyncService:
         ).distinct()
         
         aliases = list(db.session.scalars(stmt).all())
+        logger.debug(f"Found {len(aliases)} global role aliases")
+        
         for alias in aliases:
             if alias:
-                roles.add(alias.strip().lower())
+                normalized = self._normalize_role(alias)
+                if normalized:
+                    roles.add(normalized)
+                    logger.debug(f"Normalized alias '{alias}' -> '{normalized}'")
         
-        return list(roles)
+        final_roles = sorted(list(roles))
+        logger.info(f"Tenant {tenant_id}: Extracted {len(final_roles)} unique normalized roles")
+        
+        return final_roles
+    
+    def _tokenized_role_match(self, subject: str, role: str) -> bool:
+        """
+        Check if a role matches the subject using tokenized matching.
+        
+        This allows partial matches:
+        - Subject: "Hiring Python Developer" matches role "python developer"
+        - Subject: "Senior DevOps Engineer position" matches role "devops engineer"
+        - Subject: "Looking for ML Ops specialist" matches role "mlops engineer"
+        
+        Algorithm:
+        1. Tokenize role into significant words (skip common stopwords)
+        2. Check if ALL role tokens appear in subject
+        3. Must maintain rough order (prevents false positives)
+        
+        Args:
+            subject: Email subject line (lowercase)
+            role: Normalized role name (lowercase)
+            
+        Returns:
+            True if role matches subject
+        """
+        stopwords = {'a', 'an', 'and', 'the', 'for', 'with', 'in', 'on', 'at', 'to', 'of', 'is', 'are'}
+        
+        role_tokens = [
+            token for token in role.split()
+            if token not in stopwords and len(token) > 1
+        ]
+        
+        if not role_tokens:
+            return False
+        
+        subject_lower = subject.lower()
+        
+        last_found_pos = -1
+        for token in role_tokens:
+            pos = subject_lower.find(token, last_found_pos + 1)
+            if pos == -1:
+                return False
+            last_found_pos = pos
+        
+        return True
     
     def _matches_job_criteria(
         self,
@@ -907,41 +991,42 @@ class EmailSyncService:
         preferred_roles: list[str],
     ) -> tuple[bool, Optional[str]]:
         """
-        Check if email subject matches job criteria using ONLY role-based filtering.
+        Check if email subject matches job criteria using tokenized role matching.
         
-        This method implements strict role-based matching:
-        - Only emails with subject containing exact role names (case-insensitive) are matched
-        - No generic patterns or keywords - prevents fetching unrelated emails
-        - Blocked senders and subjects are still filtered out
+        This method implements flexible role-based matching:
+        - Tokenizes roles to handle variations ("python developer" matches "Hiring Python Developer")
+        - Blocks marketing senders and automated subjects
+        - Logs detailed rejection reasons for debugging
         
         Args:
             subject: Email subject line
             sender: Email sender address
-            preferred_roles: List of preferred roles to match (from tenant candidates + GlobalRoles)
+            preferred_roles: List of normalized roles to match
             
         Returns:
-            Tuple of (matches, reason)
+            Tuple of (matches: bool, reason: str)
         """
         subject_lower = subject.lower()
         sender_lower = sender.lower()
         
-        # First, check if sender is blocked (marketing, newsletters, etc.)
+        logger.debug(f"Checking email: subject='{subject[:50]}...' sender='{sender}'")
+        
         for blocked in self.BLOCKED_SENDERS:
             if blocked in sender_lower:
+                logger.debug(f"❌ Blocked sender: '{sender}' contains '{blocked}'")
                 return False, f"blocked_sender:{blocked}"
         
-        # Check if subject matches blocked patterns (automated emails)
         for pattern in self.BLOCKED_SUBJECT_PATTERNS:
             if re.search(pattern, subject_lower, re.IGNORECASE):
+                logger.debug(f"❌ Blocked subject pattern: '{pattern}' in '{subject[:50]}...'")
                 return False, f"blocked_subject:{pattern}"
         
-        # ONLY match if subject contains one of the preferred roles (exact match)
-        # No generic patterns or keywords - this ensures we only fetch relevant jobs
         for role in preferred_roles:
-            if role and role in subject_lower:
+            if self._tokenized_role_match(subject_lower, role):
+                logger.debug(f"✅ Role match: '{role}' found in '{subject[:50]}...'")
                 return True, f"role_match:{role}"
         
-        # If no role matches, reject the email
+        logger.debug(f"❌ No role match for: '{subject[:50]}...' (checked {len(preferred_roles)} roles)")
         return False, "no_role_match"
     
     def _is_email_processed(self, integration_id: int, email_id: str) -> bool:

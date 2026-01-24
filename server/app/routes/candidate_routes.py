@@ -453,6 +453,7 @@ def upload_and_create():
     
     Form Data:
         - file: Resume file (PDF/DOCX)
+        - candidate_name: (Optional) Candidate's name to use instead of "Processing"
     
     Returns: Candidate ID and processing status (1-2 seconds)
     """
@@ -486,6 +487,22 @@ def upload_and_create():
         
         logger.info(f"[UPLOAD-{request_id}] File received: {file.filename}")
         
+        # Get candidate name from form data (optional)
+        candidate_name = request.form.get('candidate_name', '').strip()
+        
+        # Parse name into first and last name
+        first_name = "Processing"
+        last_name = ""
+        
+        if candidate_name:
+            # Split by space, first word is first_name, rest is last_name
+            name_parts = candidate_name.split(' ', 1)
+            first_name = name_parts[0]
+            last_name = name_parts[1] if len(name_parts) > 1 else ""
+            logger.info(f"[UPLOAD-{request_id}] Using provided name: {first_name} {last_name}")
+        else:
+            logger.info(f"[UPLOAD-{request_id}] No name provided, using placeholder 'Processing'")
+        
         # Upload file to storage (fast - 1-2s)
         from app.services.file_storage import FileStorageService
         storage = FileStorageService()
@@ -512,8 +529,8 @@ def upload_and_create():
         
         candidate_data = {
             "tenant_id": tenant_id,
-            "first_name": "Processing",
-            "last_name": "",
+            "first_name": first_name,
+            "last_name": last_name,
             "email": None,
             "phone": None,
             "status": "processing",

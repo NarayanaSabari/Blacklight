@@ -7,6 +7,8 @@ import { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { UploadResumeResponse } from '@/types/candidate';
@@ -14,13 +16,15 @@ import type { UploadResumeResponse } from '@/types/candidate';
 interface ResumeUploadProps {
   onUploadSuccess: (result: UploadResumeResponse) => void;
   onUploadError?: (error: string) => void;
-  candidateId?: number; // If provided, uploads for existing candidate
+  candidateId?: number;
+  candidateName?: string;
+  onCandidateNameChange?: (name: string) => void;
 }
 
 // Global debounce to prevent multiple uploads from any instance
 let lastUploadTime = 0;
 
-export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId }: ResumeUploadProps) {
+export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId, candidateName, onCandidateNameChange }: ResumeUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -128,7 +132,7 @@ export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId }: Re
       if (candidateId) {
         result = await candidateApi.uploadResumeForCandidate(candidateId, file);
       } else {
-        result = await candidateApi.uploadResume(file);
+        result = await candidateApi.uploadResume(file, candidateName || undefined);
       }
 
       clearInterval(progressInterval);
@@ -175,9 +179,27 @@ export function ResumeUpload({ onUploadSuccess, onUploadError, candidateId }: Re
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const showNameInput = !candidateId && onCandidateNameChange;
+
   return (
     <div className="space-y-4">
-      {/* Dropzone */}
+      {showNameInput && (
+        <div className="space-y-2">
+          <Label htmlFor="candidate-name">Candidate Name</Label>
+          <Input
+            id="candidate-name"
+            type="text"
+            placeholder="e.g., John Smith"
+            value={candidateName || ''}
+            onChange={(e) => onCandidateNameChange(e.target.value)}
+            className="border-2 border-black"
+          />
+          <p className="text-sm text-slate-600">
+            Enter the candidate's name. If left blank, it will be set to "Processing" until the resume is parsed.
+          </p>
+        </div>
+      )}
+
       {!file && (
         <div
           {...getRootProps()}
