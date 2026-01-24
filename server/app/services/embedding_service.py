@@ -257,7 +257,7 @@ class EmbeddingService:
         
         Example:
             >>> service = EmbeddingService()
-            >>> candidate = Candidate.query.first()
+            >>> candidate = db.session.get(Candidate, 1)
             >>> embedding = service.generate_candidate_embedding(candidate)
         """
         # Build candidate profile text
@@ -318,7 +318,7 @@ class EmbeddingService:
         
         Example:
             >>> service = EmbeddingService()
-            >>> job = JobPosting.query.first()
+            >>> job = db.session.get(JobPosting, 1)
             >>> embedding = service.generate_job_embedding(job)
         """
         # Build job description text
@@ -368,3 +368,51 @@ class EmbeddingService:
         logger.debug(f"Generating embedding for job posting (length: {len(job_text)})")
         
         return self.generate_embedding(job_text, task_type="RETRIEVAL_DOCUMENT")
+    
+    def save_candidate_embedding(self, candidate) -> bool:
+        """
+        Generate and save embedding for a candidate.
+        
+        Args:
+            candidate: Candidate model instance
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        from app import db
+        
+        try:
+            embedding = self.generate_candidate_embedding(candidate)
+            if embedding:
+                candidate.embedding = embedding
+                db.session.commit()
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to save candidate embedding: {e}")
+            db.session.rollback()
+            raise
+    
+    def save_job_embedding(self, job) -> bool:
+        """
+        Generate and save embedding for a job posting.
+        
+        Args:
+            job: JobPosting model instance
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        from app import db
+        
+        try:
+            embedding = self.generate_job_embedding(job)
+            if embedding:
+                job.embedding = embedding
+                db.session.commit()
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to save job embedding: {e}")
+            db.session.rollback()
+            raise

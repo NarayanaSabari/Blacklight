@@ -36,29 +36,24 @@ ACTIVITY_TYPES = [
 class SubmissionCreateSchema(BaseModel):
     """Schema for creating a new submission."""
     
-    # Required fields
     candidate_id: int = Field(..., description="ID of the candidate being submitted")
     job_posting_id: int = Field(..., description="ID of the job posting")
     
-    # Vendor/Client info (important for bench recruiters)
-    vendor_company: Optional[str] = Field(None, max_length=255)
-    vendor_contact_name: Optional[str] = Field(None, max_length=255)
-    vendor_contact_email: Optional[EmailStr] = None
-    vendor_contact_phone: Optional[str] = Field(None, max_length=50)
-    client_company: Optional[str] = Field(None, max_length=255)
+    vendor_company: str = Field(..., max_length=255, min_length=1)
+    vendor_contact_name: str = Field(..., max_length=255, min_length=1)
+    vendor_contact_email: EmailStr = Field(...)
+    vendor_contact_phone: str = Field(..., max_length=50, min_length=1)
+    client_company: str = Field(..., max_length=255, min_length=1)
     
-    # Rate information
-    bill_rate: Optional[float] = Field(None, ge=0, description="Bill rate ($/hr)")
-    pay_rate: Optional[float] = Field(None, ge=0, description="Pay rate ($/hr)")
+    bill_rate: float = Field(..., ge=0, description="Bill rate ($/hr)")
+    pay_rate: float = Field(..., ge=0, description="Pay rate ($/hr)")
     rate_type: Optional[str] = Field(default='HOURLY', max_length=20)
     currency: Optional[str] = Field(default='USD', max_length=10)
     
-    # Submission details
-    submission_notes: Optional[str] = None
+    submission_notes: str = Field(..., min_length=1)
     cover_letter: Optional[str] = None
     tailored_resume_id: Optional[int] = None
     
-    # Priority
     priority: Optional[str] = Field(default='MEDIUM', max_length=20)
     is_hot: Optional[bool] = Field(default=False)
     follow_up_date: Optional[datetime] = None

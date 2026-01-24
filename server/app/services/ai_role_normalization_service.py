@@ -18,7 +18,7 @@ from typing import Tuple, Optional, List, Dict, Any
 from datetime import datetime
 
 import google.generativeai as genai
-from sqlalchemy import text
+from sqlalchemy import text, select
 
 from app import db
 from app.models.global_role import GlobalRole
@@ -106,7 +106,8 @@ class AIRoleNormalizationService:
             logger.info(f"AI normalized '{raw_role}' to '{canonical_name}'")
             
             # Check if AI-normalized name already exists
-            existing = GlobalRole.query.filter_by(name=canonical_name).first()
+            stmt = select(GlobalRole).where(GlobalRole.name == canonical_name)
+            existing = db.session.scalar(stmt)
             
             if existing:
                 # AI normalized to an existing role
@@ -299,10 +300,11 @@ Return ONLY the normalized job title, nothing else."""
             preferred_locations: Optional list of candidate's preferred work locations
         """
         # Check if link already exists
-        existing_link = CandidateGlobalRole.query.filter_by(
-            candidate_id=candidate_id,
-            global_role_id=global_role.id
-        ).first()
+        stmt = select(CandidateGlobalRole).where(
+            CandidateGlobalRole.candidate_id == candidate_id,
+            CandidateGlobalRole.global_role_id == global_role.id
+        )
+        existing_link = db.session.scalar(stmt)
         
         if existing_link:
             logger.debug(f"Candidate {candidate_id} already linked to role {global_role.id}")
@@ -381,10 +383,11 @@ Return ONLY the normalized job title, nothing else."""
             normalized_location = location.strip()
             
             # Check if entry already exists
-            existing_entry = RoleLocationQueue.query.filter_by(
-                global_role_id=global_role.id,
-                location=normalized_location
-            ).first()
+            stmt = select(RoleLocationQueue).where(
+                RoleLocationQueue.global_role_id == global_role.id,
+                RoleLocationQueue.location == normalized_location
+            )
+            existing_entry = db.session.scalar(stmt)
             
             if existing_entry:
                 # Increment candidate count for existing entry
@@ -544,9 +547,11 @@ Return ONLY the normalized job title, nothing else."""
             logger.info(f"Merging role '{source_role.name}' into '{target_role.name}'")
             
             # Update all candidate links to point to target role
-            candidates_updated = CandidateGlobalRole.query.filter_by(
-                global_role_id=source_role_id
-            ).update({"global_role_id": target_role_id})
+            from sqlalchemy import update
+            stmt = update(CandidateGlobalRole).where(
+                CandidateGlobalRole.global_role_id == source_role_id
+            ).values(global_role_id=target_role_id)
+            candidates_updated = db.session.execute(stmt).rowcount
             
             total_candidates_updated += candidates_updated
             
@@ -570,6 +575,7 @@ Return ONLY the normalized job title, nothing else."""
         target_role.aliases = all_new_aliases
         
         db.session.commit()
+        db.session.expire_all()
         
         return {
             "merged_roles": merged_roles,
@@ -635,7 +641,8 @@ Return ONLY the normalized job title, nothing else."""
                 logger.info(f"AI normalized job title '{job_title}' to '{canonical_name}'")
                 
                 # Check if AI-normalized name already exists
-                existing = GlobalRole.query.filter_by(name=canonical_name).first()
+                stmt = select(GlobalRole).where(GlobalRole.name == canonical_name)
+                existing = db.session.scalar(stmt)
                 
                 if existing:
                     # AI normalized to an existing role
@@ -688,8 +695,8 @@ Return ONLY the normalized job title, nothing else."""
             logger.error(f"Failed to normalize job title '{job_title}': {e}", exc_info=True)
             try:
                 db.session.rollback()
-            except:
-                pass
+            except (RuntimeError, ValueError) as rollback_error:
+                logger.error(f"Failed to rollback session: {rollback_error}")
             return None, 0.0, "error"
     
     def _link_job_to_role(self, job_posting_id: int, global_role: GlobalRole):
@@ -701,10 +708,11 @@ Return ONLY the normalized job title, nothing else."""
         from app.models.role_job_mapping import RoleJobMapping
         
         # Check if link already exists
-        existing_link = RoleJobMapping.query.filter_by(
-            job_posting_id=job_posting_id,
-            global_role_id=global_role.id
-        ).first()
+        stmt = select(RoleJobMapping).where(
+            RoleJobMapping.job_posting_id == job_posting_id,
+            RoleJobMapping.global_role_id == global_role.id
+        )
+        existing_link = db.session.scalar(stmt)
         
         if existing_link:
             logger.debug(f"Job {job_posting_id} already linked to role {global_role.id}")

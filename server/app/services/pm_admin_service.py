@@ -437,6 +437,7 @@ class PMAdminService:
 
         db.session.delete(admin)
         db.session.commit()
+        db.session.expire_all()
 
         logger.info(f"PM Admin deleted: {admin_id} ({email}) by {changed_by}")
 

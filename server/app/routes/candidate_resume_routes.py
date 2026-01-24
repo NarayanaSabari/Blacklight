@@ -222,41 +222,13 @@ def upload_resume(candidate_id: int):
         is_primary = request.form.get('is_primary', 'false').lower() == 'true'
         trigger_parsing = request.form.get('trigger_parsing', 'true').lower() == 'true'
         
-        # Upload and create resume record
-        resume, file_key = CandidateResumeService.upload_and_create_resume(
+        resume, resume_document = CandidateResumeService.upload_resume_with_document(
             candidate_id=candidate_id,
             tenant_id=tenant_id,
             file=file,
             is_primary=is_primary,
             uploaded_by_user_id=user_id,
-            uploaded_by_candidate=False,
         )
-        
-        # Also create a CandidateDocument record for consistency with email invitation flow
-        # This ensures resumes appear in document listings and are subject to verification
-        from app.models.candidate_document import CandidateDocument
-        
-        resume_document = CandidateDocument(
-            tenant_id=tenant_id,
-            candidate_id=candidate_id,
-            invitation_id=None,  # HR upload, not from invitation
-            document_type='resume',
-            file_name=file.filename or 'resume',
-            file_key=file_key,
-            file_size=resume.file_size or 0,
-            mime_type=resume.mime_type or 'application/pdf',
-            storage_backend=resume.storage_backend or 'gcs',
-            uploaded_by_id=user_id,
-            is_verified=False,  # Requires HR verification like other docs
-        )
-        db.session.add(resume_document)
-        
-        # CRITICAL: Commit the resume before triggering Inngest event
-        # CandidateResumeService.upload_and_create_resume() only does flush(), not commit()
-        # The Inngest worker runs in a separate process and needs committed data
-        db.session.commit()
-        
-        logger.info(f"Uploaded resume {resume.id} and document {resume_document.id} for candidate {candidate_id}")
         
         # Trigger async parsing if requested
         if trigger_parsing:
@@ -550,22 +522,14 @@ def update_polished_resume(candidate_id: int, resume_id: int):
     try:
         tenant_id = g.tenant_id
         
-        # Get resume
-        resume = CandidateResumeService.get_resume_by_id(resume_id, tenant_id)
-        
-        if not resume or resume.candidate_id != candidate_id:
-            return error_response("Resume not found", 404)
-        
-        # Validate request body
         data = PolishedResumeUpdateSchema.model_validate(request.get_json())
         
-        # Update polished data
-        polished_data = resume.polished_resume_data or {}
-        polished_data['markdown_content'] = data.markdown_content
-        polished_data['manually_edited'] = True
-        
-        resume.set_polished_resume(data.markdown_content)
-        db.session.commit()
+        resume = CandidateResumeService.update_polished_resume(
+            resume_id=resume_id,
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            markdown_content=data.markdown_content,
+        )
         
         return jsonify({
             "message": "Polished resume updated",
@@ -573,6 +537,8 @@ def update_polished_resume(candidate_id: int, resume_id: int):
             "markdown_content": data.markdown_content,
         }), 200
         
+    except ValueError as e:
+        return error_response(str(e), 404)
     except Exception as e:
         logger.error(f"Error updating polished resume {resume_id}: {e}", exc_info=True)
         return error_response(f"Failed to update polished resume: {str(e)}", 500)

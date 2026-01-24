@@ -10,7 +10,7 @@ Admin endpoints for managing global roles (PM_ADMIN only):
 6. Get role candidates (GET /api/roles/{id}/candidates)
 """
 import logging
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify
 from sqlalchemy import func
 
 from app import db
@@ -21,6 +21,7 @@ from app.models.scrape_session import ScrapeSession
 from app.middleware import require_pm_admin
 from app.services.ai_role_normalization_service import AIRoleNormalizationService
 from app.services.scrape_queue_service import ScrapeQueueService
+from app.services.global_role_service import GlobalRoleService
 
 logger = logging.getLogger(__name__)
 
@@ -216,16 +217,8 @@ def update_priority(role_id: int):
         }), 400
     
     try:
-        role = db.session.get(GlobalRole, role_id)
-        
-        if not role:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"Role {role_id} not found"
-            }), 404
-        
-        role.priority = priority
-        db.session.commit()
+        service = GlobalRoleService()
+        role = service.update_priority(role_id, priority)
         
         return jsonify({
             "id": role.id,
@@ -234,9 +227,13 @@ def update_priority(role_id: int):
             "message": f"Priority updated to {priority}"
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error updating priority for role {role_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -253,18 +250,8 @@ def approve_role(role_id: int):
     The scraper will pick up roles with status 'approved' or 'pending'.
     """
     try:
-        role = db.session.get(GlobalRole, role_id)
-        
-        if not role:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"Role {role_id} not found"
-            }), 404
-        
-        # Set status to 'approved' - reviewed and ready for scrape queue
-        # This removes it from the "pending review" list in the dashboard
-        role.queue_status = 'approved'
-        db.session.commit()
+        service = GlobalRoleService()
+        role = service.approve_role(role_id)
         
         # Get job count for response
         from app.models.role_job_mapping import RoleJobMapping
@@ -272,8 +259,6 @@ def approve_role(role_id: int):
             db.select(func.count(RoleJobMapping.id))
             .where(RoleJobMapping.global_role_id == role.id)
         ) or 0
-        
-        logger.info(f"Role {role_id} ({role.name}) approved by PM_ADMIN")
         
         return jsonify({
             "role": {
@@ -296,9 +281,13 @@ def approve_role(role_id: int):
             "message": f"Role '{role.name}' approved and added to scrape queue"
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error approving role {role_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -318,42 +307,21 @@ def reject_role(role_id: int):
     reason = data.get('reason', 'No reason provided')
     
     try:
-        role = db.session.get(GlobalRole, role_id)
-        
-        if not role:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"Role {role_id} not found"
-            }), 404
-        
-        role_name = role.name
-        
-        # Delete any candidate links first
-        from app.models.candidate_global_role import CandidateGlobalRole
-        db.session.query(CandidateGlobalRole).filter(
-            CandidateGlobalRole.global_role_id == role_id
-        ).delete()
-        
-        # Delete any job mappings
-        from app.models.role_job_mapping import RoleJobMapping
-        db.session.query(RoleJobMapping).filter(
-            RoleJobMapping.global_role_id == role_id
-        ).delete()
-        
-        # Hard delete the role
-        db.session.delete(role)
-        db.session.commit()
-        
-        logger.info(f"Role {role_id} ({role_name}) rejected and deleted by PM_ADMIN. Reason: {reason}")
+        service = GlobalRoleService()
+        role_name = service.reject_role(role_id, reason)
         
         return jsonify({
             "message": f"Role '{role_name}' rejected and deleted",
             "reason": reason
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error rejecting role {role_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -370,47 +338,27 @@ def delete_role(role_id: int):
     Use this to clean up approved roles that are no longer needed.
     """
     try:
-        role = db.session.get(GlobalRole, role_id)
-        
-        if not role:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"Role {role_id} not found"
-            }), 404
-        
-        # Check if any candidates are linked
-        from app.models.candidate_global_role import CandidateGlobalRole
-        linked_candidates = db.session.query(CandidateGlobalRole).filter(
-            CandidateGlobalRole.global_role_id == role_id
-        ).count()
-        
-        if linked_candidates > 0:
-            return jsonify({
-                "error": "Cannot Delete",
-                "message": f"Role '{role.name}' has {linked_candidates} candidate(s) linked. Remove candidate links first."
-            }), 400
-        
-        role_name = role.name
-        
-        # Delete any job mappings
-        from app.models.role_job_mapping import RoleJobMapping
-        db.session.query(RoleJobMapping).filter(
-            RoleJobMapping.global_role_id == role_id
-        ).delete()
-        
-        # Hard delete the role
-        db.session.delete(role)
-        db.session.commit()
-        
-        logger.info(f"Role {role_id} ({role_name}) deleted by PM_ADMIN")
+        service = GlobalRoleService()
+        role_name = service.delete_role(role_id)
         
         return jsonify({
             "message": f"Role '{role_name}' deleted successfully"
         }), 200
         
+    except ValueError as e:
+        error_msg = str(e)
+        if "candidate(s) linked" in error_msg:
+            return jsonify({
+                "error": "Cannot Delete",
+                "message": error_msg
+            }), 400
+        else:
+            return jsonify({
+                "error": "Not Found",
+                "message": error_msg
+            }), 404
     except Exception as e:
         logger.error(f"Error deleting role {role_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -556,22 +504,8 @@ def add_to_queue(role_id: int):
     Add role to scrape queue (set status to pending).
     """
     try:
-        role = db.session.get(GlobalRole, role_id)
-        
-        if not role:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"Role {role_id} not found"
-            }), 404
-        
-        if role.queue_status == 'processing':
-            return jsonify({
-                "error": "Bad Request",
-                "message": "Role is currently being processed"
-            }), 400
-        
-        role.queue_status = 'approved'
-        db.session.commit()
+        service = GlobalRoleService()
+        role = service.add_to_queue(role_id)
         
         return jsonify({
             "id": role.id,
@@ -580,9 +514,20 @@ def add_to_queue(role_id: int):
             "message": "Role added to scrape queue"
         }), 200
         
+    except ValueError as e:
+        error_msg = str(e)
+        if "currently being processed" in error_msg:
+            return jsonify({
+                "error": "Bad Request",
+                "message": error_msg
+            }), 400
+        else:
+            return jsonify({
+                "error": "Not Found",
+                "message": error_msg
+            }), 404
     except Exception as e:
         logger.error(f"Error adding role {role_id} to queue: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)

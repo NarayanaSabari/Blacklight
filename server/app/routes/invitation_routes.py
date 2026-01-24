@@ -114,7 +114,6 @@ def create_invitation():
             return error_response(str(e), 409)  # Conflict
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error creating invitation: {e}")
         return error_response("Internal server error", 500)
 
@@ -275,7 +274,6 @@ def resend_invitation(invitation_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error resending invitation: {e}")
         return error_response("Internal server error", 500)
 
@@ -336,7 +334,6 @@ def review_invitation(invitation_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error reviewing invitation: {e}")
         return error_response("Internal server error", 500)
 
@@ -369,7 +366,6 @@ def cancel_invitation(invitation_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error cancelling invitation: {e}")
         return error_response("Internal server error", 500)
 
@@ -529,7 +525,6 @@ def submit_invitation():
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error submitting invitation: {e}")
         return error_response("Internal server error", 500)
 
@@ -710,7 +705,6 @@ def upload_document_public():
         logger.error(f"[DOC_UPLOAD] ValueError: {str(e)}")
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         logger.error(f"[DOC_UPLOAD] Unexpected error: {e}", exc_info=True)
         return error_response("Internal server error", 500)
 
@@ -795,7 +789,6 @@ def verify_document(document_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception as e:
-        db.session.rollback()
         current_app.logger.error(f"Error verifying document: {e}")
         return error_response("Internal server error", 500)
 

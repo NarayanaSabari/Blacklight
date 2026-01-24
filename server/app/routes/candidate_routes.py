@@ -62,42 +62,36 @@ def create_candidate():
         # Validate request body
         data = CandidateCreateSchema.model_validate(request.get_json())
         
-        # Create candidate using service
-        from app import db
-        from app.models.candidate import Candidate
+        from app.services.candidate_service import CandidateService
+        service = CandidateService()
         
-        # NOTE: Resume files are now stored in the CandidateResume table.
-        # Use CandidateResumeService to create resume records.
-        candidate = Candidate(
-            tenant_id=tenant_id,
-            first_name=data.first_name,
-            last_name=data.last_name,
-            email=data.email,
-            phone=data.phone,
-            full_name=data.full_name or f"{data.first_name} {data.last_name}",
-            location=data.location,
-            linkedin_url=data.linkedin_url,
-            portfolio_url=data.portfolio_url,
-            current_title=data.current_title,
-            total_experience_years=data.total_experience_years,
-            notice_period=data.notice_period,
-            expected_salary=data.expected_salary,
-            visa_type=data.visa_type,
-            professional_summary=data.professional_summary,
-            preferred_locations=data.preferred_locations or [],
-            skills=data.skills or [],
-            certifications=data.certifications or [],
-            languages=data.languages or [],
-            education=data.education or [],
-            work_experience=data.work_experience or [],
-            status=data.status,
-            source=data.source,
-        )
+        candidate_data = {
+            'first_name': data.first_name,
+            'last_name': data.last_name,
+            'email': data.email,
+            'phone': data.phone,
+            'full_name': data.full_name or f"{data.first_name} {data.last_name}",
+            'location': data.location,
+            'linkedin_url': data.linkedin_url,
+            'portfolio_url': data.portfolio_url,
+            'current_title': data.current_title,
+            'total_experience_years': data.total_experience_years,
+            'notice_period': data.notice_period,
+            'expected_salary': data.expected_salary,
+            'visa_type': data.visa_type,
+            'professional_summary': data.professional_summary,
+            'preferred_locations': data.preferred_locations or [],
+            'skills': data.skills or [],
+            'certifications': data.certifications or [],
+            'languages': data.languages or [],
+            'education': data.education or [],
+            'work_experience': data.work_experience or [],
+            'status': data.status,
+            'source': data.source,
+        }
         
-        db.session.add(candidate)
-        db.session.commit()
+        candidate = service.create_candidate(candidate_data, tenant_id)
         
-        # Return response
         response = CandidateResponseSchema.model_validate(candidate)
         return jsonify(response.model_dump()), 201
     
@@ -361,32 +355,20 @@ def review_candidate(candidate_id: int):
     Returns: Updated candidate
     """
     try:
-        tenant_id = g.tenant_id
-        
-        # Get candidate
-        from sqlalchemy import select
-        stmt = select(Candidate).where(
-            Candidate.id == candidate_id,
-            Candidate.tenant_id == tenant_id
-        )
-        candidate = db.session.scalar(stmt)
-        
-        if not candidate:
-            return error_response("Candidate not found", 404)
-        
         # Validate input
         try:
             data = CandidateUpdateSchema(**request.json)
         except ValidationError as e:
             return error_response(f"Invalid input: {str(e)}", 400)
         
-        # Update candidate with reviewed data
-        update_dict = data.model_dump(exclude_unset=True)
-        for key, value in update_dict.items():
-            if hasattr(candidate, key):
-                setattr(candidate, key, value)
+        from app.services.candidate_service import CandidateService
+        service = CandidateService()
         
-        db.session.commit()
+        update_dict = data.model_dump(exclude_unset=True)
+        candidate = service.update_candidate(candidate_id, g.tenant_id, update_dict)
+        
+        if not candidate:
+            return error_response("Candidate not found", 404)
         
         logger.info(f"Candidate {candidate_id} reviewed and updated by user {g.user_id}")
         
@@ -416,219 +398,44 @@ def approve_candidate(candidate_id: int):
     Returns: Approved candidate
     """
     try:
-        tenant_id = g.tenant_id
+        from app.services.candidate_service import CandidateService
+        service = CandidateService()
         
-        # Get candidate
-        from sqlalchemy import select
-        stmt = select(Candidate).where(
-            Candidate.id == candidate_id,
-            Candidate.tenant_id == tenant_id
-        )
-        candidate = db.session.scalar(stmt)
-        
-        if not candidate:
-            return error_response("Candidate not found", 404)
-        
-        # Make endpoint idempotent - if already approved, return success
-        if candidate.status == 'ready_for_assignment':
-            logger.info(f"Candidate {candidate_id} already approved with status '{candidate.status}'")
-            return jsonify({
-                "message": "Candidate already approved",
-                "candidate": candidate.to_dict(),
-                "already_approved": True
-            }), 200
-        
-        if candidate.status != 'pending_review':
-            return error_response(
-                f"Cannot approve candidate with status '{candidate.status}'. " 
-                "Only candidates with status 'pending_review' can be approved.",
-                400
-            )
-        
-        # VALIDATION: Check preferred_roles is filled (required for job scraping)
-        # Auto-fill from parsed_resume_data if empty (fallback for legacy/incomplete data)
-        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
-            parsed_data = candidate.parsed_resume_data or {}
-            if isinstance(parsed_data, dict) and parsed_data.get('preferred_roles'):
-                candidate.preferred_roles = parsed_data['preferred_roles']
-                logger.info(f"Auto-filled preferred_roles from parsed_resume_data for candidate {candidate_id}")
-        
-        # Still validate after fallback attempt
-        if not candidate.preferred_roles or len(candidate.preferred_roles) == 0:
-            return error_response(
-                "Preferred roles are required for approval. "
-                "Please add at least one preferred role for the candidate.",
-                400
-            )
-        
-        # VALIDATION: Check preferred_locations is filled (required for location-based job scraping)
-        # Auto-fill from parsed_resume_data if empty (fallback for legacy/incomplete data)
-        if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
-            parsed_data = candidate.parsed_resume_data or {}
-            if isinstance(parsed_data, dict) and parsed_data.get('preferred_locations'):
-                candidate.preferred_locations = parsed_data['preferred_locations']
-                logger.info(f"Auto-filled preferred_locations from parsed_resume_data for candidate {candidate_id}")
-        
-        # Still validate after fallback attempt
-        if not candidate.preferred_locations or len(candidate.preferred_locations) == 0:
-            return error_response(
-                "Preferred locations are required for approval. "
-                "Please add at least one preferred location for the candidate "
-                "(e.g., 'New York, NY', 'Remote', 'Los Angeles, CA').",
-                400
-            )
-        
-        # VALIDATION: Check all documents are verified before approval
-        from app.models.candidate_document import CandidateDocument
-        from app.models.candidate_invitation import CandidateInvitation
-        from sqlalchemy import select as sql_select, or_
-        
-        # First, find associated invitation to check its documents too
-        invitation_stmt = sql_select(CandidateInvitation).where(
-            CandidateInvitation.candidate_id == candidate_id,
-            CandidateInvitation.tenant_id == tenant_id
-        )
-        invitation = db.session.scalar(invitation_stmt)
-        
-        # Build query to find all documents for this candidate (via candidate_id or invitation_id)
-        doc_conditions = [CandidateDocument.candidate_id == candidate_id]
-        if invitation:
-            doc_conditions.append(CandidateDocument.invitation_id == invitation.id)
-        
-        docs_stmt = sql_select(CandidateDocument).where(
-            or_(*doc_conditions),
-            CandidateDocument.tenant_id == tenant_id
-        )
-        all_documents = list(db.session.scalars(docs_stmt).all())
-        
-        if all_documents:
-            unverified_docs = [doc for doc in all_documents if not doc.is_verified]
-            if unverified_docs:
-                unverified_names = [doc.file_name for doc in unverified_docs]
-                return error_response(
-                    f"All documents must be verified before approval. "
-                    f"{len(unverified_docs)} document(s) pending verification: {', '.join(unverified_names[:5])}"
-                    + (f" and {len(unverified_names) - 5} more..." if len(unverified_names) > 5 else ""),
-                    400,
-                    details={
-                        "unverified_count": len(unverified_docs),
-                        "unverified_documents": [
-                            {"id": doc.id, "file_name": doc.file_name, "document_type": doc.document_type}
-                            for doc in unverified_docs
-                        ]
-                    }
-                )
-            logger.info(f"All {len(all_documents)} documents verified for candidate {candidate_id}")
-        
-        # Update status to 'ready_for_assignment'
-        candidate.status = 'ready_for_assignment'
-        candidate.onboarding_status = 'APPROVED'  # For tracking
-        
-        # Also update associated invitation status if exists
-        if invitation and invitation.status == 'pending_review':
-            invitation.status = 'approved'
-            invitation.reviewed_by_id = g.user_id
-            invitation.reviewed_at = datetime.utcnow()
-            logger.info(f"Updated invitation {invitation.id} status to 'approved' for candidate {candidate_id}")
-        
-        # Move documents from invitation to candidate folder (GCS/local storage)
-        if invitation:
-            from app.services.document_service import DocumentService
-            moved_count, move_error = DocumentService.move_documents_to_candidate(
-                invitation_id=invitation.id,
+        try:
+            candidate = service.approve_candidate(
                 candidate_id=candidate_id,
-                tenant_id=tenant_id
+                approved_by_user_id=g.user_id,
+                tenant_id=g.tenant_id
             )
-            if move_error:
-                logger.warning(f"Document move had issues: {move_error}")
-            else:
-                logger.info(f"Moved {moved_count} documents from invitation {invitation.id} to candidate {candidate_id}")
-        
-        db.session.commit()
-        
-        logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: ready_for_assignment")
-        
-        # Send approval email to candidate via Inngest
-        try:
-            from app.inngest import inngest_client
-            import inngest
             
-            candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
+            logger.info(f"Candidate {candidate_id} approved by user {g.user_id}, status: ready_for_assignment")
+            return jsonify(candidate.to_dict()), 200
             
-            # Build candidate data for email
-            candidate_data = {
-                "full_name": candidate.full_name or candidate_name,
-                "email": candidate.email,
-                "phone": candidate.phone,
-                "current_title": candidate.current_title,
-                "experience_years": candidate.total_experience_years,
-                "skills": candidate.skills or [],
-                "preferred_roles": candidate.preferred_roles or [],
-            }
+        except ValueError as e:
+            error_msg = str(e)
             
-            inngest_client.send_sync(
-                inngest.Event(
-                    name="email/approval",
-                    data={
-                        "candidate_id": candidate.id,
-                        "tenant_id": tenant_id,
-                        "to_email": candidate.email,
-                        "candidate_name": candidate_name,
-                        "candidate_data": candidate_data,
-                        "hr_edited_fields": []
-                    }
+            if "has already been approved" in error_msg:
+                from sqlalchemy import select
+                stmt = select(Candidate).where(
+                    Candidate.id == candidate_id,
+                    Candidate.tenant_id == g.tenant_id
                 )
-            )
-            logger.info(f"Triggered approval email for candidate {candidate_id}")
-        except Exception as e:
-            logger.warning(f"Failed to send approval email for candidate {candidate_id}: {str(e)}")
-        
-        # Trigger Inngest workflows for role normalization and job matching
-        try:
-            from app.inngest import inngest_client
-            import inngest
+                candidate = db.session.scalar(stmt)
+                
+                if candidate and candidate.status == 'ready_for_assignment':
+                    logger.info(f"Candidate {candidate_id} already approved with status '{candidate.status}'")
+                    return jsonify({
+                        "message": "Candidate already approved",
+                        "candidate": candidate.to_dict(),
+                        "already_approved": True
+                    }), 200
             
-            # 1. Trigger role normalization workflow (async, visible in Inngest dashboard)
-            if candidate.preferred_roles:
-                logger.info(f"[APPROVAL-ROUTE] Triggering role normalization for candidate {candidate_id}")
-                inngest_client.send_sync(
-                    inngest.Event(
-                        name="role/normalize-candidate",
-                        data={
-                            "candidate_id": candidate.id,
-                            "tenant_id": tenant_id,
-                            "preferred_roles": candidate.preferred_roles,
-                            "preferred_locations": candidate.preferred_locations or [],
-                            "trigger_source": "approval_route"
-                        }
-                    )
-                )
-                logger.info(f"[APPROVAL-ROUTE] ✅ Role normalization event sent for candidate {candidate_id}")
+            if "document(s) pending verification" in error_msg:
+                return error_response(error_msg, 400)
             
-            # 2. Trigger job matching workflow (async)
-            logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")
-            inngest_client.send_sync(
-                inngest.Event(
-                    name="job-match/generate-candidate",
-                    data={
-                        "candidate_id": candidate.id,
-                        "tenant_id": tenant_id,
-                        "trigger_source": "candidate_approval",
-                        "preferred_roles": candidate.preferred_roles or []
-                    }
-                )
-            )
-            logger.info(f"[INNGEST] ✅ Job matching event sent for candidate {candidate_id}")
-            
-        except Exception as e:
-            # Log but don't fail
-            logger.warning(f"Failed to trigger Inngest workflows for candidate {candidate_id}: {str(e)}")
-        
-        # Return approved candidate using to_dict() to handle None values
-        return jsonify(candidate.to_dict()), 200
+            return error_response(error_msg, 400)
     
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error approving candidate {candidate_id}: {e}", exc_info=True)
         return error_response(f"Failed to approve candidate: {str(e)}", 500)
 
@@ -699,28 +506,26 @@ def upload_and_create():
         
         logger.info(f"[UPLOAD-{request_id}] File uploaded successfully: {upload_result['file_key']}")
         
-        # Create candidate with minimal data and status='processing'
-        from app.models.candidate import Candidate
+        from app.services.candidate_service import CandidateService
         from app.services.candidate_resume_service import CandidateResumeService
+        service = CandidateService()
         
-        candidate = Candidate(
-            tenant_id=tenant_id,
-            first_name="Processing",  # Temporary, will be updated by AI
-            last_name="",
-            email=None,
-            phone=None,
-            status='processing',  # NEW: Processing status
-            source='resume_upload',
-        )
+        candidate_data = {
+            "tenant_id": tenant_id,
+            "first_name": "Processing",
+            "last_name": "",
+            "email": None,
+            "phone": None,
+            "status": "processing",
+            "source": "resume_upload",
+        }
         
-        db.session.add(candidate)
-        db.session.commit()
+        candidate = service.create_candidate(candidate_data, tenant_id)
         
         logger.info(f"[UPLOAD-{request_id}] Created candidate {candidate.id} with status='processing'")
         
-        # Create CandidateResume record (primary resume for this candidate)
         file_key = upload_result.get('file_key') or upload_result.get('file_path')
-        resume = CandidateResumeService.create_resume(
+        resume, resume_document = CandidateResumeService.create_resume_with_document(
             candidate_id=candidate.id,
             tenant_id=tenant_id,
             file_key=file_key,
@@ -730,32 +535,7 @@ def upload_and_create():
             mime_type=upload_result.get('mime_type'),
             is_primary=True,
             uploaded_by_user_id=g.user_id,
-            uploaded_by_candidate=False,
         )
-        
-        # Also create a CandidateDocument record for consistency with email invitation flow
-        # This ensures resumes appear in document listings and are subject to verification
-        from app.models.candidate_document import CandidateDocument
-        
-        resume_document = CandidateDocument(
-            tenant_id=tenant_id,
-            candidate_id=candidate.id,
-            invitation_id=None,  # HR upload, not from invitation
-            document_type='resume',
-            file_name=file.filename or 'resume',
-            file_key=file_key,
-            file_size=upload_result.get('file_size') or 0,
-            mime_type=upload_result.get('mime_type') or 'application/pdf',
-            storage_backend=upload_result.get('storage_backend', 'gcs'),
-            uploaded_by_id=g.user_id,
-            is_verified=False,  # Requires HR verification like other docs
-        )
-        db.session.add(resume_document)
-        
-        # CRITICAL: Commit the resume before triggering Inngest event
-        # CandidateResumeService.create_resume() only does flush(), not commit()
-        # The Inngest worker runs in a separate process and needs committed data
-        db.session.commit()
         
         logger.info(f"[UPLOAD-{request_id}] Created resume {resume.id} and document {resume_document.id} for candidate {candidate.id}")
         
@@ -928,19 +708,19 @@ def update_preferred_roles(candidate_id: int):
         if len(preferred_roles) > 10:
             return error_response("Maximum 10 preferred roles allowed", 400)
         
-        # Clean up the roles (remove empty strings)
         preferred_roles = [r.strip() for r in preferred_roles if r and r.strip()]
         
-        # Get candidate
-        from app.models.candidate import Candidate
-        candidate = db.session.get(Candidate, candidate_id)
+        from app.services.candidate_service import CandidateService
+        service = CandidateService()
         
-        if not candidate or candidate.tenant_id != tenant_id:
+        candidate = service.update_candidate(
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            data={"preferred_roles": preferred_roles}
+        )
+        
+        if not candidate:
             return error_response("Candidate not found", 404)
-        
-        # Update preferred roles
-        candidate.preferred_roles = preferred_roles
-        db.session.commit()
         
         logger.info(f"Updated preferred roles for candidate {candidate_id}: {len(preferred_roles)} roles")
         
@@ -1032,12 +812,19 @@ def generate_role_suggestions(candidate_id: int):
         
         logger.info(f"Generating role suggestions for candidate {candidate_id}...")
         
-        # Run async function in sync context
         suggestions = asyncio.run(role_service.generate_suggestions(candidate))
         
-        # Save to database
-        candidate.suggested_roles = suggestions
-        db.session.commit()
+        from app.services.candidate_service import CandidateService
+        service = CandidateService()
+        
+        candidate = service.update_candidate(
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            data={"suggested_roles": suggestions}
+        )
+        
+        if not candidate:
+            return error_response("Candidate not found", 404)
         
         logger.info(f"Generated {len(suggestions.get('roles', []))} role suggestions for candidate {candidate_id}")
         
@@ -1492,19 +1279,18 @@ def update_polished_resume(candidate_id: int):
         if not candidate:
             return error_response("Candidate not found", 404)
         
-        # Get primary resume
         primary_resume = candidate.primary_resume
         if not primary_resume:
             return error_response("Candidate has no resume to update", 400)
         
-        # Update using the helper method on the resume
-        primary_resume.set_polished_resume(
-            markdown_content=markdown_content.strip(),
-            polished_by="recruiter",
-            user_id=user_id
-        )
+        from app.services.candidate_resume_service import CandidateResumeService
         
-        db.session.commit()
+        primary_resume = CandidateResumeService.update_polished_resume(
+            resume_id=primary_resume.id,
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            markdown_content=markdown_content.strip()
+        )
         
         logger.info(f"Polished resume updated for candidate {candidate_id} (resume {primary_resume.id}) by user {user_id}")
         
@@ -1551,37 +1337,26 @@ def regenerate_polished_resume(candidate_id: int):
         if not candidate:
             return error_response("Candidate not found", 404)
         
-        # Get primary resume
         primary_resume = candidate.primary_resume
         if not primary_resume:
             return error_response("Candidate has no resume to polish", 400)
         
-        # Check if there's parsed data to polish
-        if not primary_resume.parsed_resume_data:
-            return error_response(
-                "No parsed resume data available. Please upload and parse a resume first.",
-                400
-            )
-        
-        # Get candidate name
         candidate_name = candidate.full_name or f"{candidate.first_name} {candidate.last_name}".strip()
         
-        # Run the polishing service
-        from app.services.resume_polishing_service import ResumePolishingService
+        from app.services.candidate_resume_service import CandidateResumeService
         
         try:
-            service = ResumePolishingService()
-            polished_data = service.polish_resume(
-                parsed_data=primary_resume.parsed_resume_data,
+            primary_resume = CandidateResumeService.regenerate_polished_resume(
+                resume_id=primary_resume.id,
+                candidate_id=candidate_id,
+                tenant_id=tenant_id,
                 candidate_name=candidate_name
             )
+        except ValueError as e:
+            return error_response(str(e), 400)
         except Exception as polish_error:
             logger.error(f"AI polishing failed for candidate {candidate_id}: {polish_error}")
             return error_response(f"AI polishing failed: {str(polish_error)}", 500)
-        
-        # Update the primary resume
-        primary_resume.polished_resume_data = polished_data
-        db.session.commit()
         
         logger.info(f"Polished resume regenerated for candidate {candidate_id} (resume {primary_resume.id})")
         

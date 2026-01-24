@@ -109,19 +109,49 @@ export function SubmissionDialog({
   };
 
   const handleSubmit = () => {
+    const requiredFields = {
+      vendor_company: 'Vendor Company',
+      vendor_contact_name: 'Vendor Contact Name',
+      vendor_contact_email: 'Vendor Contact Email',
+      vendor_contact_phone: 'Vendor Contact Phone',
+      client_company: 'Client Company',
+      bill_rate: 'Bill Rate',
+      pay_rate: 'Pay Rate',
+      submission_notes: 'Submission Notes',
+    };
+
+    const missingFields: string[] = [];
+    for (const [field, label] of Object.entries(requiredFields)) {
+      const value = formData[field as keyof typeof formData];
+      if (!value || (typeof value === 'string' && value.trim() === '')) {
+        missingFields.push(label);
+      }
+    }
+
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in all required fields: ${missingFields.join(', ')}`);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (formData.vendor_contact_email && !emailRegex.test(formData.vendor_contact_email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
     createMutation.mutate({
       candidate_id: candidateId,
       job_posting_id: jobPostingId,
-      vendor_company: formData.vendor_company || undefined,
-      vendor_contact_name: formData.vendor_contact_name || undefined,
-      vendor_contact_email: formData.vendor_contact_email || undefined,
-      vendor_contact_phone: formData.vendor_contact_phone || undefined,
-      client_company: formData.client_company || undefined,
-      bill_rate: formData.bill_rate || undefined,
-      pay_rate: formData.pay_rate || undefined,
+      vendor_company: formData.vendor_company!,
+      vendor_contact_name: formData.vendor_contact_name!,
+      vendor_contact_email: formData.vendor_contact_email!,
+      vendor_contact_phone: formData.vendor_contact_phone!,
+      client_company: formData.client_company!,
+      bill_rate: formData.bill_rate!,
+      pay_rate: formData.pay_rate!,
       rate_type: formData.rate_type as RateType,
       currency: formData.currency || 'USD',
-      submission_notes: formData.submission_notes || undefined,
+      submission_notes: formData.submission_notes!,
       priority: formData.priority as PriorityLevel,
       is_hot: formData.is_hot || false,
     });
@@ -197,27 +227,33 @@ export function SubmissionDialog({
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bill_rate">Bill Rate</Label>
+                  <Label htmlFor="bill_rate">
+                    Bill Rate <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="bill_rate"
                     type="number"
                     placeholder="0.00"
                     value={formData.bill_rate || ''}
                     onChange={(e) =>
-                      updateField('bill_rate', parseFloat(e.target.value) || undefined)
+                      updateField('bill_rate', parseFloat(e.target.value) || 0)
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pay_rate">Pay Rate</Label>
+                  <Label htmlFor="pay_rate">
+                    Pay Rate <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="pay_rate"
                     type="number"
                     placeholder="0.00"
                     value={formData.pay_rate || ''}
                     onChange={(e) =>
-                      updateField('pay_rate', parseFloat(e.target.value) || undefined)
+                      updateField('pay_rate', parseFloat(e.target.value) || 0)
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -269,40 +305,65 @@ export function SubmissionDialog({
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="vendor_company">Vendor Company</Label>
+                  <Label htmlFor="vendor_company">
+                    Vendor Company <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="vendor_company"
                     placeholder="Enter vendor company"
                     value={formData.vendor_company || ''}
                     onChange={(e) => updateField('vendor_company', e.target.value)}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="client_company">Client Company</Label>
+                  <Label htmlFor="client_company">
+                    Client Company <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="client_company"
                     placeholder="Enter client company"
                     value={formData.client_company || ''}
                     onChange={(e) => updateField('client_company', e.target.value)}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vendor_contact_name">Contact Name</Label>
+                  <Label htmlFor="vendor_contact_name">
+                    Contact Name <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="vendor_contact_name"
                     placeholder="Enter contact name"
                     value={formData.vendor_contact_name || ''}
                     onChange={(e) => updateField('vendor_contact_name', e.target.value)}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vendor_contact_email">Contact Email</Label>
+                  <Label htmlFor="vendor_contact_email">
+                    Contact Email <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="vendor_contact_email"
                     type="email"
                     placeholder="contact@vendor.com"
                     value={formData.vendor_contact_email || ''}
                     onChange={(e) => updateField('vendor_contact_email', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor_contact_phone">
+                    Contact Phone <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="vendor_contact_phone"
+                    type="tel"
+                    placeholder="Enter contact phone"
+                    value={formData.vendor_contact_phone || ''}
+                    onChange={(e) => updateField('vendor_contact_phone', e.target.value)}
+                    required
                   />
                 </div>
               </div>
@@ -347,13 +408,16 @@ export function SubmissionDialog({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="submission_notes">Notes</Label>
+                <Label htmlFor="submission_notes">
+                  Notes <span className="text-red-500">*</span>
+                </Label>
                 <Textarea
                   id="submission_notes"
                   placeholder="Add any notes about this submission..."
                   value={formData.submission_notes || ''}
                   onChange={(e) => updateField('submission_notes', e.target.value)}
                   rows={3}
+                  required
                 />
               </div>
             </div>

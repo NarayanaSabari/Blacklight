@@ -298,6 +298,7 @@ class DocumentService:
             # Delete database record
             db.session.delete(document)
             db.session.commit()
+            db.session.expire_all()
             
             logger.info(f"Deleted document {document_id}")
             return True, None

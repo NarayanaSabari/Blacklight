@@ -37,12 +37,12 @@ class PlatformService:
         Returns:
             List of platform dictionaries
         """
-        query = ScraperPlatform.query.order_by(ScraperPlatform.priority)
+        stmt = select(ScraperPlatform).order_by(ScraperPlatform.priority)
         
         if not include_inactive:
-            query = query.filter_by(is_active=True)
+            stmt = stmt.where(ScraperPlatform.is_active == True)
         
-        platforms = query.all()
+        platforms = db.session.scalars(stmt).all()
         
         result = []
         for platform in platforms:
@@ -65,7 +65,8 @@ class PlatformService:
     @staticmethod
     def get_platform_by_name(name: str) -> Optional[ScraperPlatform]:
         """Get platform by name."""
-        return ScraperPlatform.query.filter_by(name=name.lower()).first()
+        stmt = select(ScraperPlatform).where(ScraperPlatform.name == name.lower())
+        return db.session.scalar(stmt)
     
     @staticmethod
     def create_platform(
@@ -96,7 +97,8 @@ class PlatformService:
         name = name.lower().strip().replace(' ', '_')
         
         # Check for duplicate
-        if ScraperPlatform.query.filter_by(name=name).first():
+        stmt = select(ScraperPlatform).where(ScraperPlatform.name == name)
+        if db.session.scalar(stmt):
             raise ValueError(f"Platform '{name}' already exists")
         
         platform = ScraperPlatform(
@@ -164,6 +166,7 @@ class PlatformService:
         name = platform.name
         db.session.delete(platform)
         db.session.commit()
+        db.session.expire_all()
         
         logger.info(f"Deleted platform: {name}")
         return True

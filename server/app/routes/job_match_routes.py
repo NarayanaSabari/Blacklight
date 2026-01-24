@@ -756,54 +756,27 @@ def update_match_status(match_id: int):
     Permissions: candidates.view
     """
     try:
-        tenant_id = g.tenant_id
-        
-        # Fetch match
-        match = db.session.get(CandidateJobMatch, match_id)
-        if not match:
-            return error_response(f"Match {match_id} not found", 404)
-        
-        # Verify candidate belongs to tenant
-        candidate = db.session.get(Candidate, match.candidate_id)
-        if candidate.tenant_id != tenant_id:
-            return error_response("Access denied", 403)
-        
-        # Parse request body
         data = request.get_json()
         if not data or 'status' not in data:
             return error_response("status is required")
         
-        new_status = data['status']
-        valid_statuses = ['SUGGESTED', 'VIEWED', 'APPLIED', 'REJECTED', 'SHORTLISTED']
-        
-        if new_status not in valid_statuses:
-            return error_response(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
-        
-        # Update match
-        match.status = new_status
-        
-        if new_status == 'VIEWED' and not match.viewed_at:
-            match.viewed_at = db.func.now()
-        elif new_status == 'APPLIED':
-            match.applied_at = db.func.now()
-        elif new_status == 'REJECTED':
-            match.rejected_at = db.func.now()
-            if 'rejection_reason' in data:
-                match.rejection_reason = data['rejection_reason']
-        
-        if 'notes' in data:
-            match.notes = data['notes']
-        
-        db.session.commit()
+        match = JobMatchingService.update_match_status(
+            match_id=match_id,
+            tenant_id=g.tenant_id,
+            status=data['status'],
+            notes=data.get('notes'),
+            rejection_reason=data.get('rejection_reason')
+        )
         
         return jsonify({
             'message': 'Match status updated',
             'match': match.to_dict(include_job=True)
         }), 200
         
+    except ValueError as e:
+        return error_response(str(e), 400 if "Invalid status" in str(e) else 404)
     except Exception as e:
         logger.error(f"Error updating match {match_id}: {str(e)}")
-        db.session.rollback()
         return error_response("Failed to update match", 500)
 
 
@@ -1065,8 +1038,6 @@ def get_ai_compatibility_analysis(match_id: int):
         "force_refresh": false  // Optional: Force re-analysis even if cached
     }
     
-    Permissions: candidates.view
-    
     Returns:
     - compatibility_score: AI-calculated score
     - strengths: List of candidate strengths for this role
@@ -1081,12 +1052,10 @@ def get_ai_compatibility_analysis(match_id: int):
     try:
         tenant_id = g.tenant_id
         
-        # Fetch match record
         match = db.session.get(CandidateJobMatch, match_id)
         if not match:
             return error_response(f"Match {match_id} not found", 404)
         
-        # Verify candidate belongs to tenant
         candidate = db.session.get(Candidate, match.candidate_id)
         if not candidate:
             return error_response("Candidate not found", 404)
@@ -1094,16 +1063,13 @@ def get_ai_compatibility_analysis(match_id: int):
         if candidate.tenant_id != tenant_id:
             return error_response("Access denied", 403)
         
-        # Fetch job posting
         job_posting = db.session.get(JobPosting, match.job_posting_id)
         if not job_posting:
             return error_response("Job posting not found", 404)
         
-        # Parse request body
         data = request.get_json() or {}
         force_refresh = data.get('force_refresh', False)
         
-        # Check if we have cached AI analysis (within 24 hours)
         cache_valid = False
         if match.ai_scored_at and not force_refresh:
             cache_expiry = match.ai_scored_at + timedelta(hours=24)
@@ -1111,7 +1077,6 @@ def get_ai_compatibility_analysis(match_id: int):
                 cache_valid = True
         
         if cache_valid and match.ai_compatibility_score is not None:
-            # Return cached result
             logger.info(f"Returning cached AI analysis for match {match_id}")
             return jsonify({
                 'match_id': match_id,
@@ -1123,24 +1088,21 @@ def get_ai_compatibility_analysis(match_id: int):
                 'cached': True
             }), 200
         
-        # Calculate new AI analysis
         logger.info(f"Calculating AI analysis for match {match_id}")
         
         service = UnifiedScorerService()
         ai_result = service.calculate_ai_compatibility(candidate, job_posting)
         
-        # Store result in match record
-        match.ai_compatibility_score = ai_result.compatibility_score
-        match.ai_compatibility_details = {
-            'strengths': ai_result.strengths,
-            'gaps': ai_result.gaps,
-            'recommendations': ai_result.recommendations,
-            'experience_analysis': ai_result.experience_analysis,
-            'culture_fit_indicators': ai_result.culture_fit_indicators
-        }
-        match.ai_scored_at = datetime.utcnow()
-        
-        db.session.commit()
+        match = JobMatchingService.update_ai_analysis(
+            match_id=match_id,
+            tenant_id=tenant_id,
+            compatibility_score=ai_result.compatibility_score,
+            strengths=ai_result.strengths,
+            gaps=ai_result.gaps,
+            recommendations=ai_result.recommendations,
+            experience_analysis=ai_result.experience_analysis,
+            culture_fit_indicators=ai_result.culture_fit_indicators
+        )
         
         logger.info(f"AI analysis complete for match {match_id}, score: {ai_result.compatibility_score}")
         
@@ -1165,5 +1127,4 @@ def get_ai_compatibility_analysis(match_id: int):
         return error_response(str(e), 400)
     except Exception as e:
         logger.error(f"Error getting AI analysis for match {match_id}: {str(e)}")
-        db.session.rollback()
         return error_response("Failed to get AI analysis", 500)

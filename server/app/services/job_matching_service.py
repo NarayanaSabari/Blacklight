@@ -1124,3 +1124,113 @@ class JobMatchingService:
         """
         # TODO: Implement later - requires candidate assignment data
         pass
+    
+    @staticmethod
+    def update_match_status(
+        match_id: int,
+        tenant_id: int,
+        status: str,
+        notes: Optional[str] = None,
+        rejection_reason: Optional[str] = None
+    ) -> CandidateJobMatch:
+        """
+        Update match status and related timestamps.
+        
+        Args:
+            match_id: Match ID
+            tenant_id: Tenant ID for verification
+            status: New status (SUGGESTED, VIEWED, APPLIED, REJECTED, SHORTLISTED)
+            notes: Optional notes
+            rejection_reason: Optional rejection reason (for REJECTED status)
+            
+        Returns:
+            Updated CandidateJobMatch
+            
+        Raises:
+            ValueError: If match not found or tenant mismatch
+        """
+        valid_statuses = ['SUGGESTED', 'VIEWED', 'APPLIED', 'REJECTED', 'SHORTLISTED']
+        if status not in valid_statuses:
+            raise ValueError(f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+        
+        match = db.session.get(CandidateJobMatch, match_id)
+        if not match:
+            raise ValueError(f"Match {match_id} not found")
+        
+        candidate = db.session.get(Candidate, match.candidate_id)
+        if candidate.tenant_id != tenant_id:
+            raise ValueError("Access denied")
+        
+        match.status = status
+        
+        if status == 'VIEWED' and not match.viewed_at:
+            match.viewed_at = db.func.now()
+        elif status == 'APPLIED':
+            match.applied_at = db.func.now()
+        elif status == 'REJECTED':
+            match.rejected_at = db.func.now()
+            if rejection_reason:
+                match.rejection_reason = rejection_reason
+        
+        if notes:
+            match.notes = notes
+        
+        db.session.commit()
+        
+        logger.info(f"Updated match {match_id} status to {status} for tenant {tenant_id}")
+        
+        return match
+    
+    @staticmethod
+    def update_ai_analysis(
+        match_id: int,
+        tenant_id: int,
+        compatibility_score: float,
+        strengths: List[str],
+        gaps: List[str],
+        recommendations: List[str],
+        experience_analysis: str,
+        culture_fit_indicators: List[str]
+    ) -> CandidateJobMatch:
+        """
+        Update match with AI compatibility analysis results.
+        
+        Args:
+            match_id: Match ID
+            tenant_id: Tenant ID for verification
+            compatibility_score: AI compatibility score
+            strengths: List of candidate strengths
+            gaps: List of skill/experience gaps
+            recommendations: List of recommendations
+            experience_analysis: Experience analysis text
+            culture_fit_indicators: Culture fit observations
+            
+        Returns:
+            Updated CandidateJobMatch
+            
+        Raises:
+            ValueError: If match not found or tenant mismatch
+        """
+        match = db.session.get(CandidateJobMatch, match_id)
+        if not match:
+            raise ValueError(f"Match {match_id} not found")
+        
+        candidate = db.session.get(Candidate, match.candidate_id)
+        if candidate.tenant_id != tenant_id:
+            raise ValueError("Access denied")
+        
+        match.ai_compatibility_score = compatibility_score
+        match.ai_compatibility_details = {
+            'strengths': strengths,
+            'gaps': gaps,
+            'recommendations': recommendations,
+            'experience_analysis': experience_analysis,
+            'culture_fit_indicators': culture_fit_indicators
+        }
+        match.ai_scored_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        logger.info(f"Updated AI analysis for match {match_id}, score: {compatibility_score}")
+        
+        return match

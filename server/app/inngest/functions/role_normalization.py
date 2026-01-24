@@ -200,8 +200,8 @@ def sync_removed_roles_step(candidate_id: int, current_preferred_roles: List[str
         logger.error(f"[ROLE-NORM] Error syncing removed roles: {e}")
         try:
             db.session.rollback()
-        except:
-            pass
+        except (RuntimeError, ValueError) as rollback_error:
+            logger.error(f"[ROLE-NORM] Failed to rollback session: {rollback_error}")
         return {
             "removed_count": 0,
             "removed_roles": [],
@@ -262,8 +262,8 @@ def normalize_single_role_step(
         # Rollback any failed transaction
         try:
             db.session.rollback()
-        except:
-            pass
+        except (RuntimeError, ValueError) as rollback_error:
+            logger.error(f"[ROLE-NORM] Failed to rollback session: {rollback_error}")
         
         logger.error(f"[ROLE-NORM] ❌ Failed to normalize '{raw_role}': {e}")
         

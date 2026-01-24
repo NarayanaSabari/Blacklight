@@ -172,6 +172,72 @@ class CandidateResumeService:
         return resume
     
     @staticmethod
+    def create_resume_with_document(
+        candidate_id: int,
+        tenant_id: int,
+        file_key: str,
+        storage_backend: str,
+        original_filename: str,
+        uploaded_by_user_id: int,
+        file_size: Optional[int] = None,
+        mime_type: Optional[str] = None,
+        is_primary: bool = False,
+    ) -> Tuple[CandidateResume, CandidateDocument]:
+        """
+        Create both CandidateResume and CandidateDocument records and commit.
+        Used for HR uploads to ensure resumes appear in document listings.
+        
+        Args:
+            candidate_id: Candidate ID
+            tenant_id: Tenant ID
+            file_key: Storage file key
+            storage_backend: Storage backend ('local' or 'gcs')
+            original_filename: Original uploaded filename
+            uploaded_by_user_id: Portal user who uploaded
+            file_size: File size in bytes
+            mime_type: MIME type
+            is_primary: Whether this is the primary resume
+            
+        Returns:
+            Tuple of (CandidateResume, CandidateDocument)
+        """
+        resume = CandidateResumeService.create_resume(
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            file_key=file_key,
+            storage_backend=storage_backend,
+            original_filename=original_filename,
+            file_size=file_size,
+            mime_type=mime_type,
+            is_primary=is_primary,
+            uploaded_by_user_id=uploaded_by_user_id,
+            uploaded_by_candidate=False,
+        )
+        
+        resume_document = CandidateDocument(
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            invitation_id=None,
+            document_type='resume',
+            file_name=original_filename,
+            file_key=file_key,
+            file_size=file_size or 0,
+            mime_type=mime_type or 'application/pdf',
+            storage_backend=storage_backend,
+            uploaded_by_id=uploaded_by_user_id,
+            is_verified=False,
+        )
+        db.session.add(resume_document)
+        
+        db.session.commit()
+        db.session.refresh(resume)
+        db.session.refresh(resume_document)
+        
+        logger.info(f"Created resume {resume.id} and document {resume_document.id} for candidate {candidate_id}")
+        
+        return resume, resume_document
+    
+    @staticmethod
     def upload_and_create_resume(
         candidate_id: int,
         tenant_id: int,
@@ -413,6 +479,7 @@ class CandidateResumeService:
         
         # Single commit for all changes (resume delete, document delete, primary update)
         db.session.commit()
+        db.session.expire_all()
         
         logger.info(f"Deleted resume {resume_id} for candidate {candidate_id}")
         
@@ -443,3 +510,138 @@ class CandidateResumeService:
             return f"/api/portal/candidates/{resume.candidate_id}/resumes/{resume_id}/download"
         
         return signed_url
+    
+    @staticmethod
+    def update_polished_resume(
+        resume_id: int,
+        candidate_id: int,
+        tenant_id: int,
+        markdown_content: str,
+    ) -> CandidateResume:
+        """
+        Update the polished/formatted version of a resume.
+        
+        Args:
+            resume_id: Resume ID
+            candidate_id: Candidate ID (for validation)
+            tenant_id: Tenant ID for multi-tenant isolation
+            markdown_content: Updated markdown content
+            
+        Returns:
+            Updated CandidateResume
+            
+        Raises:
+            ValueError: If resume not found or doesn't belong to candidate
+        """
+        resume = CandidateResumeService.get_resume_by_id(resume_id, tenant_id)
+        
+        if not resume or resume.candidate_id != candidate_id:
+            raise ValueError("Resume not found")
+        
+        polished_data = resume.polished_resume_data or {}
+        polished_data['markdown_content'] = markdown_content
+        polished_data['manually_edited'] = True
+        
+        resume.set_polished_resume(markdown_content)
+        db.session.commit()
+        
+        logger.info(f"Updated polished resume {resume_id} for candidate {candidate_id}")
+        
+        return resume
+    
+    @staticmethod
+    def regenerate_polished_resume(
+        resume_id: int,
+        candidate_id: int,
+        tenant_id: int,
+        candidate_name: str,
+    ) -> CandidateResume:
+        """
+        Regenerate polished resume using AI from parsed data.
+        
+        Args:
+            resume_id: Resume ID
+            candidate_id: Candidate ID (for validation)
+            tenant_id: Tenant ID for multi-tenant isolation
+            candidate_name: Candidate's full name for personalization
+            
+        Returns:
+            Updated CandidateResume with new polished data
+            
+        Raises:
+            ValueError: If resume not found or no parsed data available
+        """
+        resume = CandidateResumeService.get_resume_by_id(resume_id, tenant_id)
+        
+        if not resume or resume.candidate_id != candidate_id:
+            raise ValueError("Resume not found")
+        
+        if not resume.parsed_resume_data:
+            raise ValueError("No parsed resume data available. Please upload and parse a resume first.")
+        
+        from app.services.resume_polishing_service import ResumePolishingService
+        
+        service = ResumePolishingService()
+        polished_data = service.polish_resume(
+            parsed_data=resume.parsed_resume_data,
+            candidate_name=candidate_name
+        )
+        
+        resume.polished_resume_data = polished_data
+        db.session.commit()
+        db.session.refresh(resume)
+        
+        logger.info(f"Regenerated polished resume {resume_id} for candidate {candidate_id}")
+        
+        return resume
+    
+    @staticmethod
+    def upload_resume_with_document(
+        candidate_id: int,
+        tenant_id: int,
+        file: FileStorage,
+        is_primary: bool,
+        uploaded_by_user_id: int,
+    ) -> Tuple[CandidateResume, CandidateDocument]:
+        """
+        Upload resume and create both CandidateResume and CandidateDocument records.
+        This commits the transaction for Inngest worker compatibility.
+        
+        Args:
+            candidate_id: Candidate ID
+            tenant_id: Tenant ID
+            file: Uploaded file
+            is_primary: Whether this is the primary resume
+            uploaded_by_user_id: Portal user who uploaded
+            
+        Returns:
+            Tuple of (CandidateResume, CandidateDocument)
+        """
+        resume, file_key = CandidateResumeService.upload_and_create_resume(
+            candidate_id=candidate_id,
+            tenant_id=tenant_id,
+            file=file,
+            is_primary=is_primary,
+            uploaded_by_user_id=uploaded_by_user_id,
+            uploaded_by_candidate=False,
+        )
+        
+        resume_document = CandidateDocument(
+            tenant_id=tenant_id,
+            candidate_id=candidate_id,
+            invitation_id=None,
+            document_type='resume',
+            file_name=file.filename or 'resume',
+            file_key=file_key,
+            file_size=resume.file_size or 0,
+            mime_type=resume.mime_type or 'application/pdf',
+            storage_backend=resume.storage_backend or 'gcs',
+            uploaded_by_id=uploaded_by_user_id,
+            is_verified=False,
+        )
+        db.session.add(resume_document)
+        db.session.commit()
+        
+        logger.info(f"Uploaded resume {resume.id} and document {resume_document.id} for candidate {candidate_id}")
+        
+        return resume, resume_document

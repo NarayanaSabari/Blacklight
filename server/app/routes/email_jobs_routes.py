@@ -18,6 +18,7 @@ from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
 from app.models.user_email_integration import UserEmailIntegration
+from app.services.email_job_service import EmailJobService
 
 bp = Blueprint("email_jobs", __name__, url_prefix="/api/email-jobs")
 logger = logging.getLogger(__name__)
@@ -178,36 +179,13 @@ def update_email_job(job_id: int):
         Updated job details
     """
     tenant_id = g.tenant_id
-    
-    stmt = select(JobPosting).where(
-        JobPosting.id == job_id,
-        JobPosting.is_email_sourced == True,
-        JobPosting.source_tenant_id == tenant_id,
-    )
-    job = db.session.scalar(stmt)
-    
-    if not job:
-        return error_response("Job not found", status=404)
-    
     data = request.get_json()
     
-    # Update allowed fields
-    updateable_fields = [
-        "title", "company", "location", "description", "job_type",
-        "remote_type", "skills", "required_skills", "preferred_skills",
-        "experience_years", "requirements", "min_rate", "max_rate",
-        "min_salary", "max_salary", "employment_type", "duration_months",
-        "status", "client_name",
-    ]
-    
-    for field in updateable_fields:
-        if field in data:
-            setattr(job, field, data[field])
-    
-    job.updated_at = datetime.utcnow()
-    db.session.commit()
-    
-    return jsonify(job.to_dict()), 200
+    try:
+        job = EmailJobService.update_email_job(job_id, tenant_id, data)
+        return jsonify(job.to_dict()), 200
+    except ValueError as e:
+        return error_response(str(e), status=404)
 
 
 @bp.route("/<int:job_id>", methods=["DELETE"])
@@ -215,31 +193,14 @@ def update_email_job(job_id: int):
 @with_tenant_context
 @require_permission("candidates.delete")
 def delete_email_job(job_id: int):
-    """
-    Delete an email-sourced job.
-    
-    Args:
-        job_id: Job ID
-        
-    Returns:
-        Success message
-    """
+    """Delete an email-sourced job."""
     tenant_id = g.tenant_id
     
-    stmt = select(JobPosting).where(
-        JobPosting.id == job_id,
-        JobPosting.is_email_sourced == True,
-        JobPosting.source_tenant_id == tenant_id,
-    )
-    job = db.session.scalar(stmt)
-    
-    if not job:
-        return error_response("Job not found", status=404)
-    
-    db.session.delete(job)
-    db.session.commit()
-    
-    return jsonify({"message": "Job deleted successfully"}), 200
+    try:
+        EmailJobService.delete_email_job(job_id, tenant_id)
+        return jsonify({"message": "Job deleted successfully"}), 200
+    except ValueError as e:
+        return error_response(str(e), status=404)
 
 
 # ============================================================================

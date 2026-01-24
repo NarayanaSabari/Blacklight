@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-from sqlalchemy import select, case, func, and_, or_
+from sqlalchemy import select, case, func, and_, or_, update
 import inngest
 
 from app import db
@@ -165,7 +165,7 @@ class ScrapeQueueService:
         """
         # Find approved roles ready for scraping, prioritized by priority + candidate_count
         # 'approved' = auto-approved, ready for scraping
-        role = GlobalRole.query.filter(
+        stmt = select(GlobalRole).where(
             GlobalRole.queue_status == "approved"
         ).order_by(
             case(
@@ -175,7 +175,8 @@ class ScrapeQueueService:
                 (GlobalRole.priority == "low", 1),
             ).desc(),
             GlobalRole.candidate_count.desc()  # Higher demand = higher priority
-        ).first()
+        )
+        role = db.session.scalar(stmt)
         
         if not role:
             logger.info("Scrape queue is empty")
@@ -236,10 +237,11 @@ class ScrapeQueueService:
             ValueError: If scraper already has an active session
         """
         # Check if this API key already has an active session
-        active_session = ScrapeSession.query.filter(
+        stmt = select(ScrapeSession).where(
             ScrapeSession.scraper_key_id == scraper_key.id,
             ScrapeSession.status == "in_progress"
-        ).first()
+        )
+        active_session = db.session.scalar(stmt)
         
         if active_session:
             logger.warning(
@@ -258,7 +260,7 @@ class ScrapeQueueService:
         # 3. Candidate count (higher = more demand)
         # Use FOR UPDATE SKIP LOCKED to prevent race conditions when multiple scrapers
         # call this endpoint simultaneously - each will get a different role
-        role = GlobalRole.query.filter(
+        stmt = select(GlobalRole).where(
             GlobalRole.queue_status == "approved"
         ).order_by(
             case(
@@ -270,7 +272,8 @@ class ScrapeQueueService:
             # NULLS FIRST: roles never scraped get priority, then oldest scraped
             GlobalRole.last_scraped_at.asc().nulls_first(),
             GlobalRole.candidate_count.desc()
-        ).with_for_update(skip_locked=True).first()
+        ).with_for_update(skip_locked=True)
+        role = db.session.scalar(stmt)
         
         if not role:
             logger.info("Scrape queue is empty - no approved roles")
@@ -365,10 +368,11 @@ class ScrapeQueueService:
         from app.models.role_location_queue import RoleLocationQueue
         
         # Check if this API key already has an active session
-        active_session = ScrapeSession.query.filter(
+        stmt = select(ScrapeSession).where(
             ScrapeSession.scraper_key_id == scraper_key.id,
             ScrapeSession.status == "in_progress"
-        ).first()
+        )
+        active_session = db.session.scalar(stmt)
         
         if active_session:
             logger.warning(
@@ -387,7 +391,7 @@ class ScrapeQueueService:
         # 3. Candidate count (higher = more demand)
         # Use FOR UPDATE SKIP LOCKED to prevent race conditions when multiple scrapers
         # call this endpoint simultaneously - each will get a different entry
-        queue_entry = db.session.query(RoleLocationQueue).filter(
+        stmt = select(RoleLocationQueue).where(
             RoleLocationQueue.queue_status == "approved"
         ).order_by(
             case(
@@ -399,7 +403,8 @@ class ScrapeQueueService:
             # NULLS FIRST: entries never scraped get priority, then oldest scraped
             RoleLocationQueue.last_scraped_at.asc().nulls_first(),
             RoleLocationQueue.candidate_count.desc()
-        ).with_for_update(skip_locked=True).first()
+        ).with_for_update(skip_locked=True)
+        queue_entry = db.session.scalar(stmt)
         
         if not queue_entry:
             logger.info("Role+location queue is empty - no approved entries")
@@ -502,10 +507,11 @@ class ScrapeQueueService:
             Import results with statistics
         """
         # Find session
-        session = ScrapeSession.query.filter_by(
-            session_id=uuid.UUID(session_id),
-            scraper_key_id=scraper_key.id
-        ).first()
+        stmt = select(ScrapeSession).where(
+            ScrapeSession.session_id == uuid.UUID(session_id),
+            ScrapeSession.scraper_key_id == scraper_key.id
+        )
+        session = db.session.scalar(stmt)
         
         if not session:
             raise ValueError("Session not found or unauthorized")
@@ -637,10 +643,11 @@ class ScrapeQueueService:
         for job_data in jobs_data:
             try:
                 # Check for duplicate
-                existing = JobPosting.query.filter_by(
-                    platform=job_data.get("platform", "scraper"),
-                    external_job_id=job_data.get("job_id") or job_data.get("external_job_id")
-                ).first()
+                stmt = select(JobPosting).where(
+                    JobPosting.platform == job_data.get("platform", "scraper"),
+                    JobPosting.external_job_id == job_data.get("job_id") or job_data.get("external_job_id")
+                )
+                existing = db.session.scalar(stmt)
                 
                 if existing:
                     skipped_count += 1
@@ -720,18 +727,20 @@ class ScrapeQueueService:
         Returns:
             Updated session info
         """
-        session = ScrapeSession.query.filter_by(
-            session_id=uuid.UUID(session_id),
-            scraper_key_id=scraper_key.id
-        ).first()
+        stmt = select(ScrapeSession).where(
+            ScrapeSession.session_id == uuid.UUID(session_id),
+            ScrapeSession.scraper_key_id == scraper_key.id
+        )
+        session = db.session.scalar(stmt)
         
         if not session:
             raise ValueError("Session not found or unauthorized")
         
         # Check actual platform statuses from database
-        platform_statuses = SessionPlatformStatus.query.filter_by(
-            session_id=session.session_id
-        ).all()
+        stmt = select(SessionPlatformStatus).where(
+            SessionPlatformStatus.session_id == session.session_id
+        )
+        platform_statuses = db.session.scalars(stmt).all()
         
         actually_failed = [ps for ps in platform_statuses if ps.status == 'failed']
         actually_completed = [ps for ps in platform_statuses if ps.status == 'completed']
@@ -812,7 +821,8 @@ class ScrapeQueueService:
         except ValueError:
             raise ValueError(f"Invalid session ID format: {session_id}")
         
-        session = ScrapeSession.query.filter_by(session_id=session_uuid).first()
+        stmt = select(ScrapeSession).where(ScrapeSession.session_id == session_uuid)
+        session = db.session.scalar(stmt)
         
         if not session:
             raise ValueError(f"Session not found: {session_id}")
@@ -888,12 +898,13 @@ class ScrapeQueueService:
         timeout_threshold = datetime.utcnow() - timedelta(seconds=ScrapeQueueService.SESSION_TIMEOUT_SECONDS)
         
         # Find stale sessions
-        stale_sessions = ScrapeSession.query.filter(
+        stmt = select(ScrapeSession).where(
             and_(
                 ScrapeSession.status == "in_progress",
                 ScrapeSession.started_at < timeout_threshold
             )
-        ).all()
+        )
+        stale_sessions = db.session.scalars(stmt).all()
         
         timed_out = 0
         role_location_reset = 0
@@ -941,9 +952,10 @@ class ScrapeQueueService:
         """
         if force:
             # Force reset all completed roles back to pending
-            reset_count = GlobalRole.query.filter(
+            stmt = update(GlobalRole).where(
                 GlobalRole.queue_status == "completed"
-            ).update({"queue_status": "pending"})
+            ).values(queue_status="pending")
+            reset_count = db.session.execute(stmt).rowcount
             
             db.session.commit()
             logger.info(f"Force reset {reset_count} completed roles back to pending")
@@ -955,7 +967,7 @@ class ScrapeQueueService:
         # Roles are reset if:
         # 1. They have candidates and haven't been scraped in X hours, OR
         # 2. They have no last_scraped_at timestamp (never scraped or no record)
-        reset_count = GlobalRole.query.filter(
+        stmt = update(GlobalRole).where(
             and_(
                 GlobalRole.queue_status == "completed",
                 or_(
@@ -971,7 +983,8 @@ class ScrapeQueueService:
                     GlobalRole.candidate_count == 0
                 )
             )
-        ).update({"queue_status": "pending"})
+        ).values(queue_status="pending")
+        reset_count = db.session.execute(stmt).rowcount
         
         db.session.commit()
         
@@ -995,17 +1008,20 @@ class ScrapeQueueService:
         
         # Reset 'processing' entries that have no active session
         # (their session must have failed or timed out without proper cleanup)
-        processing_entries = RoleLocationQueue.query.filter(
+        from app.models.role_location_queue import RoleLocationQueue
+        stmt = select(RoleLocationQueue).where(
             RoleLocationQueue.queue_status == "processing"
-        ).all()
+        )
+        processing_entries = db.session.scalars(stmt).all()
         
         processing_reset = 0
         for entry in processing_entries:
             # Check if there's an active session for this entry
-            active_session = ScrapeSession.query.filter(
+            stmt = select(ScrapeSession).where(
                 ScrapeSession.role_location_queue_id == entry.id,
                 ScrapeSession.status == "in_progress"
-            ).first()
+            )
+            active_session = db.session.scalar(stmt)
             
             if not active_session:
                 # No active session - this entry is stuck, reset it
@@ -1018,9 +1034,11 @@ class ScrapeQueueService:
                 )
         
         # Reset 'completed' entries back to 'approved' for continuous rotation
-        completed_reset = RoleLocationQueue.query.filter(
+        from app.models.role_location_queue import RoleLocationQueue
+        stmt = update(RoleLocationQueue).where(
             RoleLocationQueue.queue_status == "completed"
-        ).update({"queue_status": "approved"})
+        ).values(queue_status="approved")
+        completed_reset = db.session.execute(stmt).rowcount
         
         if completed_reset > 0:
             logger.info(f"Reset {completed_reset} 'completed' RoleLocationQueue entries to 'approved'")
@@ -1041,9 +1059,10 @@ class ScrapeQueueService:
         Returns:
             List of active session info
         """
-        sessions = ScrapeSession.query.filter_by(
-            status="in_progress"
-        ).order_by(ScrapeSession.started_at.desc()).all()
+        stmt = select(ScrapeSession).where(
+            ScrapeSession.status == "in_progress"
+        ).order_by(ScrapeSession.started_at.desc())
+        sessions = db.session.scalars(stmt).all()
         
         return [
             {
@@ -1067,9 +1086,10 @@ class ScrapeQueueService:
         Returns:
             List of session info
         """
-        sessions = ScrapeSession.query.order_by(
+        stmt = select(ScrapeSession).order_by(
             ScrapeSession.started_at.desc()
-        ).limit(limit).all()
+        ).limit(limit)
+        sessions = db.session.scalars(stmt).all()
         
         return [s.to_dict() for s in sessions]
     

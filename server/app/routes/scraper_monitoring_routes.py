@@ -16,6 +16,8 @@ from app.models.global_role import GlobalRole
 from app.models.job_posting import JobPosting
 from app.models.role_location_queue import RoleLocationQueue
 from app.middleware import require_pm_admin
+from app.services.scraper_api_key_service import ScraperApiKeyService
+from app.services.role_location_queue_service import RoleLocationQueueService
 
 logger = logging.getLogger(__name__)
 
@@ -509,16 +511,12 @@ def create_api_key():
         }), 400
     
     try:
-        # Create new key
-        api_key, raw_key = ScraperApiKey.create_new_key(
+        api_key, raw_key = ScraperApiKeyService.create_api_key(
             name=data['name'],
             description=data.get('description'),
             created_by_id=getattr(g, 'pm_admin_id', None),
             rate_limit=data.get('rate_limit_per_minute', 60)
         )
-        
-        db.session.add(api_key)
-        db.session.commit()
         
         return jsonify({
             "api_key": {
@@ -536,9 +534,13 @@ def create_api_key():
             "message": "Store this key securely - it won't be shown again"
         }), 201
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
     except Exception as e:
         logger.error(f"Error creating API key: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -554,19 +556,10 @@ def revoke_api_key(key_id: int):
     from flask import g
     
     try:
-        api_key = db.session.get(ScraperApiKey, key_id)
-        
-        if not api_key:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"API key {key_id} not found"
-            }), 404
-        
-        api_key.is_active = False
-        api_key.revoked_at = datetime.utcnow()
-        api_key.revoked_by = getattr(g, 'pm_admin_id', None)
-        
-        db.session.commit()
+        api_key = ScraperApiKeyService.revoke_api_key(
+            key_id=key_id,
+            revoked_by_id=getattr(g, 'pm_admin_id', None)
+        )
         
         return jsonify({
             "id": api_key.id,
@@ -576,9 +569,13 @@ def revoke_api_key(key_id: int):
             "message": "API key revoked"
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error revoking API key {key_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -592,30 +589,23 @@ def activate_api_key(key_id: int):
     Reactivate a revoked API key.
     """
     try:
-        api_key = db.session.get(ScraperApiKey, key_id)
-        
-        if not api_key:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"API key {key_id} not found"
-            }), 404
-        
-        api_key.is_active = True
-        api_key.revoked_at = None
-        api_key.revoked_by = None
-        
-        db.session.commit()
+        api_key = ScraperApiKeyService.activate_api_key(key_id=key_id)
         
         return jsonify({
             "id": api_key.id,
             "name": api_key.name,
             "is_active": True,
+            "revoked_at": None,
             "message": "API key activated"
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error activating API key {key_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -644,22 +634,10 @@ def update_api_key_status(key_id: int):
         }), 400
     
     try:
-        api_key = db.session.get(ScraperApiKey, key_id)
-        
-        if not api_key:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"API key {key_id} not found"
-            }), 404
-        
-        if api_key.revoked_at:
-            return jsonify({
-                "error": "Bad Request",
-                "message": "Cannot update status of a revoked key"
-            }), 400
-        
-        api_key.is_active = (status == 'active')
-        db.session.commit()
+        api_key = ScraperApiKeyService.update_api_key_status(
+            key_id=key_id,
+            status=status
+        )
         
         def get_status(k):
             if k.revoked_at:
@@ -682,9 +660,13 @@ def update_api_key_status(key_id: int):
             }
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
     except Exception as e:
         logger.error(f"Error updating API key {key_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -700,25 +682,20 @@ def delete_api_key(key_id: int):
     from flask import g
     
     try:
-        api_key = db.session.get(ScraperApiKey, key_id)
-        
-        if not api_key:
-            return jsonify({
-                "error": "Not Found",
-                "message": f"API key {key_id} not found"
-            }), 404
-        
-        api_key.is_active = False
-        api_key.revoked_at = datetime.utcnow()
-        api_key.revoked_by = getattr(g, 'pm_admin_id', None)
-        
-        db.session.commit()
+        api_key = ScraperApiKeyService.revoke_api_key(
+            key_id=key_id,
+            revoked_by_id=getattr(g, 'pm_admin_id', None)
+        )
         
         return '', 204
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
         logger.error(f"Error deleting API key {key_id}: {e}")
-        db.session.rollback()
         return jsonify({
             "error": "Internal Server Error",
             "message": str(e)
@@ -1275,31 +1252,19 @@ def get_locations_for_role(role_id: int):
 def approve_role_location_entry(entry_id: int):
     """Approve a role+location queue entry for scraping."""
     try:
-        from app.models.role_location_queue import RoleLocationQueue
-        
-        entry = db.session.get(RoleLocationQueue, entry_id)
-        if not entry:
-            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
-        
-        if entry.queue_status not in ['pending', 'rejected']:
-            return jsonify({
-                "error": "Bad Request",
-                "message": f"Cannot approve entry with status '{entry.queue_status}'"
-            }), 400
-        
-        entry.queue_status = 'approved'
-        entry.updated_at = datetime.utcnow()
-        db.session.commit()
-        
-        logger.info(f"Approved role+location entry {entry_id}: {entry.global_role.name} @ {entry.location}")
+        entry = RoleLocationQueueService.approve_entry(entry_id)
         
         return jsonify({
             "message": "Entry approved",
             "entry": entry.to_dict(include_role=True)
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error approving role location entry: {e}")
         return jsonify({
             "error": "Internal Server Error",
@@ -1312,31 +1277,19 @@ def approve_role_location_entry(entry_id: int):
 def reject_role_location_entry(entry_id: int):
     """Reject a role+location queue entry."""
     try:
-        from app.models.role_location_queue import RoleLocationQueue
-        
-        entry = db.session.get(RoleLocationQueue, entry_id)
-        if not entry:
-            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
-        
-        if entry.queue_status not in ['pending', 'approved']:
-            return jsonify({
-                "error": "Bad Request",
-                "message": f"Cannot reject entry with status '{entry.queue_status}'"
-            }), 400
-        
-        entry.queue_status = 'rejected'
-        entry.updated_at = datetime.utcnow()
-        db.session.commit()
-        
-        logger.info(f"Rejected role+location entry {entry_id}: {entry.global_role.name} @ {entry.location}")
+        entry = RoleLocationQueueService.reject_entry(entry_id)
         
         return jsonify({
             "message": "Entry rejected",
             "entry": entry.to_dict(include_role=True)
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error rejecting role location entry: {e}")
         return jsonify({
             "error": "Internal Server Error",
@@ -1349,34 +1302,28 @@ def reject_role_location_entry(entry_id: int):
 def update_role_location_priority(entry_id: int):
     """Update priority of a role+location queue entry."""
     try:
-        from app.models.role_location_queue import RoleLocationQueue
-        
         data = request.get_json() or {}
         priority = data.get('priority')
         
-        if priority not in ['urgent', 'high', 'normal', 'low']:
+        if not priority:
             return jsonify({
                 "error": "Bad Request",
-                "message": "Invalid priority. Must be: urgent, high, normal, low"
+                "message": "priority is required"
             }), 400
         
-        entry = db.session.get(RoleLocationQueue, entry_id)
-        if not entry:
-            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
-        
-        entry.priority = priority
-        entry.updated_at = datetime.utcnow()
-        db.session.commit()
-        
-        logger.info(f"Updated priority for role+location entry {entry_id} to {priority}")
+        entry = RoleLocationQueueService.update_priority(entry_id, priority)
         
         return jsonify({
             "message": "Priority updated",
             "entry": entry.to_dict(include_role=True)
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Bad Request",
+            "message": str(e)
+        }), 400
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error updating role location priority: {e}")
         return jsonify({
             "error": "Internal Server Error",
@@ -1389,27 +1336,19 @@ def update_role_location_priority(entry_id: int):
 def delete_role_location_entry(entry_id: int):
     """Delete a role+location queue entry."""
     try:
-        from app.models.role_location_queue import RoleLocationQueue
-        
-        entry = db.session.get(RoleLocationQueue, entry_id)
-        if not entry:
-            return jsonify({"error": "Not Found", "message": "Entry not found"}), 404
-        
-        role_name = entry.global_role.name if entry.global_role else "Unknown"
-        location = entry.location
-        
-        db.session.delete(entry)
-        db.session.commit()
-        
-        logger.info(f"Deleted role+location entry {entry_id}: {role_name} @ {location}")
+        entry_id, role_name, location = RoleLocationQueueService.delete_entry(entry_id)
         
         return jsonify({
             "message": "Entry deleted",
             "deleted_id": entry_id
         }), 200
         
+    except ValueError as e:
+        return jsonify({
+            "error": "Not Found",
+            "message": str(e)
+        }), 404
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error deleting role location entry: {e}")
         return jsonify({
             "error": "Internal Server Error",
@@ -1422,29 +1361,10 @@ def delete_role_location_entry(entry_id: int):
 def bulk_approve_role_location_entries():
     """Bulk approve pending role+location queue entries."""
     try:
-        from app.models.role_location_queue import RoleLocationQueue
-        
         data = request.get_json() or {}
-        entry_ids = data.get('entry_ids', [])
+        entry_ids = data.get('entry_ids')
         
-        if not entry_ids:
-            # If no specific IDs, approve all pending
-            entries = RoleLocationQueue.query.filter_by(queue_status='pending').all()
-        else:
-            entries = RoleLocationQueue.query.filter(
-                RoleLocationQueue.id.in_(entry_ids),
-                RoleLocationQueue.queue_status == 'pending'
-            ).all()
-        
-        approved_count = 0
-        for entry in entries:
-            entry.queue_status = 'approved'
-            entry.updated_at = datetime.utcnow()
-            approved_count += 1
-        
-        db.session.commit()
-        
-        logger.info(f"Bulk approved {approved_count} role+location entries")
+        approved_count = RoleLocationQueueService.bulk_approve_entries(entry_ids)
         
         return jsonify({
             "message": f"Approved {approved_count} entries",
@@ -1452,7 +1372,6 @@ def bulk_approve_role_location_entries():
         }), 200
         
     except Exception as e:
-        db.session.rollback()
         logger.error(f"Error bulk approving role location entries: {e}")
         return jsonify({
             "error": "Internal Server Error",

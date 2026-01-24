@@ -321,3 +321,40 @@ class PMAdminAuthService:
             raise ValueError("Token has expired")
         except jwt.InvalidTokenError as e:
             raise ValueError(f"Invalid token: {str(e)}")
+
+    @staticmethod
+    def reset_password(email: str, new_password: str) -> Dict[str, str]:
+        """
+        Reset PM admin password to a new value.
+
+        Args:
+            email: PM admin email
+            new_password: New plain text password
+
+        Returns:
+            Dictionary with success message and email
+
+        Raises:
+            ValueError: If admin not found
+        """
+        from sqlalchemy import select
+
+        admin = db.session.scalar(select(PMAdminUser).where(PMAdminUser.email == email))
+        
+        if not admin:
+            raise ValueError("PM Admin not found")
+        
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        admin.password_hash = password_hash
+        admin.failed_login_attempts = 0
+        admin.locked_until = None
+        
+        db.session.commit()
+        
+        logger.info(f"PM Admin password reset: {admin.id} ({admin.email})")
+        
+        return {
+            "message": "Password reset successfully",
+            "email": admin.email
+        }

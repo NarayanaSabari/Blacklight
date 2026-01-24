@@ -13,9 +13,7 @@ import logging
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
 
-from app import db
 from app.models.scraper_api_key import ScraperApiKey
-from app.models.scraper_credential import ScraperCredential, CredentialPlatform, CredentialStatus
 from app.services.scraper_credential_service import ScraperCredentialService
 from app.middleware import require_pm_admin
 
@@ -364,15 +362,12 @@ def get_next_credential(platform: str):
     
     credential = ScraperCredentialService.get_next_credential_for_scraper(
         platform=platform,
-        session_id=session_id
+        session_id=session_id,
+        scraper_key_id=g.scraper_key.id
     )
     
     if not credential:
         return '', 204
-    
-    # Record API key usage
-    g.scraper_key.record_usage()
-    db.session.commit()
     
     logger.info(f"Assigned credential {credential.id} to session {session_id}")
     
@@ -392,10 +387,10 @@ def report_success(credential_id: int):
     }
     """
     try:
-        credential = ScraperCredentialService.report_credential_success(credential_id)
-        
-        g.scraper_key.record_usage()
-        db.session.commit()
+        credential = ScraperCredentialService.report_credential_success(
+            credential_id=credential_id,
+            scraper_key_id=g.scraper_key.id
+        )
         
         logger.info(f"Credential {credential_id} reported success")
         
@@ -430,11 +425,9 @@ def report_failure(credential_id: int):
         credential = ScraperCredentialService.report_credential_failure(
             credential_id=credential_id,
             error_message=error_message,
-            cooldown_minutes=cooldown_minutes
+            cooldown_minutes=cooldown_minutes,
+            scraper_key_id=g.scraper_key.id
         )
-        
-        g.scraper_key.record_usage()
-        db.session.commit()
         
         logger.warning(f"Credential {credential_id} reported failure: {error_message}")
         

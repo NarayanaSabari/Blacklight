@@ -170,6 +170,7 @@ class PermissionService:
         
         db.session.delete(permission)
         db.session.commit()
+        db.session.expire_all()
         return True
     
     @staticmethod

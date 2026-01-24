@@ -203,10 +203,6 @@ def upload_public_document():
                 # Don't fail the upload, just log the error
                 # Candidate can still be created with form data
         
-        # Update invitation's last_activity_at
-        invitation.last_activity_at = datetime.now(timezone.utc)
-        db.session.commit()
-        
         # Serialize response
         response = DocumentResponse.model_validate(document.to_dict())
         return jsonify(response.model_dump()), 201

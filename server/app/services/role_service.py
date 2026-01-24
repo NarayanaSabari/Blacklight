@@ -238,6 +238,7 @@ class RoleService:
         
         db.session.delete(role)
         db.session.commit()
+        db.session.expire_all()
         return True
     
     @staticmethod

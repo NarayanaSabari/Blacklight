@@ -558,12 +558,12 @@ Important:
         
         # Check for duplicate by content hash WITHIN the same tenant
         # This catches: Same email forwarded to multiple recruiters in tenant
-        existing_by_content = JobPosting.query.filter_by(
-            platform="email",
-            source_tenant_id=integration.tenant_id,
-        ).filter(
+        stmt = select(JobPosting).where(
+            JobPosting.platform == "email",
+            JobPosting.source_tenant_id == integration.tenant_id,
             JobPosting.external_job_id.like(f"email-%-{content_hash}")
-        ).first()
+        )
+        existing_by_content = db.session.scalar(stmt)
         
         if existing_by_content:
             # Add this recruiter to the additional_source_users list
@@ -582,10 +582,11 @@ Important:
         # Check for exact email ID match (same email, same user - Inngest retry)
         external_job_id = f"email-{email_id}-{content_hash}"
         
-        existing_by_email = JobPosting.query.filter_by(
-            platform="email",
-            external_job_id=external_job_id,
-        ).first()
+        stmt = select(JobPosting).where(
+            JobPosting.platform == "email",
+            JobPosting.external_job_id == external_job_id
+        )
+        existing_by_email = db.session.scalar(stmt)
         
         if existing_by_email:
             logger.info(f"Job already exists for email {email_id}: job_id={existing_by_email.id}")

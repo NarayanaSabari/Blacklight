@@ -181,7 +181,10 @@ def cache_key(*args, **kwargs) -> str:
 
 
 def cached(ttl: int = 3600, key_prefix: str = "cache"):
-    """Cache decorator for functions.
+    """Cache decorator for functions with cache stampede protection.
+    
+    Uses Redis SET NX (set if not exists) to prevent multiple concurrent
+    requests from regenerating the same cache value (cache stampede).
     
     Args:
         ttl: Time to live in seconds
@@ -207,14 +210,50 @@ def cached(ttl: int = 3600, key_prefix: str = "cache"):
                 logger.debug(f"Cache hit: {cache_id}")
                 return cached_value
             
-            # Cache miss, call function
-            result = func(*args, **kwargs)
+            # Cache miss - acquire lock to prevent stampede
+            lock_key = f"{cache_id}:lock"
+            lock_acquired = False
             
-            # Store in cache
-            redis_client.set(cache_id, result, ttl=ttl)
-            logger.debug(f"Cache set: {cache_id}")
-            
-            return result
+            try:
+                # Try to acquire lock (10 second TTL, NX = only if doesn't exist)
+                lock_acquired = redis_client.client.set(lock_key, "1", nx=True, ex=10)
+                
+                if lock_acquired:
+                    # We got the lock - compute the value
+                    logger.debug(f"Cache miss, lock acquired: {cache_id}")
+                    result = func(*args, **kwargs)
+                    
+                    # Store in cache
+                    redis_client.set(cache_id, result, ttl=ttl)
+                    logger.debug(f"Cache set: {cache_id}")
+                    
+                    return result
+                else:
+                    # Another request is computing the value - wait and retry
+                    logger.debug(f"Cache miss, waiting for lock: {cache_id}")
+                    import time
+                    for attempt in range(10):  # Wait up to ~5 seconds
+                        time.sleep(0.5)
+                        cached_value = redis_client.get(cache_id)
+                        if cached_value is not None:
+                            logger.debug(f"Cache hit after waiting: {cache_id}")
+                            return cached_value
+                    
+                    # Timeout - compute value anyway
+                    logger.warning(f"Cache lock timeout, computing anyway: {cache_id}")
+                    return func(*args, **kwargs)
+                    
+            except Exception as e:
+                logger.error(f"Cache stampede protection error: {e}")
+                # Fallback to direct computation
+                return func(*args, **kwargs)
+            finally:
+                # Release lock if we acquired it
+                if lock_acquired:
+                    try:
+                        redis_client.client.delete(lock_key)
+                    except Exception as e:
+                        logger.error(f"Error releasing cache lock: {e}")
         
         return wrapper
     return decorator

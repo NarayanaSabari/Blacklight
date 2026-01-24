@@ -426,6 +426,7 @@ class PortalUserService:
         # Delete user
         db.session.delete(user)
         db.session.commit()
+        db.session.expire_all()
 
         logger.info(f"Portal user deleted: {user_id} ({email}) by {changed_by}")
 

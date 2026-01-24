@@ -683,6 +683,7 @@ class TenantService:
         # Delete tenant (CASCADE will handle portal_users and subscription_history)
         db.session.delete(tenant)
         db.session.commit()
+        db.session.expire_all()
 
         logger.warning(
             f"Tenant deleted: {tenant_id} ({slug}) with {users_count} users by {changed_by}. "

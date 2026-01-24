@@ -662,6 +662,7 @@ class SubmissionService:
         
         db.session.delete(submission)
         db.session.commit()
+        db.session.expire_all()
         
         logger.info(f"Deleted submission {submission_id}")
         

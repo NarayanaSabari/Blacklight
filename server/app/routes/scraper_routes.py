@@ -13,17 +13,17 @@ Authentication: X-Scraper-API-Key header
 import logging
 import math
 from functools import wraps
-from typing import List, Any
 from uuid import UUID
 from flask import Blueprint, request, jsonify, g
 import inngest
 
-from app import db
 from app.models.scraper_api_key import ScraperApiKey
 from app.models.scrape_session import ScrapeSession
 from app.models.session_platform_status import SessionPlatformStatus
-from app.models.scraper_platform import ScraperPlatform
 from app.services.scrape_queue_service import ScrapeQueueService
+from app.services.scraper_service import ScraperService
+from app.services.platform_service import PlatformService
+from app.middleware.pm_admin import require_pm_admin
 from app.inngest import inngest_client
 
 logger = logging.getLogger(__name__)
@@ -356,14 +356,12 @@ def post_jobs():
     
     try:
         if is_failed:
-            # Mark platform as failed
-            platform_status.mark_failed(error_message)
-            session.platforms_completed += 1
-            session.platforms_failed += 1
-            db.session.commit()
-            
-            logger.info(
-                f"Platform {platform_name} failed for session {session_id}: {error_message}"
+            # Delegate to service - marks platform as failed and updates session counters
+            session, platform_status = ScraperService.mark_platform_failed(
+                session_id=UUID(session_id),
+                platform_name=platform_name,
+                error_message=error_message,
+                scraper_key_id=g.scraper_key.id
             )
             
             result = {
@@ -382,12 +380,15 @@ def post_jobs():
             total_jobs = len(jobs)
             total_batches = max(1, math.ceil(total_jobs / BATCH_SIZE))
             
-            # CRITICAL: Set batch tracking BEFORE sending events to avoid race condition
-            # Inngest processes events async - batches might complete before we set total_batches
-            platform_status.mark_in_progress()
-            platform_status.total_batches = total_batches
-            platform_status.completed_batches = 0
-            db.session.commit()
+            # CRITICAL: Delegate to service to set batch tracking BEFORE sending events
+            # This avoids race condition where Inngest processes events async and batches
+            # might complete before we set total_batches (service commits before returning)
+            platform_status = ScraperService.initialize_platform_batches(
+                session_id=UUID(session_id),
+                platform_name=platform_name,
+                total_batches=total_batches,
+                scraper_key_id=g.scraper_key.id
+            )
             
             logger.info(
                 f"Starting job import for platform {platform_name} "
@@ -516,15 +517,12 @@ def complete_session_endpoint():
         }), 400
     
     try:
-        # Mark session as pending_completion - the last batch to complete will trigger
-        # the actual session completion workflow via Inngest
+        # Delegate to service - marks session as pending_completion
+        # The last batch to complete will trigger actual session completion workflow via Inngest
         # This avoids race condition where complete is called before batches finish processing
-        session.status = 'pending_completion'
-        db.session.commit()
-        
-        logger.info(
-            f"Session {session_id} marked as pending_completion. "
-            f"Completion will be triggered when all platform batches finish."
+        session = ScraperService.mark_session_pending_completion(
+            session_id=session_id,
+            scraper_key_id=g.scraper_key.id
         )
         
         # Get current stats for response
@@ -751,9 +749,6 @@ def _get_session_progress(session: ScrapeSession) -> dict:
 # ============================================================================
 # PLATFORM MANAGEMENT ENDPOINTS (for PM_ADMIN dashboard)
 # ============================================================================
-
-from app.middleware.pm_admin import require_pm_admin
-from app.services.platform_service import PlatformService
 
 
 @scraper_bp.route('/platforms', methods=['GET'])

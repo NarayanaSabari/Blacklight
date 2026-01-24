@@ -78,31 +78,12 @@ def fix_admin_password():
     
     if settings.is_production:
         return jsonify({"error": "This endpoint is not available in production"}), 403
-
-    import bcrypt
-    from app.models import PMAdminUser
-    from sqlalchemy import select
     
-    admin = db.session.scalar(select(PMAdminUser).where(PMAdminUser.email == "admin@blacklight.com"))
-    
-    if not admin:
-        return jsonify({"error": "No admin found"}), 404
-    
-    # Set password to Admin@123 with bcrypt
-    password = "Admin@123"
-    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
-    admin.password_hash = password_hash
-    admin.failed_login_attempts = 0
-    admin.locked_until = None
-    
-    db.session.commit()
-    
-    return jsonify({
-        "message": "Password reset successfully",
-        "email": admin.email,
-        "new_password_hash_starts_with": password_hash[:10],
-    }), 200
+    try:
+        result = PMAdminAuthService.reset_password("admin@blacklight.com", "Admin@123")
+        return jsonify(result), 200
+    except ValueError as e:
+        return error_response(str(e), 404)
 
 
 @bp.route("/auth/login", methods=["POST"])

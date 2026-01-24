@@ -220,29 +220,24 @@ export interface Submission {
 // ==================== Request Types ====================
 
 export interface SubmissionCreateInput {
-  // Required
   candidate_id: number;
   job_posting_id: number;
 
-  // Vendor/Client info
-  vendor_company?: string;
-  vendor_contact_name?: string;
-  vendor_contact_email?: string;
-  vendor_contact_phone?: string;
-  client_company?: string;
+  vendor_company: string;
+  vendor_contact_name: string;
+  vendor_contact_email: string;
+  vendor_contact_phone: string;
+  client_company: string;
 
-  // Rate information
-  bill_rate?: number;
-  pay_rate?: number;
+  bill_rate: number;
+  pay_rate: number;
   rate_type?: RateType;
   currency?: string;
 
-  // Submission details
-  submission_notes?: string;
+  submission_notes: string;
   cover_letter?: string;
   tailored_resume_id?: number;
 
-  // Priority
   priority?: PriorityLevel;
   is_hot?: boolean;
   follow_up_date?: string;

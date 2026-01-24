@@ -9,8 +9,8 @@ Features:
 - Credential rotation
 """
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
-from sqlalchemy import and_, or_
+from typing import Optional, List, Dict, Any
+from sqlalchemy import or_, select
 
 from app import db
 from app.models.scraper_credential import (
@@ -18,6 +18,7 @@ from app.models.scraper_credential import (
     CredentialPlatform,
     CredentialStatus
 )
+from app.models.scraper_api_key import ScraperApiKey
 
 
 class ScraperCredentialService:
@@ -102,15 +103,15 @@ class ScraperCredentialService:
         notes: Optional[str] = None
     ) -> ScraperCredential:
         """
-        Update an existing credential.
+        Update a credential.
         
         Args:
             credential_id: ID of the credential to update
-            name: New display name
-            email: New email (for email/password credentials)
-            password: New password (for email/password credentials)
-            json_credentials: New JSON data (for JSON credentials)
-            notes: New admin notes
+            name: Optional new name
+            email: Optional new email (for email/password type)
+            password: Optional new password (for email/password type)
+            json_credentials: Optional new JSON creds (for JSON type)
+            notes: Optional new notes
             
         Returns:
             Updated ScraperCredential instance
@@ -118,7 +119,7 @@ class ScraperCredentialService:
         Raises:
             ValueError: If credential not found
         """
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -153,18 +154,19 @@ class ScraperCredentialService:
         Returns:
             True if deleted, False if not found
         """
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             return False
         
         db.session.delete(credential)
         db.session.commit()
+        db.session.expire_all()
         return True
     
     @staticmethod
     def get_credential(credential_id: int, include_credentials: bool = False) -> Optional[ScraperCredential]:
         """Get a credential by ID."""
-        return ScraperCredential.query.get(credential_id)
+        return db.session.get(ScraperCredential, credential_id)
     
     @staticmethod
     def get_credentials_by_platform(
@@ -183,14 +185,15 @@ class ScraperCredentialService:
         Returns:
             List of credentials
         """
-        query = ScraperCredential.query.filter(
+        stmt = select(ScraperCredential).where(
             ScraperCredential.platform == platform.lower()
         )
         
         if status:
-            query = query.filter(ScraperCredential.status == status)
+            stmt = stmt.where(ScraperCredential.status == status)
         
-        return query.order_by(ScraperCredential.created_at.desc()).all()
+        stmt = stmt.order_by(ScraperCredential.created_at.desc())
+        return db.session.scalars(stmt).all()
     
     @staticmethod
     def get_all_credentials(
@@ -207,18 +210,19 @@ class ScraperCredentialService:
         Returns:
             List of credentials
         """
-        query = ScraperCredential.query
+        stmt = select(ScraperCredential)
         
         if platform:
-            query = query.filter(ScraperCredential.platform == platform.lower())
+            stmt = stmt.where(ScraperCredential.platform == platform.lower())
         
         if status:
-            query = query.filter(ScraperCredential.status == status)
+            stmt = stmt.where(ScraperCredential.status == status)
         
-        return query.order_by(
+        stmt = stmt.order_by(
             ScraperCredential.platform,
             ScraperCredential.created_at.desc()
-        ).all()
+        )
+        return db.session.scalars(stmt).all()
     
     # =========================================================================
     # STATUS MANAGEMENT
@@ -227,7 +231,7 @@ class ScraperCredentialService:
     @staticmethod
     def enable_credential(credential_id: int) -> ScraperCredential:
         """Enable a disabled/failed credential."""
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -238,7 +242,7 @@ class ScraperCredentialService:
     @staticmethod
     def disable_credential(credential_id: int) -> ScraperCredential:
         """Disable a credential."""
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -249,7 +253,7 @@ class ScraperCredentialService:
     @staticmethod
     def reset_credential(credential_id: int) -> ScraperCredential:
         """Reset a credential to available status (clear failure state)."""
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -265,23 +269,25 @@ class ScraperCredentialService:
     @staticmethod
     def get_next_credential_for_scraper(
         platform: str,
-        session_id: str
+        session_id: str,
+        scraper_key_id: Optional[int] = None
     ) -> Optional[ScraperCredential]:
         """
         Get the next available credential for a scraper.
-        Assigns the credential to the scraper session.
+        Handles credential rotation and assignment.
         
         Args:
-            platform: Platform to get credential for
-            session_id: Scraper session ID (for tracking)
+            platform: Platform name (linkedin, glassdoor, etc.)
+            session_id: Session ID to track credential usage
+            scraper_key_id: Optional scraper API key ID for usage tracking
             
         Returns:
-            Available credential or None if none available
+            Next available credential or None if none available
         """
         now = datetime.utcnow()
         
         # Find available credential
-        credential = ScraperCredential.query.filter(
+        stmt = select(ScraperCredential).where(
             ScraperCredential.platform == platform.lower(),
             ScraperCredential.status == CredentialStatus.AVAILABLE.value,
             or_(
@@ -293,10 +299,19 @@ class ScraperCredentialService:
             ScraperCredential.failure_count.asc(),
             # Then by least recently used
             ScraperCredential.last_success_at.asc().nullsfirst()
-        ).with_for_update(skip_locked=True).first()
+        ).with_for_update(skip_locked=True)
+        
+        credential = db.session.scalar(stmt)
         
         if credential:
             credential.assign_to_scraper(session_id)
+            
+            # Record API key usage if provided
+            if scraper_key_id:
+                scraper_key = db.session.get(ScraperApiKey, scraper_key_id)
+                if scraper_key:
+                    scraper_key.record_usage()
+            
             db.session.commit()
         
         return credential
@@ -305,7 +320,8 @@ class ScraperCredentialService:
     def report_credential_failure(
         credential_id: int,
         error_message: str,
-        cooldown_minutes: int = 0
+        cooldown_minutes: int = 0,
+        scraper_key_id: Optional[int] = None
     ) -> ScraperCredential:
         """
         Report that a credential failed.
@@ -315,11 +331,12 @@ class ScraperCredentialService:
             credential_id: ID of the failed credential
             error_message: Error message describing the failure
             cooldown_minutes: Optional cooldown period before retry
+            scraper_key_id: Optional scraper API key ID for usage tracking
             
         Returns:
             Updated credential
         """
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -329,26 +346,43 @@ class ScraperCredentialService:
             credential.cooldown_until = datetime.utcnow() + timedelta(minutes=cooldown_minutes)
             credential.status = CredentialStatus.COOLDOWN.value
         
+        # Record API key usage if provided
+        if scraper_key_id:
+            scraper_key = db.session.get(ScraperApiKey, scraper_key_id)
+            if scraper_key:
+                scraper_key.record_usage()
+        
         db.session.commit()
         return credential
     
     @staticmethod
-    def report_credential_success(credential_id: int) -> ScraperCredential:
+    def report_credential_success(
+        credential_id: int,
+        scraper_key_id: Optional[int] = None
+    ) -> ScraperCredential:
         """
         Report that a credential was used successfully.
         Releases it back to the available pool.
         
         Args:
             credential_id: ID of the credential
+            scraper_key_id: Optional scraper API key ID for usage tracking
             
         Returns:
             Updated credential
         """
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
         credential.release(success=True)
+        
+        # Record API key usage if provided
+        if scraper_key_id:
+            scraper_key = db.session.get(ScraperApiKey, scraper_key_id)
+            if scraper_key:
+                scraper_key.record_usage()
+        
         db.session.commit()
         return credential
     
@@ -367,7 +401,7 @@ class ScraperCredentialService:
         Returns:
             Updated credential
         """
-        credential = ScraperCredential.query.get(credential_id)
+        credential = db.session.get(ScraperCredential, credential_id)
         if not credential:
             raise ValueError(f"Credential not found: {credential_id}")
         
@@ -390,9 +424,10 @@ class ScraperCredentialService:
         Returns:
             Dictionary with stats
         """
-        credentials = ScraperCredential.query.filter(
+        stmt = select(ScraperCredential).where(
             ScraperCredential.platform == platform.lower()
-        ).all()
+        )
+        credentials = db.session.scalars(stmt).all()
         
         stats = {
             'platform': platform,
@@ -449,10 +484,11 @@ class ScraperCredentialService:
         """
         cutoff = datetime.utcnow() - timedelta(minutes=timeout_minutes)
         
-        stale_credentials = ScraperCredential.query.filter(
+        stmt = select(ScraperCredential).where(
             ScraperCredential.status == CredentialStatus.IN_USE.value,
             ScraperCredential.assigned_at < cutoff
-        ).all()
+        )
+        stale_credentials = db.session.scalars(stmt).all()
         
         count = 0
         for cred in stale_credentials:
@@ -474,10 +510,11 @@ class ScraperCredentialService:
         """
         now = datetime.utcnow()
         
-        expired = ScraperCredential.query.filter(
+        stmt = select(ScraperCredential).where(
             ScraperCredential.status == CredentialStatus.COOLDOWN.value,
             ScraperCredential.cooldown_until <= now
-        ).all()
+        )
+        expired = db.session.scalars(stmt).all()
         
         count = 0
         for cred in expired:

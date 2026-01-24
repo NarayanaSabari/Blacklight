@@ -190,10 +190,6 @@ def parse_resume_public():
                 status=500
             ).model_dump()), 500
         
-        # Update invitation's last_activity_at
-        invitation.last_activity_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        db.session.commit()
-        
         # Format response data for frontend
         response_data = {
             "status": "success",

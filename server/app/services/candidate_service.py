@@ -37,6 +37,34 @@ class CandidateService:
             self.parser = ResumeParserService()
         return self.parser
     
+    def create_candidate(self, data: Dict[str, Any], tenant_id: int) -> Candidate:
+        """
+        Create a new candidate manually (without resume).
+        
+        Args:
+            data: Candidate data dict with all fields
+            tenant_id: Tenant ID
+            
+        Returns:
+            Created Candidate
+        """
+        try:
+            candidate_data = {**data, 'tenant_id': tenant_id}
+            
+            candidate = Candidate(**candidate_data)
+            
+            db.session.add(candidate)
+            db.session.commit()
+            db.session.refresh(candidate)
+            
+            logger.info(f"Created candidate {candidate.id} for tenant {tenant_id}")
+            return candidate
+            
+        except Exception as e:
+            logger.error(f"Failed to create candidate: {e}")
+            db.session.rollback()
+            raise
+    
     def upload_and_parse_resume(
         self,
         file: FileStorage,
@@ -609,6 +637,9 @@ class CandidateService:
                 # Log but don't fail - database deletion already succeeded
                 print(f"Warning: Failed to delete document file {doc_path}: {e}")
         
+        from app.services.email_sync_service import EmailSyncService
+        EmailSyncService.invalidate_tenant_roles_cache(tenant_id)
+        
         return True
     
     def reparse_resume(self, candidate_id: int, tenant_id: int, resume_id: Optional[int] = None) -> Dict[str, Any]:
@@ -845,9 +876,27 @@ class CandidateService:
         
         # Update approval fields
         candidate.onboarding_status = 'APPROVED'
-        candidate.status = 'ready_for_assignment'  # Critical for job matching
+        candidate.status = 'ready_for_assignment'
         candidate.approved_by_user_id = approved_by_user_id
         candidate.approved_at = datetime.utcnow()
+        
+        if invitation and invitation.status == 'pending_review':
+            invitation.status = 'approved'
+            invitation.reviewed_by_id = approved_by_user_id
+            invitation.reviewed_at = datetime.utcnow()
+            logger.info(f"Updated invitation {invitation.id} status to 'approved' for candidate {candidate_id}")
+        
+        if invitation:
+            from app.services.document_service import DocumentService
+            moved_count, move_error = DocumentService.move_documents_to_candidate(
+                invitation_id=invitation.id,
+                candidate_id=candidate_id,
+                tenant_id=tenant_id
+            )
+            if move_error:
+                logger.warning(f"Document move had issues: {move_error}")
+            else:
+                logger.info(f"Moved {moved_count} documents from invitation {invitation.id} to candidate {candidate_id}")
         
         db.session.commit()
         
@@ -874,6 +923,32 @@ class CandidateService:
                     )
                 )
                 logger.info(f"[APPROVAL-SERVICE] ✅ Role normalization event sent for candidate {candidate_id}")
+            
+            candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
+            candidate_data = {
+                "full_name": candidate.full_name or candidate_name,
+                "email": candidate.email,
+                "phone": candidate.phone,
+                "current_title": candidate.current_title,
+                "experience_years": candidate.total_experience_years,
+                "skills": candidate.skills or [],
+                "preferred_roles": candidate.preferred_roles or [],
+            }
+            
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="email/approval",
+                    data={
+                        "candidate_id": candidate.id,
+                        "tenant_id": tenant_id,
+                        "to_email": candidate.email,
+                        "candidate_name": candidate_name,
+                        "candidate_data": candidate_data,
+                        "hr_edited_fields": []
+                    }
+                )
+            )
+            logger.info(f"Approval email triggered for candidate {candidate_id}")
             
             # 2. Trigger job matching workflow (async)
             logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")

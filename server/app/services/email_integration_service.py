@@ -9,7 +9,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app import db
 from app.models.processed_email import ProcessedEmail
@@ -319,11 +319,13 @@ class EmailIntegrationService:
             logger.warning(f"Failed to revoke token: {e}")
         
         # Delete processed emails for this integration
-        ProcessedEmail.query.filter_by(integration_id=integration_id).delete()
+        stmt = delete(ProcessedEmail).where(ProcessedEmail.integration_id == integration_id)
+        db.session.execute(stmt)
         
         # Delete integration
         db.session.delete(integration)
         db.session.commit()
+        db.session.expire_all()
         
         logger.info(f"Disconnected {integration.provider} integration for user {user_id}")
         return True

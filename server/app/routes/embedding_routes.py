@@ -95,11 +95,7 @@ def generate_embeddings():
                 
                 for candidate in batch:
                     try:
-                        embedding = service.generate_candidate_embedding(candidate)
-                        
-                        if embedding:
-                            candidate.embedding = embedding
-                            db.session.commit()
+                        if service.save_candidate_embedding(candidate):
                             candidate_stats['successful'] += 1
                         else:
                             candidate_stats['failed'] += 1
@@ -113,7 +109,6 @@ def generate_embeddings():
                             'id': candidate.id,
                             'error': str(e)
                         })
-                        db.session.rollback()
                 
                 # Rate limiting
                 if i + batch_size < len(candidates):
@@ -144,11 +139,7 @@ def generate_embeddings():
                 
                 for job in batch:
                     try:
-                        embedding = service.generate_job_embedding(job)
-                        
-                        if embedding:
-                            job.embedding = embedding
-                            db.session.commit()
+                        if service.save_job_embedding(job):
                             job_stats['successful'] += 1
                         else:
                             job_stats['failed'] += 1
@@ -162,7 +153,6 @@ def generate_embeddings():
                             'id': job.id,
                             'error': str(e)
                         })
-                        db.session.rollback()
                 
                 # Rate limiting
                 if i + batch_size < len(jobs):
@@ -320,10 +310,7 @@ def regenerate_embeddings():
                         })
                         continue
                     
-                    embedding = service.generate_candidate_embedding(candidate)
-                    if embedding:
-                        candidate.embedding = embedding
-                        db.session.commit()
+                    if service.save_candidate_embedding(candidate):
                         results['successful'] += 1
                     else:
                         results['failed'] += 1
@@ -337,7 +324,6 @@ def regenerate_embeddings():
                         'id': entity_id,
                         'error': str(e)
                     })
-                    db.session.rollback()
                 
                 # Small delay to avoid rate limits
                 if len(entity_ids) > 1:
@@ -355,10 +341,7 @@ def regenerate_embeddings():
                         })
                         continue
                     
-                    embedding = service.generate_job_embedding(job)
-                    if embedding:
-                        job.embedding = embedding
-                        db.session.commit()
+                    if service.save_job_embedding(job):
                         results['successful'] += 1
                     else:
                         results['failed'] += 1
@@ -372,7 +355,6 @@ def regenerate_embeddings():
                         'id': entity_id,
                         'error': str(e)
                     })
-                    db.session.rollback()
                 
                 # Small delay to avoid rate limits
                 if len(entity_ids) > 1:

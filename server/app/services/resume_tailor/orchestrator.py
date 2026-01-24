@@ -205,10 +205,11 @@ class ResumeTailorOrchestrator:
             db.session.commit()
             
             # Try to get initial score from existing CandidateJobMatch (unified scoring)
-            existing_match = CandidateJobMatch.query.filter_by(
-                candidate_id=candidate_id,
-                job_posting_id=job_posting_id
-            ).first()
+            stmt = select(CandidateJobMatch).where(
+                CandidateJobMatch.candidate_id == candidate_id,
+                CandidateJobMatch.job_posting_id == job_posting_id
+            )
+            existing_match = db.session.scalar(stmt)
             
             if existing_match and existing_match.match_score:
                 # Use stored unified score
@@ -490,10 +491,11 @@ class ResumeTailorOrchestrator:
             yield emit('calculating_initial_score', 'Calculating initial match score...')
             
             # Try to get initial score from existing CandidateJobMatch (unified scoring)
-            existing_match = CandidateJobMatch.query.filter_by(
-                candidate_id=candidate_id,
-                job_posting_id=job_posting_id
-            ).first()
+            stmt = select(CandidateJobMatch).where(
+                CandidateJobMatch.candidate_id == candidate_id,
+                CandidateJobMatch.job_posting_id == job_posting_id
+            )
+            existing_match = db.session.scalar(stmt)
             
             if existing_match and existing_match.match_score:
                 # Use stored unified score
