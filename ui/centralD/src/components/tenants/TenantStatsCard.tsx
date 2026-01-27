@@ -5,15 +5,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { BarChart3, Users, Briefcase, FileText, HardDrive } from 'lucide-react';
+import { BarChart3, Users, FileText, HardDrive } from 'lucide-react';
 import type { Tenant } from '@/types';
 
 interface TenantStatsCardProps {
   tenant: Tenant;
   stats?: {
     user_count: number;
-    candidates_count: number;
-    jobs_count: number;
+    candidate_count: number;
     storage_used_gb: number;
   };
 }
@@ -28,8 +27,7 @@ export function TenantStatsCard({ tenant, stats }: TenantStatsCardProps) {
   // Use provided stats or default to 0
   const currentStats = stats || {
     user_count: 0,
-    candidates_count: 0,
-    jobs_count: 0,
+    candidate_count: 0,
     storage_used_gb: 0,
   };
 
@@ -49,16 +47,9 @@ export function TenantStatsCard({ tenant, stats }: TenantStatsCardProps) {
     {
       label: 'Candidates',
       icon: FileText,
-      current: currentStats.candidates_count,
+      current: currentStats.candidate_count,
       max: plan.max_candidates,
-      percentage: getUsagePercentage(currentStats.candidates_count, plan.max_candidates),
-    },
-    {
-      label: 'Jobs',
-      icon: Briefcase,
-      current: currentStats.jobs_count,
-      max: plan.max_jobs,
-      percentage: getUsagePercentage(currentStats.jobs_count, plan.max_jobs),
+      percentage: getUsagePercentage(currentStats.candidate_count, plan.max_candidates),
     },
     {
       label: 'Storage',

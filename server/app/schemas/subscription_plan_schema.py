@@ -16,7 +16,6 @@ class SubscriptionPlanBaseSchema(BaseModel):
     price_yearly: Optional[Decimal] = Field(None, ge=0, description="Yearly price")
     max_users: int = Field(..., gt=0, description="Maximum users allowed")
     max_candidates: int = Field(..., gt=0, description="Maximum candidates allowed")
-    max_jobs: int = Field(..., gt=0, description="Maximum jobs allowed")
     max_storage_gb: int = Field(default=1, gt=0, description="Maximum storage in GB")
     features: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Plan features")
     is_active: bool = Field(default=True, description="Is plan active")
@@ -38,7 +37,6 @@ class SubscriptionPlanUpdateSchema(BaseModel):
     price_yearly: Optional[Decimal] = Field(None, ge=0)
     max_users: Optional[int] = Field(None, gt=0)
     max_candidates: Optional[int] = Field(None, gt=0)
-    max_jobs: Optional[int] = Field(None, gt=0)
     max_storage_gb: Optional[int] = Field(None, gt=0)
     features: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
@@ -58,7 +56,6 @@ class SubscriptionPlanResponseSchema(BaseModel):
     price_yearly: Optional[Decimal]
     max_users: int
     max_candidates: int
-    max_jobs: int
     max_storage_gb: int
     features: Dict[str, Any]
     is_active: bool
@@ -106,7 +103,6 @@ class CustomPlanCreateSchema(BaseModel):
     price_yearly: Optional[Decimal] = Field(None, ge=0, description="Yearly price in dollars (must be >= 0)")
     max_users: int = Field(..., gt=0, description="Maximum users allowed (must be >= 1)")
     max_candidates: int = Field(..., gt=0, description="Maximum candidates allowed (must be >= 1)")
-    max_jobs: int = Field(..., gt=0, description="Maximum jobs allowed (must be >= 1)")
     max_storage_gb: int = Field(..., gt=0, description="Maximum storage in GB (must be >= 1)")
     features: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Plan features")
     
@@ -122,7 +118,6 @@ class CustomPlanUpdateSchema(BaseModel):
     price_yearly: Optional[Decimal] = Field(None, ge=0, description="Yearly price in dollars (must be >= 0)")
     max_users: Optional[int] = Field(None, gt=0, description="Maximum users allowed (must be >= 1)")
     max_candidates: Optional[int] = Field(None, gt=0, description="Maximum candidates allowed (must be >= 1)")
-    max_jobs: Optional[int] = Field(None, gt=0, description="Maximum jobs allowed (must be >= 1)")
     max_storage_gb: Optional[int] = Field(None, gt=0, description="Maximum storage in GB (must be >= 1)")
     features: Optional[Dict[str, Any]] = None
     
@@ -140,7 +135,6 @@ class CustomPlanResponseSchema(BaseModel):
     price_yearly: Optional[Decimal]
     max_users: int
     max_candidates: int
-    max_jobs: int
     max_storage_gb: int
     features: Dict[str, Any]
     is_active: bool

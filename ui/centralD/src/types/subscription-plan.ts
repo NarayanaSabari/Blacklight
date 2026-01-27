@@ -11,7 +11,6 @@ export interface SubscriptionPlan {
   price_yearly?: number;
   max_users: number;
   max_candidates: number;
-  max_jobs: number;
   max_storage_gb: number;
   features?: Record<string, boolean | string>;
   is_active: boolean;
@@ -45,7 +44,6 @@ export interface CustomPlanCreateRequest {
   price_yearly?: number;
   max_users: number;
   max_candidates: number;
-  max_jobs: number;
   max_storage_gb: number;
   features?: Record<string, boolean | string>;
 }
@@ -57,7 +55,6 @@ export interface CustomPlanUpdateRequest {
   price_yearly?: number;
   max_users?: number;
   max_candidates?: number;
-  max_jobs?: number;
   max_storage_gb?: number;
   features?: Record<string, boolean | string>;
 }

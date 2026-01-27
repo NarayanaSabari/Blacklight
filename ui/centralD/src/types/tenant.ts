@@ -103,11 +103,11 @@ export interface TenantListResponse {
 export interface TenantStats {
   tenant_id: number;
   user_count: number;
-  candidates_count: number;
-  jobs_count: number;
+  candidate_count: number;
+  storage_used_gb: number;
   max_users: number;
   max_candidates: number;
-  max_jobs: number;
+  max_storage_gb: number;
 }
 
 export interface TenantDeleteResponse {

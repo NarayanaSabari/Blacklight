@@ -256,19 +256,16 @@ class TenantStatsSchema(BaseModel):
     # Current usage
     user_count: int
     candidate_count: int = 0  # Placeholder until candidates table exists
-    job_count: int = 0  # Placeholder until jobs table exists
     storage_used_gb: float = 0.0  # Placeholder
     
     # Plan limits
     max_users: int
     max_candidates: int
-    max_jobs: int
     max_storage_gb: int
     
     # Percentage usage
     user_usage_percent: float
     candidate_usage_percent: float
-    job_usage_percent: float
     storage_usage_percent: float
     
     model_config = ConfigDict(from_attributes=True)

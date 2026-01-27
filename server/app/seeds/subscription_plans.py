@@ -13,7 +13,6 @@ DEFAULT_PLANS = [
         "price_yearly": 0.00,
         "max_users": 5,
         "max_candidates": 50,
-        "max_jobs": 5,
         "max_storage_gb": 1,
         "features": {
             "advanced_analytics": False,
@@ -32,7 +31,6 @@ DEFAULT_PLANS = [
         "price_yearly": 490.00,
         "max_users": 25,
         "max_candidates": 500,
-        "max_jobs": 50,
         "max_storage_gb": 10,
         "features": {
             "advanced_analytics": True,
@@ -51,7 +49,6 @@ DEFAULT_PLANS = [
         "price_yearly": 1490.00,
         "max_users": 100,
         "max_candidates": 5000,
-        "max_jobs": 500,
         "max_storage_gb": 100,
         "features": {
             "advanced_analytics": True,
@@ -70,7 +67,6 @@ DEFAULT_PLANS = [
         "price_yearly": 4990.00,
         "max_users": 999,
         "max_candidates": 99999,
-        "max_jobs": 9999,
         "max_storage_gb": 1000,
         "features": {
             "advanced_analytics": True,

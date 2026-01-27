@@ -151,7 +151,6 @@ class Tenant(BaseModel):
                 "user_count": self.portal_users.count(),
                 "max_users": self.subscription_plan.max_users,
                 "max_candidates": self.subscription_plan.max_candidates,
-                "max_jobs": self.subscription_plan.max_jobs,
                 "max_storage_gb": self.subscription_plan.max_storage_gb,
             }
         

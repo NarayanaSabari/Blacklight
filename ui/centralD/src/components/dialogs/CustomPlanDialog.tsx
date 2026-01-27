@@ -43,7 +43,6 @@ const customPlanSchema = z.object({
   price_yearly: z.number().min(0, 'Yearly price must be at least 0').optional(),
   max_users: z.number().min(1, 'Must allow at least 1 user'),
   max_candidates: z.number().min(1, 'Must allow at least 1 candidate'),
-  max_jobs: z.number().min(1, 'Must allow at least 1 job'),
   max_storage_gb: z.number().min(1, 'Must allow at least 1 GB'),
 });
 
@@ -85,7 +84,6 @@ export function CustomPlanDialog({
           price_yearly: existingPlan.price_yearly || 0,
           max_users: existingPlan.max_users,
           max_candidates: existingPlan.max_candidates,
-          max_jobs: existingPlan.max_jobs,
           max_storage_gb: existingPlan.max_storage_gb,
         }
       : {
@@ -95,7 +93,6 @@ export function CustomPlanDialog({
           price_yearly: 0,
           max_users: 10,
           max_candidates: 1000,
-          max_jobs: 50,
           max_storage_gb: 10,
         },
   });
@@ -112,7 +109,6 @@ export function CustomPlanDialog({
         form.setValue('price_yearly', basePlan.price_yearly || 0);
         form.setValue('max_users', basePlan.max_users);
         form.setValue('max_candidates', basePlan.max_candidates);
-        form.setValue('max_jobs', basePlan.max_jobs);
         form.setValue('max_storage_gb', basePlan.max_storage_gb);
       }
     }
@@ -165,7 +161,6 @@ export function CustomPlanDialog({
         price_yearly: data.price_yearly || undefined,
         max_users: data.max_users,
         max_candidates: data.max_candidates,
-        max_jobs: data.max_jobs,
         max_storage_gb: data.max_storage_gb,
       };
       updateMutation.mutate(updateData);
@@ -179,7 +174,6 @@ export function CustomPlanDialog({
         price_yearly: data.price_yearly || undefined,
         max_users: data.max_users,
         max_candidates: data.max_candidates,
-        max_jobs: data.max_jobs,
         max_storage_gb: data.max_storage_gb,
       };
       createMutation.mutate(createData);
@@ -355,25 +349,6 @@ export function CustomPlanDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Max Candidates *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="max_jobs"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Jobs *</FormLabel>
                       <FormControl>
                         <Input
                           type="number"

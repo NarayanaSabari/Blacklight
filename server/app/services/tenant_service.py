@@ -818,14 +818,6 @@ class TenantService:
             select(func.count(Candidate.id)).where(Candidate.tenant_id == tenant_id)
         ) or 0
 
-        jobs_count = db.session.scalar(
-            select(func.count(JobApplication.id)).where(
-                JobApplication.candidate_id.in_(
-                    select(Candidate.id).where(Candidate.tenant_id == tenant_id)
-                )
-            )
-        ) or 0
-
         total_storage_bytes = db.session.scalar(
             select(func.sum(CandidateDocument.file_size)).where(
                 CandidateDocument.tenant_id == tenant_id
@@ -835,7 +827,6 @@ class TenantService:
 
         user_usage_percent = (users_count / tenant.subscription_plan.max_users) * 100 if tenant.subscription_plan.max_users > 0 else 0
         candidate_usage_percent = (candidates_count / tenant.subscription_plan.max_candidates) * 100 if tenant.subscription_plan.max_candidates > 0 else 0
-        job_usage_percent = (jobs_count / tenant.subscription_plan.max_jobs) * 100 if tenant.subscription_plan.max_jobs > 0 else 0
         storage_usage_percent = (storage_used_gb / tenant.subscription_plan.max_storage_gb) * 100 if tenant.subscription_plan.max_storage_gb > 0 else 0
 
         return TenantStatsSchema(
@@ -843,15 +834,12 @@ class TenantService:
             tenant_name=tenant.name, # Added
             user_count=users_count, # Renamed from users_count
             candidate_count=candidates_count,
-            job_count=jobs_count,
             storage_used_gb=storage_used_gb, # Added
             max_users=tenant.subscription_plan.max_users,
             max_candidates=tenant.subscription_plan.max_candidates,
-            max_jobs=tenant.subscription_plan.max_jobs,
             max_storage_gb=tenant.subscription_plan.max_storage_gb, # Added
             user_usage_percent=user_usage_percent, # Added
             candidate_usage_percent=candidate_usage_percent, # Added
-            job_usage_percent=job_usage_percent, # Added
             storage_usage_percent=storage_usage_percent, # Added
         )
 

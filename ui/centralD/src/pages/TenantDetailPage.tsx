@@ -160,7 +160,7 @@ export function TenantDetailPage() {
             onCreateCustomPlan={() => setShowCustomPlanDialog(true)}
             onEditCustomPlan={() => setShowCustomPlanDialog(true)}
           />
-          <TenantStatsCard tenant={tenant} />
+          <TenantStatsCard tenant={tenant} stats={stats} />
         </div>
       </div>
 

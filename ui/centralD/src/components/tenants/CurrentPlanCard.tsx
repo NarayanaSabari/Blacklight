@@ -101,10 +101,6 @@ export function CurrentPlanCard({
             <div className="font-medium">{plan.max_candidates}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Max Jobs</div>
-            <div className="font-medium">{plan.max_jobs}</div>
-          </div>
-          <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Storage</div>
             <div className="font-medium">{plan.max_storage_gb} GB</div>
           </div>

@@ -184,7 +184,6 @@ class SubscriptionPlanService:
             price_yearly=plan_data.price_yearly,
             max_users=plan_data.max_users,
             max_candidates=plan_data.max_candidates,
-            max_jobs=plan_data.max_jobs,
             max_storage_gb=plan_data.max_storage_gb,
             features=features,
             is_custom=True,
@@ -229,7 +228,7 @@ class SubscriptionPlanService:
         update_dict = updates.model_dump(exclude_unset=True)
         
         if plan.custom_for_tenant_id and any(
-            key in update_dict for key in ['max_users', 'max_candidates', 'max_jobs']
+            key in update_dict for key in ['max_users', 'max_candidates']
         ):
             tenant_id = plan.custom_for_tenant_id
             
@@ -251,16 +250,6 @@ class SubscriptionPlanService:
                     raise ValueError(
                         f"Cannot reduce max_candidates to {update_dict['max_candidates']}. "
                         f"Tenant currently has {current_candidates} candidates."
-                    )
-            
-            if 'max_jobs' in update_dict:
-                current_jobs = db.session.scalar(
-                    select(func.count(JobPosting.id)).where(JobPosting.tenant_id == tenant_id)
-                ) or 0
-                if update_dict['max_jobs'] < current_jobs:
-                    raise ValueError(
-                        f"Cannot reduce max_jobs to {update_dict['max_jobs']}. "
-                        f"Tenant currently has {current_jobs} jobs."
                     )
         
         for key, value in update_dict.items():

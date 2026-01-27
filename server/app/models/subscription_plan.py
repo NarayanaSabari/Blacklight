@@ -27,7 +27,6 @@ class SubscriptionPlan(BaseModel):
     # Resource Limits
     max_users = db.Column(db.Integer, nullable=False)
     max_candidates = db.Column(db.Integer, nullable=False)
-    max_jobs = db.Column(db.Integer, nullable=False)
     max_storage_gb = db.Column(db.Integer, nullable=False, default=1)
     
     # Features (JSON for flexibility)
@@ -78,7 +77,6 @@ class SubscriptionPlan(BaseModel):
             "price_yearly": float(self.price_yearly) if self.price_yearly else None,
             "max_users": self.max_users,
             "max_candidates": self.max_candidates,
-            "max_jobs": self.max_jobs,
             "max_storage_gb": self.max_storage_gb,
             "features": self.features or {},
             "is_active": self.is_active,

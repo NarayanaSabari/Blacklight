@@ -100,15 +100,9 @@ export function ChangePlanDialog({
       );
     }
 
-    if (stats.candidates_count > newPlan.max_candidates) {
+    if (stats.candidate_count > newPlan.max_candidates) {
       newViolations.push(
-        `You have ${stats.candidates_count} candidates but the new plan allows only ${newPlan.max_candidates}`
-      );
-    }
-
-    if (stats.jobs_count > newPlan.max_jobs) {
-      newViolations.push(
-        `You have ${stats.jobs_count} jobs but the new plan allows only ${newPlan.max_jobs}`
+        `You have ${stats.candidate_count} candidates but the new plan allows only ${newPlan.max_candidates}`
       );
     }
 
@@ -268,16 +262,6 @@ export function ChangePlanDialog({
                   <div className="text-center font-semibold">
                     {selectedPlan.max_candidates.toLocaleString()}
                     {selectedPlan.max_candidates > currentPlan.max_candidates && (
-                      <ArrowRight className="inline h-3 w-3 ml-1 text-green-600" />
-                    )}
-                  </div>
-
-                  {/* Jobs */}
-                  <div className="text-muted-foreground">Jobs</div>
-                  <div className="text-center">{currentPlan.max_jobs.toLocaleString()}</div>
-                  <div className="text-center font-semibold">
-                    {selectedPlan.max_jobs.toLocaleString()}
-                    {selectedPlan.max_jobs > currentPlan.max_jobs && (
                       <ArrowRight className="inline h-3 w-3 ml-1 text-green-600" />
                     )}
                   </div>

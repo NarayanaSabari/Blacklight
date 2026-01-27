@@ -176,7 +176,7 @@ export function TenantForm({ onSubmit, isSubmitting, defaultValues, mode = 'crea
                       <div className="flex flex-col">
                         <span className="font-medium">{plan.name}</span>
                         <span className="text-sm text-muted-foreground">
-                          {plan.max_users} users • {plan.max_candidates} candidates • {plan.max_jobs} jobs
+                          {plan.max_users} users • {plan.max_candidates} candidates • {plan.max_storage_gb} GB storage
                         </span>
                       </div>
                     </SelectItem>
@@ -221,7 +221,6 @@ export function TenantForm({ onSubmit, isSubmitting, defaultValues, mode = 'crea
                   <div>Price: ${getPrice()?.toFixed(2)} / {billingCycle === 'YEARLY' ? 'year' : 'month'}</div>
                   <div>Users: {selectedPlan.max_users}</div>
                   <div>Candidates: {selectedPlan.max_candidates}</div>
-                  <div>Jobs: {selectedPlan.max_jobs}</div>
                   <div>Storage: {selectedPlan.max_storage_gb} GB</div>
                 </div>
               </AlertDescription>
