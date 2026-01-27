@@ -50,48 +50,48 @@ export function CurrentPlanCard({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3">
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5" />
             Current Subscription
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {isCustomPlan && onEditCustomPlan ? (
-              <Button variant="outline" size="sm" onClick={onEditCustomPlan}>
+              <Button variant="outline" size="sm" onClick={onEditCustomPlan} className="flex-1 min-w-[120px]">
                 <Edit className="mr-2 h-4 w-4" />
-                Edit Custom Plan
+                Edit Custom
               </Button>
             ) : onCreateCustomPlan ? (
-              <Button variant="outline" size="sm" onClick={onCreateCustomPlan}>
+              <Button variant="outline" size="sm" onClick={onCreateCustomPlan} className="flex-1 min-w-[120px]">
                 <Plus className="mr-2 h-4 w-4" />
-                Create Custom Plan
+                Create Custom
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" onClick={onChangePlan}>
+            <Button variant="outline" size="sm" onClick={onChangePlan} className="flex-1 min-w-[100px]">
               Change Plan
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="text-2xl font-bold">{plan.name}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-2xl font-bold break-words">{plan.name}</div>
               {isCustomPlan && (
                 <Badge variant="secondary">Custom</Badge>
+              )}
+              {tenant.billing_cycle && (
+                <Badge variant="secondary">{tenant.billing_cycle}</Badge>
               )}
             </div>
             <div className="text-lg text-muted-foreground">
               ${priceValue?.toFixed(2)} / {billingPeriod}
             </div>
           </div>
-          {tenant.billing_cycle && (
-            <Badge variant="secondary">{tenant.billing_cycle}</Badge>
-          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t">
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Max Users</div>
             <div className="font-medium">{plan.max_users}</div>
@@ -100,7 +100,7 @@ export function CurrentPlanCard({
             <div className="text-sm text-muted-foreground">Max Candidates</div>
             <div className="font-medium">{plan.max_candidates}</div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 sm:col-span-2">
             <div className="text-sm text-muted-foreground">Storage</div>
             <div className="font-medium">{plan.max_storage_gb} GB</div>
           </div>
