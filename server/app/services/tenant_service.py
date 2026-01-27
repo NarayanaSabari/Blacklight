@@ -16,6 +16,9 @@ from app.models import (
     SubscriptionPlan,
     TenantSubscriptionHistory,
     Role,
+    Candidate,
+    JobApplication,
+    CandidateDocument,
 )
 from app.models.tenant import TenantStatus, BillingCycle
 from app.schemas.tenant_schema import (
@@ -807,22 +810,32 @@ class TenantService:
         if not tenant:
             raise ValueError(f"Tenant with ID {tenant_id} not found")
 
-        # Count current users
         users_count = db.session.scalar(
             select(func.count(PortalUser.id)).where(PortalUser.tenant_id == tenant_id)
         ) or 0
 
-        # TODO: Count candidates when Candidate model exists
-        candidates_count = 0
+        candidates_count = db.session.scalar(
+            select(func.count(Candidate.id)).where(Candidate.tenant_id == tenant_id)
+        ) or 0
 
-        # TODO: Count jobs when Job model exists
-        jobs_count = 0
+        jobs_count = db.session.scalar(
+            select(func.count(JobApplication.id)).where(
+                JobApplication.candidate_id.in_(
+                    select(Candidate.id).where(Candidate.tenant_id == tenant_id)
+                )
+            )
+        ) or 0
 
-        # Calculate percentages
+        total_storage_bytes = db.session.scalar(
+            select(func.sum(CandidateDocument.file_size)).where(
+                CandidateDocument.tenant_id == tenant_id
+            )
+        ) or 0
+        storage_used_gb = round(total_storage_bytes / (1024 ** 3), 2)
+
         user_usage_percent = (users_count / tenant.subscription_plan.max_users) * 100 if tenant.subscription_plan.max_users > 0 else 0
         candidate_usage_percent = (candidates_count / tenant.subscription_plan.max_candidates) * 100 if tenant.subscription_plan.max_candidates > 0 else 0
         job_usage_percent = (jobs_count / tenant.subscription_plan.max_jobs) * 100 if tenant.subscription_plan.max_jobs > 0 else 0
-        storage_used_gb = 0.0 # Placeholder for now
         storage_usage_percent = (storage_used_gb / tenant.subscription_plan.max_storage_gb) * 100 if tenant.subscription_plan.max_storage_gb > 0 else 0
 
         return TenantStatsSchema(
