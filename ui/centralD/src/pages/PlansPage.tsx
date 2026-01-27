@@ -186,12 +186,6 @@ export function PlansPage() {
                       <li className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-primary" />
                         <span>
-                          {plan.max_jobs === -1 ? 'Unlimited' : plan.max_jobs} jobs
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        <span>
                           {plan.max_storage_gb === -1 ? 'Unlimited' : `${plan.max_storage_gb}GB`} storage
                         </span>
                       </li>
