@@ -255,9 +255,9 @@ export function CustomPlanDialog({
                     <FormLabel>Base Plan (Optional)</FormLabel>
                     <Select
                       onValueChange={(value) =>
-                        field.onChange(value ? Number(value) : undefined)
+                        field.onChange(value === "none" ? undefined : Number(value))
                       }
-                      value={field.value?.toString()}
+                      value={field.value?.toString() ?? "none"}
                       disabled={plansLoading}
                     >
                       <FormControl>
@@ -266,7 +266,7 @@ export function CustomPlanDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {standardPlans?.plans
                           .filter((p: SubscriptionPlan) => !p.is_custom)
                           .map((plan: SubscriptionPlan) => (
