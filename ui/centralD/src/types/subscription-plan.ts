@@ -16,6 +16,8 @@ export interface SubscriptionPlan {
   features?: Record<string, boolean | string>;
   is_active: boolean;
   sort_order: number;
+  is_custom: boolean;
+  custom_for_tenant_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,4 +34,30 @@ export interface SubscriptionPlanUsageResponse {
   plan: SubscriptionPlan;
   active_tenants_count: number;
   total_tenants_count: number;
+}
+
+export interface CustomPlanCreateRequest {
+  tenant_id: number;
+  base_plan_id?: number;
+  display_name: string;
+  description?: string;
+  price_monthly: number;
+  price_yearly?: number;
+  max_users: number;
+  max_candidates: number;
+  max_jobs: number;
+  max_storage_gb: number;
+  features?: Record<string, boolean | string>;
+}
+
+export interface CustomPlanUpdateRequest {
+  display_name?: string;
+  description?: string;
+  price_monthly?: number;
+  price_yearly?: number;
+  max_users?: number;
+  max_candidates?: number;
+  max_jobs?: number;
+  max_storage_gb?: number;
+  features?: Record<string, boolean | string>;
 }

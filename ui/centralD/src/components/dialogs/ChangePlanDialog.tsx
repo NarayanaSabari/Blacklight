@@ -35,6 +35,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, ArrowRight, Check } from 'lucide-react';
 import type { Tenant, SubscriptionPlan, TenantStats } from '@/types';
 
@@ -183,7 +184,14 @@ export function ChangePlanDialog({
                         return (
                           <SelectItem key={plan.id} value={plan.id.toString()}>
                             <div className="flex items-center justify-between gap-4">
-                              <span className="font-medium">{plan.display_name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{plan.display_name}</span>
+                                {plan.is_custom && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Custom
+                                  </Badge>
+                                )}
+                              </div>
                               <span className="text-sm text-muted-foreground">
                                 ${price.toFixed(2)}/
                                 {watchedBillingCycle === 'YEARLY' ? 'year' : 'month'}

@@ -49,6 +49,9 @@ from app.schemas.subscription_plan_schema import (
     SubscriptionPlanResponseSchema,
     SubscriptionPlanListResponseSchema,
     SubscriptionPlanUsageSchema,
+    CustomPlanCreateSchema,
+    CustomPlanUpdateSchema,
+    CustomPlanResponseSchema,
 )
 
 from app.schemas.tenant_schema import (

@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TenantInfoCard } from '@/components/tenants/TenantInfoCard';
@@ -20,14 +21,15 @@ import { TenantUsersTable } from '@/components/tenants/TenantUsersTable';
 import { DeleteTenantDialog } from '@/components/dialogs/DeleteTenantDialog';
 import { SuspendTenantDialog } from '@/components/dialogs/SuspendTenantDialog';
 import { ChangePlanDialog } from '@/components/dialogs/ChangePlanDialog';
+import { CustomPlanDialog } from '@/components/dialogs/CustomPlanDialog';
 import { useTenant } from '@/hooks/api/useTenant';
 import { useTenantStats } from '@/hooks/api/useTenantStats';
-import { usePlans } from '@/hooks/api/usePlans';
 import { usePortalUsers } from '@/hooks/api/usePortalUsers';
 import { useSuspendTenant } from '@/hooks/api/useSuspendTenant';
 import { useActivateTenant } from '@/hooks/api/useActivateTenant';
 import { useDeleteTenant } from '@/hooks/api/useDeleteTenant';
 import { useChangeTenantPlan } from '@/hooks/api/useChangeTenantPlan';
+import { subscriptionPlansApi } from '@/lib/dashboard-api';
 import { toast } from 'sonner';
 
 export function TenantDetailPage() {
@@ -38,7 +40,12 @@ export function TenantDetailPage() {
   const tenantId = tenant?.id || 0;
   
   const { data: stats } = useTenantStats(slug);
-  const { data: plans = [] } = usePlans();
+  const { data: plans = [] } = useQuery({
+    queryKey: ['subscription-plans', tenantId],
+    queryFn: () => subscriptionPlansApi.listForTenant(tenantId),
+    staleTime: 0,
+    enabled: !!tenantId,
+  });
   const { data: portalUsers = [], isLoading: isLoadingUsers } = usePortalUsers(slug);
   
   const suspendTenant = useSuspendTenant(tenantId);
@@ -49,6 +56,7 @@ export function TenantDetailPage() {
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showChangePlanDialog, setShowChangePlanDialog] = useState(false);
+  const [showCustomPlanDialog, setShowCustomPlanDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -149,6 +157,8 @@ export function TenantDetailPage() {
           <CurrentPlanCard
             tenant={tenant}
             onChangePlan={() => setShowChangePlanDialog(true)}
+            onCreateCustomPlan={() => setShowCustomPlanDialog(true)}
+            onEditCustomPlan={() => setShowCustomPlanDialog(true)}
           />
           <TenantStatsCard tenant={tenant} />
         </div>
@@ -179,6 +189,14 @@ export function TenantDetailPage() {
         tenant={tenant}
         onConfirm={handleDelete}
         isDeleting={deleteTenant.isPending}
+      />
+
+      <CustomPlanDialog
+        open={showCustomPlanDialog}
+        onOpenChange={setShowCustomPlanDialog}
+        tenantId={tenant.id}
+        tenantName={tenant.name}
+        existingPlan={tenant.subscription_plan?.is_custom ? tenant.subscription_plan : undefined}
       />
     </div>
   );

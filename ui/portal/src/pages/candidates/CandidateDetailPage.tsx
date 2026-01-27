@@ -55,6 +55,7 @@ import { candidateAssignmentApi } from '@/lib/candidateAssignmentApi';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { submissionApi } from '@/lib/submissionApi';
 import { getErrorMessage } from '@/lib/api-client';
+import { DuplicateWarning } from '@/components/candidates/DuplicateWarning';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CandidateAssignmentDialog } from '@/components/CandidateAssignmentDialog';
 import { Button } from '@/components/ui/button';
@@ -781,6 +782,16 @@ export function CandidateDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Duplicate Warning (shown in review mode) */}
+      {isReviewMode && (
+        <DuplicateWarning
+          firstName={candidate.first_name}
+          lastName={candidate.last_name}
+          email={candidate.email || undefined}
+          excludeCandidateId={candidate.id}
+        />
       )}
 
       {/* Header Section with Gradient Background */}

@@ -301,5 +301,21 @@ export const candidateApi = {
       update_candidate_profile: updateProfile ?? true,
     });
   },
+
+  checkDuplicates: async (params: {
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+    exclude_candidate_id?: number;
+  }): Promise<{
+    duplicates: Array<{
+      candidate: Candidate;
+      match_reasons: string[];
+      match_type: 'exact' | 'name_only';
+    }>;
+    count: number;
+  }> => {
+    return apiRequest.post('/api/candidates/check-duplicates', params);
+  },
 };
 

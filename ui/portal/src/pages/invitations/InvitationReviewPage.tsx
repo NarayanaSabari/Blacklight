@@ -44,6 +44,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { invitationApi } from '@/lib/api/invitationApi';
 import { getErrorMessage } from '@/lib/api-client';
+import { DuplicateWarning } from '@/components/candidates/DuplicateWarning';
 
 interface SubmissionData {
   phone?: string;
@@ -198,6 +199,13 @@ export default function InvitationReviewPage() {
           Submitted
         </Badge>
       </div>
+
+      {/* Duplicate Warning */}
+      <DuplicateWarning
+        firstName={invitation.first_name}
+        lastName={invitation.last_name}
+        email={invitation.email}
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content - 2 columns */}

@@ -38,11 +38,27 @@ class SubscriptionPlan(BaseModel):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     sort_order = db.Column(db.Integer, nullable=False, default=0)
     
+    # Custom Plan Support
+    is_custom = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    custom_for_tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey('tenants.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True
+    )
+    
     # Relationships
     tenants = db.relationship(
         'Tenant',
+        foreign_keys='Tenant.subscription_plan_id',
         back_populates='subscription_plan',
         lazy='dynamic'
+    )
+    
+    custom_tenant = db.relationship(
+        'Tenant',
+        foreign_keys=[custom_for_tenant_id],
+        back_populates='custom_plans'
     )
     
     subscription_histories = db.relationship(
@@ -67,6 +83,8 @@ class SubscriptionPlan(BaseModel):
             "features": self.features or {},
             "is_active": self.is_active,
             "sort_order": self.sort_order,
+            "is_custom": self.is_custom,
+            "custom_for_tenant_id": self.custom_for_tenant_id,
         })
         return data
     

@@ -6,16 +6,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Calendar, ArrowRight } from 'lucide-react';
+import { CreditCard, Calendar, ArrowRight, Plus, Edit } from 'lucide-react';
 import type { Tenant } from '@/types';
 
 interface CurrentPlanCardProps {
   tenant: Tenant;
   onChangePlan: () => void;
+  onCreateCustomPlan?: () => void;
+  onEditCustomPlan?: () => void;
 }
 
-export function CurrentPlanCard({ tenant, onChangePlan }: CurrentPlanCardProps) {
+export function CurrentPlanCard({ 
+  tenant, 
+  onChangePlan, 
+  onCreateCustomPlan, 
+  onEditCustomPlan 
+}: CurrentPlanCardProps) {
   const plan = tenant.subscription_plan;
+  const isCustomPlan = plan?.is_custom || false;
 
   if (!plan) {
     return (
@@ -47,15 +55,33 @@ export function CurrentPlanCard({ tenant, onChangePlan }: CurrentPlanCardProps) 
             <CreditCard className="h-5 w-5" />
             Current Subscription
           </CardTitle>
-          <Button variant="outline" size="sm" onClick={onChangePlan}>
-            Change Plan
-          </Button>
+          <div className="flex items-center gap-2">
+            {isCustomPlan && onEditCustomPlan ? (
+              <Button variant="outline" size="sm" onClick={onEditCustomPlan}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Custom Plan
+              </Button>
+            ) : onCreateCustomPlan ? (
+              <Button variant="outline" size="sm" onClick={onCreateCustomPlan}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Custom Plan
+              </Button>
+            ) : null}
+            <Button variant="outline" size="sm" onClick={onChangePlan}>
+              Change Plan
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <div className="text-2xl font-bold">{plan.name}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-bold">{plan.name}</div>
+              {isCustomPlan && (
+                <Badge variant="secondary">Custom</Badge>
+              )}
+            </div>
             <div className="text-lg text-muted-foreground">
               ${priceValue?.toFixed(2)} / {billingPeriod}
             </div>

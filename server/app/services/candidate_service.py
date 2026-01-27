@@ -1144,3 +1144,89 @@ class CandidateService:
         db.session.commit()
         
         return candidate
+    
+    def find_duplicate_candidates(
+        self,
+        tenant_id: int,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        email: Optional[str] = None,
+        exclude_candidate_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Find potential duplicate candidates within a tenant by name and/or email.
+        
+        Args:
+            tenant_id: Tenant ID to scope search
+            first_name: Candidate first name
+            last_name: Candidate last name
+            email: Candidate email
+            exclude_candidate_id: Exclude specific candidate from results
+        
+        Returns:
+            List of potential duplicates with match reasons
+        """
+        from sqlalchemy import func, or_, and_
+        
+        duplicates = []
+        
+        if not first_name and not email:
+            return duplicates
+        
+        query = db.session.query(Candidate).filter(Candidate.tenant_id == tenant_id)
+        
+        if exclude_candidate_id:
+            query = query.filter(Candidate.id != exclude_candidate_id)
+        
+        match_conditions = []
+        
+        if email and email.strip():
+            email_clean = email.strip().lower()
+            match_conditions.append(
+                func.lower(Candidate.email) == email_clean
+            )
+        
+        if first_name and last_name:
+            first_clean = first_name.strip().lower()
+            last_clean = last_name.strip().lower()
+            
+            match_conditions.append(
+                and_(
+                    func.lower(Candidate.first_name) == first_clean,
+                    func.lower(Candidate.last_name) == last_clean
+                )
+            )
+        elif first_name:
+            first_clean = first_name.strip().lower()
+            match_conditions.append(
+                func.lower(Candidate.first_name) == first_clean
+            )
+        
+        if not match_conditions:
+            return duplicates
+        
+        query = query.filter(or_(*match_conditions))
+        
+        candidates = query.all()
+        
+        for candidate in candidates:
+            match_reasons = []
+            
+            if email and candidate.email and candidate.email.lower() == email.strip().lower():
+                match_reasons.append('email')
+            
+            if first_name and last_name:
+                if (candidate.first_name and candidate.first_name.lower() == first_name.strip().lower() and
+                    candidate.last_name and candidate.last_name.lower() == last_name.strip().lower()):
+                    match_reasons.append('full_name')
+            elif first_name:
+                if candidate.first_name and candidate.first_name.lower() == first_name.strip().lower():
+                    match_reasons.append('first_name')
+            
+            duplicates.append({
+                'candidate': candidate.to_dict(include_assignments=False),
+                'match_reasons': match_reasons,
+                'match_type': 'exact' if 'email' in match_reasons else 'name_only'
+            })
+        
+        return duplicates

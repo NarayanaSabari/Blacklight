@@ -16,7 +16,9 @@ import type { BillingCycle } from '@/types/tenant';
 
 export function PlansPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('MONTHLY');
-  const { data: plans, isLoading, error } = usePlans();
+  const { data: allPlans, isLoading, error } = usePlans();
+
+  const plans = allPlans?.filter((plan) => !plan.is_custom) || [];
 
   const getPlanPrice = (priceMonthly: number | null, priceYearly: number | null | undefined) => {
     if (billingCycle === 'MONTHLY') {
@@ -46,7 +48,7 @@ export function PlansPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Subscription Plans</h1>
         <p className="text-muted-foreground">
-          View all available subscription plans and their features
+          View all available subscription plans and their features. Custom plans are only visible on individual tenant pages.
         </p>
       </div>
 

@@ -1386,3 +1386,58 @@ def regenerate_polished_resume(candidate_id: int):
     except Exception as e:
         logger.error(f"Error regenerating polished resume for candidate {candidate_id}: {e}", exc_info=True)
         return error_response(f"Failed to regenerate polished resume: {str(e)}", 500)
+
+
+@candidate_bp.route('/check-duplicates', methods=['POST'])
+@require_portal_auth
+@with_tenant_context
+@require_permission('candidates.view')
+def check_duplicates():
+    """
+    Check for potential duplicate candidates by name and/or email.
+    
+    Request Body:
+        {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john@example.com",
+            "exclude_candidate_id": 123  // optional
+        }
+    
+    Response:
+        {
+            "duplicates": [
+                {
+                    "candidate": {...},
+                    "match_reasons": ["email", "full_name"],
+                    "match_type": "exact"
+                }
+            ],
+            "count": 1
+        }
+    """
+    try:
+        tenant_id = g.tenant_id
+        data = request.get_json() or {}
+        
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+        email = data.get('email')
+        exclude_candidate_id = data.get('exclude_candidate_id')
+        
+        duplicates = candidate_service.find_duplicate_candidates(
+            tenant_id=tenant_id,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            exclude_candidate_id=exclude_candidate_id
+        )
+        
+        return jsonify({
+            'duplicates': duplicates,
+            'count': len(duplicates)
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error checking for duplicate candidates: {e}", exc_info=True)
+        return error_response(f"Failed to check for duplicates: {str(e)}", 500)

@@ -67,7 +67,15 @@ class Tenant(BaseModel):
     # Relationships
     subscription_plan = db.relationship(
         'SubscriptionPlan',
+        foreign_keys='Tenant.subscription_plan_id',
         back_populates='tenants'
+    )
+    
+    custom_plans = db.relationship(
+        'SubscriptionPlan',
+        foreign_keys='SubscriptionPlan.custom_for_tenant_id',
+        back_populates='custom_tenant',
+        lazy='dynamic'
     )
     
     portal_users = db.relationship(

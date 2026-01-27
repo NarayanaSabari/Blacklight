@@ -2,10 +2,16 @@
 Text extraction utilities for resume files (PDF, DOCX)
 """
 import os
+import tempfile
 from typing import Optional, Dict, Any
 import fitz  # PyMuPDF
 from docx import Document
 import pdfplumber
+import logging
+
+from app.utils.docx_converter import DocxToPdfConverter, is_docx_conversion_enabled
+
+logger = logging.getLogger(__name__)
 
 
 class TextExtractor:
@@ -33,7 +39,7 @@ class TextExtractor:
         if file_ext == '.pdf':
             return TextExtractor.extract_from_pdf(file_path)
         elif file_ext in ['.docx', '.doc']:
-            return TextExtractor.extract_from_docx(file_path)
+            return TextExtractor.extract_from_docx_with_conversion(file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
     
@@ -211,6 +217,52 @@ class TextExtractor:
         
         except Exception as e:
             raise RuntimeError(f"Failed to extract text from DOCX: {file_path}") from e
+    
+    @staticmethod
+    def extract_from_docx_with_conversion(file_path: str) -> Dict[str, Any]:
+        """
+        Extract text from DOCX by converting to PDF first (better accuracy).
+        Falls back to direct DOCX extraction if conversion fails.
+        
+        Args:
+            file_path: Path to DOCX file
+        
+        Returns:
+            {
+                'text': str,
+                'page_count': int,
+                'method': str,
+                'has_images': bool,
+                'metadata': dict
+            }
+        """
+        if not is_docx_conversion_enabled():
+            logger.info("DOCX conversion not available, using direct extraction")
+            return TextExtractor.extract_from_docx(file_path)
+        
+        temp_pdf_path = None
+        try:
+            logger.info(f"Converting DOCX to PDF for better extraction: {file_path}")
+            temp_pdf_path = DocxToPdfConverter.convert_to_temp_pdf(file_path)
+            
+            result = TextExtractor.extract_from_pdf(temp_pdf_path)
+            result['method'] = f"{result['method']}_from_converted_docx"
+            result['source_format'] = 'docx'
+            
+            logger.info(f"Successfully extracted text via DOCX->PDF conversion (method: {result['method']})")
+            return result
+        
+        except Exception as e:
+            logger.warning(f"DOCX to PDF conversion failed: {e}. Falling back to direct DOCX extraction")
+            return TextExtractor.extract_from_docx(file_path)
+        
+        finally:
+            if temp_pdf_path and os.path.exists(temp_pdf_path):
+                try:
+                    os.remove(temp_pdf_path)
+                    logger.debug(f"Cleaned up temporary PDF: {temp_pdf_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup temp PDF {temp_pdf_path}: {cleanup_error}")
     
     @staticmethod
     def clean_text(text: str) -> str:

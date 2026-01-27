@@ -1770,3 +1770,77 @@ export const scraperCredentialsApi = {
     return mapCredential(response.data.credential);
   },
 };
+
+// ============================================================================
+// Subscription Plans API
+// ============================================================================
+
+import type { 
+  SubscriptionPlan, 
+  SubscriptionPlanListResponse,
+  CustomPlanCreateRequest,
+  CustomPlanUpdateRequest,
+} from '@/types/subscription-plan';
+
+export const subscriptionPlansApi = {
+  /**
+   * List all subscription plans (standard plans only for global view)
+   */
+  list: async (params?: {
+    page?: number;
+    per_page?: number;
+    include_inactive?: boolean;
+  }): Promise<SubscriptionPlanListResponse> => {
+    const response = await apiClient.get('/api/subscription-plans', { params });
+    return response.data;
+  },
+
+  /**
+   * Get a single subscription plan by ID
+   */
+  get: async (planId: number): Promise<SubscriptionPlan> => {
+    const response = await apiClient.get(`/api/subscription-plans/${planId}`);
+    return response.data.plan;
+  },
+
+  /**
+   * Get available plans for a specific tenant
+   * Returns standard plans + custom plans for this tenant
+   */
+  listForTenant: async (
+    tenantId: number,
+    includeInactive: boolean = false
+  ): Promise<SubscriptionPlan[]> => {
+    const response = await apiClient.get(
+      `/api/subscription-plans/tenants/${tenantId}/available`,
+      { params: { include_inactive: includeInactive } }
+    );
+    return response.data.plans;
+  },
+
+  /**
+   * Create a custom plan for a specific tenant
+   */
+  createCustom: async (data: CustomPlanCreateRequest): Promise<SubscriptionPlan> => {
+    const response = await apiClient.post('/api/subscription-plans/custom', data);
+    return response.data.plan;
+  },
+
+  /**
+   * Update a custom plan
+   */
+  updateCustom: async (
+    planId: number,
+    data: CustomPlanUpdateRequest
+  ): Promise<SubscriptionPlan> => {
+    const response = await apiClient.put(`/api/subscription-plans/${planId}`, data);
+    return response.data.plan;
+  },
+
+  /**
+   * Delete a custom plan
+   */
+  deleteCustom: async (planId: number): Promise<void> => {
+    await apiClient.delete(`/api/subscription-plans/${planId}`);
+  },
+};

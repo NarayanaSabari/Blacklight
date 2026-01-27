@@ -36,6 +36,7 @@ pydantic-settings
 PyJWT
 PyMuPDF
 python-docx
+docx2pdf
 python-dotenv
 python-json-logger
 redis

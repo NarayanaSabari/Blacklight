@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     
     # AI/Resume Parsing Configuration
     ai_parsing_provider: str = Field(default="gemini", env="AI_PARSING_PROVIDER")  # 'gemini' or 'openai'
+    enable_docx_to_pdf_conversion: bool = Field(default=True, env="ENABLE_DOCX_TO_PDF_CONVERSION")
     
     # Google Gemini API Configuration
     google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
