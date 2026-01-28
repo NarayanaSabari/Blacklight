@@ -50,10 +50,8 @@ import {
   ChevronLeft,
   ChevronsLeft,
   ChevronsRight,
-  Building2,
   User,
   Briefcase,
-  Clock,
   DollarSign,
   MoreHorizontal,
   Eye,
@@ -443,17 +441,22 @@ export function SubmissionsPage() {
               </div>
             ) : (
               <>
-                {/* Table */}
-                <div className="rounded-md border">
-                  <Table>
+                {/* Table with Horizontal Scroll */}
+                <div className="rounded-md border overflow-x-auto">
+                  <Table className="min-w-[1600px]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[200px]">Candidate</TableHead>
-                        <TableHead className="w-[250px]">Job</TableHead>
+                        <TableHead className="w-[140px]">Date Submitted</TableHead>
+                        <TableHead className="w-[150px]">Submitted By</TableHead>
+                        <TableHead className="w-[180px]">Candidate</TableHead>
+                        <TableHead className="w-[120px]">Visa Type</TableHead>
+                        <TableHead className="w-[160px]">Role/Technology</TableHead>
+                        <TableHead className="w-[120px]">Bill Rate</TableHead>
+                        <TableHead className="w-[150px]">Client</TableHead>
+                        <TableHead className="w-[200px]">Job/Location</TableHead>
+                        <TableHead className="w-[150px]">Vendor</TableHead>
                         <TableHead className="w-[120px]">Status</TableHead>
                         <TableHead className="w-[100px]">Priority</TableHead>
-                        <TableHead className="w-[120px]">Rates</TableHead>
-                        <TableHead className="w-[120px]">Submitted</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -464,25 +467,128 @@ export function SubmissionsPage() {
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleRowClick(submission)}
                         >
-                          {/* Candidate */}
+                          {/* Date Submitted */}
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="text-sm">
+                                  <div className="font-medium">
+                                    {format(new Date(submission.submitted_at), 'MMM dd, yyyy')}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {format(new Date(submission.submitted_at), 'h:mm a')}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {formatDistanceToNow(new Date(submission.submitted_at), {
+                                  addSuffix: true,
+                                })}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+
+                          {/* Submitted By */}
+                          <TableCell>
+                            <div className="text-sm">
+                              {submission.submitted_by ? (
+                                <>
+                                  <div className="font-medium">
+                                    {submission.submitted_by.first_name}{' '}
+                                    {submission.submitted_by.last_name}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground truncate">
+                                    {submission.submitted_by.email}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Candidate Name */}
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <User className="h-4 w-4 text-primary" />
                               </div>
-                              <div>
-                                <p className="font-medium text-sm">
+                              <div className="min-w-0">
+                                <p className="font-medium text-sm truncate">
                                   {submission.candidate?.first_name}{' '}
                                   {submission.candidate?.last_name}
                                 </p>
-                                <p className="text-xs text-muted-foreground truncate max-w-[160px]">
-                                  {submission.candidate?.current_title || 'No title'}
-                                </p>
+                                {submission.candidate?.email && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    {submission.candidate.email}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </TableCell>
 
-                          {/* Job */}
+                          {/* Visa Type */}
+                          <TableCell>
+                            <div className="text-sm">
+                              {submission.candidate?.visa_type ? (
+                                <Badge variant="outline" className="text-xs">
+                                  {submission.candidate.visa_type}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Role/Technology */}
+                          <TableCell>
+                            <div className="text-sm">
+                              {submission.candidate?.current_title ? (
+                                <div className="font-medium truncate">
+                                  {submission.candidate.current_title}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                              {submission.candidate?.skills && submission.candidate.skills.length > 0 && (
+                                <div className="text-xs text-muted-foreground truncate">
+                                  {submission.candidate.skills.slice(0, 3).join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Bill Rate */}
+                          <TableCell>
+                            <div className="text-sm">
+                              <div className="flex items-center gap-1 font-medium">
+                                <DollarSign className="h-3 w-3 text-muted-foreground" />
+                                <span>{formatRate(submission.bill_rate, submission.rate_type)}</span>
+                              </div>
+                              {submission.margin_percentage && (
+                                <span
+                                  className={`text-xs ${getMarginColor(submission.margin_percentage)}`}
+                                >
+                                  {submission.margin_percentage.toFixed(1)}% margin
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Client Name */}
+                          <TableCell>
+                            <div className="text-sm">
+                              {submission.client_company ? (
+                                <div className="font-medium truncate">
+                                  {submission.client_company}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </div>
+                          </TableCell>
+
+                          {/* Job/Location */}
                           <TableCell>
                             <div className="flex items-start gap-2">
                               {submission.is_external_job ? (
@@ -498,27 +604,41 @@ export function SubmissionsPage() {
                                       : submission.job?.title}
                                   </p>
                                   {submission.is_external_job && (
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-200">
-                                      External
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-purple-50 text-purple-700 border-purple-200 flex-shrink-0">
+                                      Ext
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                  <Building2 className="h-3 w-3" />
-                                  <span className="truncate">
+                                {(submission.is_external_job 
+                                  ? submission.external_job_location 
+                                  : submission.job?.location) && (
+                                  <p className="text-xs text-muted-foreground truncate">
                                     {submission.is_external_job 
-                                      ? submission.external_job_company 
-                                      : submission.job?.company}
-                                  </span>
-                                </div>
+                                      ? submission.external_job_location 
+                                      : submission.job?.location}
+                                  </p>
+                                )}
                               </div>
+                            </div>
+                          </TableCell>
+
+                          {/* Vendor Company */}
+                          <TableCell>
+                            <div className="text-sm">
+                              {submission.vendor_company ? (
+                                <div className="font-medium truncate">
+                                  {submission.vendor_company}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
                             </div>
                           </TableCell>
 
                           {/* Status */}
                           <TableCell>
                             <Badge
-                              className={`${STATUS_COLORS[submission.status]} text-xs`}
+                              className={`${STATUS_COLORS[submission.status]} text-xs whitespace-nowrap`}
                             >
                               <span className="flex items-center gap-1">
                                 {STATUS_ICONS[submission.status]}
@@ -533,54 +653,18 @@ export function SubmissionsPage() {
                               {submission.is_hot && (
                                 <Tooltip>
                                   <TooltipTrigger>
-                                    <Flame className="h-4 w-4 text-orange-500" />
+                                    <Flame className="h-4 w-4 text-orange-500 flex-shrink-0" />
                                   </TooltipTrigger>
                                   <TooltipContent>Hot submission</TooltipContent>
                                 </Tooltip>
                               )}
                               <Badge
                                 variant="outline"
-                                className={`${PRIORITY_COLORS[submission.priority || 'MEDIUM']} text-xs`}
+                                className={`${PRIORITY_COLORS[submission.priority || 'MEDIUM']} text-xs whitespace-nowrap`}
                               >
                                 {submission.priority || 'MEDIUM'}
                               </Badge>
                             </div>
-                          </TableCell>
-
-                          {/* Rates */}
-                          <TableCell>
-                            <div className="text-sm">
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="h-3 w-3 text-muted-foreground" />
-                                <span>{formatRate(submission.bill_rate, submission.rate_type)}</span>
-                              </div>
-                              {submission.margin_percentage && (
-                                <span
-                                  className={`text-xs ${getMarginColor(submission.margin_percentage)}`}
-                                >
-                                  {submission.margin_percentage.toFixed(1)}% margin
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          {/* Submitted Date */}
-                          <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                  <Clock className="h-3 w-3" />
-                                  <span>
-                                    {formatDistanceToNow(new Date(submission.submitted_at), {
-                                      addSuffix: true,
-                                    })}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {format(new Date(submission.submitted_at), 'PPpp')}
-                              </TooltipContent>
-                            </Tooltip>
                           </TableCell>
 
                           {/* Actions */}
@@ -631,7 +715,6 @@ export function SubmissionsPage() {
                                   className="text-destructive"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // TODO: Implement delete confirmation
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />

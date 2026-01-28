@@ -103,6 +103,7 @@ export interface SubmissionCandidate {
   current_title?: string;
   skills?: string[];
   location?: string;
+  visa_type?: string; // Visa/work authorization type
 }
 
 export interface SubmissionJob {
