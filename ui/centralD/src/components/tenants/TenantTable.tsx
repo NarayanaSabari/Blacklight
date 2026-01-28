@@ -153,32 +153,11 @@ export function TenantTable({ data, isLoading, error, currentPage, onPageChange 
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/tenants/${tenant.slug}`);
                       }}>
                         View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                        Change Plan
-                      </DropdownMenuItem>
-                      {tenant.status === 'ACTIVE' ? (
-                        <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                          Suspend
-                        </DropdownMenuItem>
-                      ) : tenant.status === 'SUSPENDED' ? (
-                        <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                          Reactivate
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-destructive"
-                      >
-                        Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

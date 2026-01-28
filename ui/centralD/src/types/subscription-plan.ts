@@ -17,6 +17,9 @@ export interface SubscriptionPlan {
   sort_order: number;
   is_custom: boolean;
   custom_for_tenant_id: number | null;
+  custom_for_tenant_name?: string;
+  custom_for_tenant_slug?: string;
+  assigned_tenants_count?: number;
   created_at: string;
   updated_at: string;
 }

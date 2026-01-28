@@ -144,12 +144,12 @@ class PortalUserService:
                 raise ValueError("Manager must be in the same tenant")
             manager_id = data.manager_id
 
-        # Hash password
+        plain_password = data.password
+        
         password_hash = bcrypt.hashpw(
             data.password.encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
 
-        # Create user with manager assignment
         user = PortalUser(
             tenant_id=tenant_id,
             email=data.email,
@@ -191,6 +191,33 @@ class PortalUserService:
             f"Portal user created: {user.id} ({data.email}) in tenant {tenant_id} "
             f"with role {data.role_id} and manager {manager_id} by {changed_by}"
         )
+        
+        try:
+            from app.inngest import inngest_client
+            import inngest
+            from config.settings import settings
+            
+            user_name = f"{data.first_name} {data.last_name}".strip()
+            login_url = f"{settings.frontend_base_url}/login"
+            
+            inngest_client.send_sync(
+                inngest.Event(
+                    name="email/portal-user-welcome",
+                    data={
+                        "user_id": user.id,
+                        "tenant_id": tenant_id,
+                        "tenant_name": tenant.name,
+                        "user_email": data.email,
+                        "user_name": user_name,
+                        "password": plain_password,
+                        "login_url": login_url,
+                        "role_name": role.name
+                    }
+                )
+            )
+            logger.info(f"Triggered welcome email for portal user {user.id} ({data.email})")
+        except Exception as e:
+            logger.error(f"Failed to trigger welcome email for portal user {user.id}: {e}", exc_info=True)
 
         return PortalUserResponseSchema.model_validate(user.to_dict(include_roles=True, include_permissions=True))
 

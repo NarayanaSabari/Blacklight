@@ -3,22 +3,33 @@
  */
 
 import { useState } from 'react';
-import { CheckCircle2, CreditCard, AlertCircle, Check, X } from 'lucide-react';
+import { CheckCircle2, CreditCard, AlertCircle, Check, X, Edit, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { usePlans } from '@/hooks/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { BillingCycle } from '@/types/tenant';
+import type { SubscriptionPlan } from '@/types/subscription-plan';
+import { CustomPlanDialog } from '@/components/dialogs/CustomPlanDialog';
 
 export function PlansPage() {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('MONTHLY');
   const { data: allPlans, isLoading, error } = usePlans();
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  const plans = allPlans?.filter((plan) => !plan.is_custom) || [];
+  const standardPlans = allPlans?.filter((plan) => !plan.is_custom) || [];
+  const customPlans = allPlans?.filter((plan) => plan.is_custom) || [];
+
+  const handleEditPlan = (plan: SubscriptionPlan) => {
+    setEditingPlan(plan);
+    setIsEditDialogOpen(true);
+  };
 
   const getPlanPrice = (priceMonthly: number | null, priceYearly: number | null | undefined) => {
     if (billingCycle === 'MONTHLY') {
@@ -43,12 +54,12 @@ export function PlansPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Subscription Plans</h1>
         <p className="text-muted-foreground">
-          View all available subscription plans and their features. Custom plans are only visible on individual tenant pages.
+          View all available subscription plans and their features. Manage standard and custom plans.
         </p>
       </div>
 
@@ -77,9 +88,9 @@ export function PlansPage() {
             )}
           >
             Yearly
-            {plans && plans.length > 0 && getSavingsPercent(plans[0].price_monthly, plans[0].price_yearly) > 0 && (
+            {standardPlans && standardPlans.length > 0 && getSavingsPercent(standardPlans[0].price_monthly, standardPlans[0].price_yearly) > 0 && (
               <Badge variant="secondary" className="ml-2">
-                Save {getSavingsPercent(plans[0].price_monthly, plans[0].price_yearly)}%
+                Save {getSavingsPercent(standardPlans[0].price_monthly, standardPlans[0].price_yearly)}%
               </Badge>
             )}
           </Label>
@@ -118,115 +129,204 @@ export function PlansPage() {
         </Alert>
       )}
 
-      {/* Plans Grid */}
-      {plans && plans.length > 0 && (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.map((plan) => {
-            const isPopular = plan.name === 'PROFESSIONAL';
-            const price = getPlanPrice(plan.price_monthly, plan.price_yearly);
-            
-            return (
-              <Card 
-                key={plan.id} 
-                className={cn(
-                  'relative flex flex-col',
-                  !plan.is_active && 'opacity-60',
-                  isPopular && 'border-primary shadow-lg'
-                )}
-              >
-                {isPopular && plan.is_active && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    Most Popular
-                  </Badge>
-                )}
-                
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="h-5 w-5 text-primary" />
-                    <CardTitle className="capitalize">{plan.name.toLowerCase()}</CardTitle>
-                  </div>
-                  <CardDescription>{plan.description || 'No description'}</CardDescription>
-                  {!plan.is_active && (
-                    <Badge variant="secondary" className="w-fit">Inactive</Badge>
+      {standardPlans.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold tracking-tight">Standard Plans</h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {standardPlans.map((plan) => {
+              const isPopular = plan.name === 'PROFESSIONAL';
+              const price = getPlanPrice(plan.price_monthly, plan.price_yearly);
+              
+              return (
+                <Card 
+                  key={plan.id} 
+                  className={cn(
+                    'relative flex flex-col',
+                    !plan.is_active && 'opacity-60',
+                    isPopular && 'border-primary shadow-lg'
                   )}
-                </CardHeader>
-                
-                <CardContent className="flex-1 flex flex-col">
-                  {/* Pricing */}
-                  <div className="mb-6">
-                    <div className="text-4xl font-bold">
-                      ${price}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        /{billingCycle === 'MONTHLY' ? 'mo' : 'yr'}
-                      </span>
+                >
+                  {isPopular && plan.is_active && (
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      Most Popular
+                    </Badge>
+                  )}
+                  
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="h-5 w-5 text-primary" />
+                      <CardTitle className="capitalize">{plan.name.toLowerCase()}</CardTitle>
                     </div>
-                    {billingCycle === 'YEARLY' && price > 0 && (
+                    <CardDescription>{plan.description || 'No description'}</CardDescription>
+                    {!plan.is_active && (
+                      <Badge variant="secondary" className="w-fit">Inactive</Badge>
+                    )}
+                  </CardHeader>
+                  
+                  <CardContent className="flex-1 flex flex-col">
+                    {/* Pricing */}
+                    <div className="mb-6">
+                      <div className="text-4xl font-bold">
+                        ${price}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          /{billingCycle === 'MONTHLY' ? 'mo' : 'yr'}
+                        </span>
+                      </div>
+                      {billingCycle === 'YEARLY' && price > 0 && (
+                        <div className="text-sm text-muted-foreground mt-1">
+                          ${(price / 12).toFixed(2)}/month billed annually
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Plan Limits */}
+                    <div className="space-y-3 mb-6">
+                      <p className="text-sm font-medium text-muted-foreground">Limits:</p>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          <span>
+                            {plan.max_users === -1 ? 'Unlimited' : plan.max_users} users
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          <span>
+                            {plan.max_candidates === -1 ? 'Unlimited' : plan.max_candidates} candidates
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          <span>
+                            {plan.max_storage_gb === -1 ? 'Unlimited' : `${plan.max_storage_gb}GB`} storage
+                          </span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Additional Features */}
+                    <div className="space-y-2 pt-4 border-t mt-auto">
+                      <p className="text-sm font-medium text-muted-foreground mb-3">Features:</p>
+                      {additionalFeatures.map(({ feature, plans: includedPlans }) => {
+                        const isIncluded = includedPlans.includes(plan.name);
+                        
+                        return (
+                          <div
+                            key={feature}
+                            className={cn(
+                              'flex items-start gap-2 text-sm',
+                              !isIncluded && 'text-muted-foreground'
+                            )}
+                          >
+                            {isIncluded ? (
+                              <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
+                            )}
+                            <span className={!isIncluded ? 'line-through' : ''}>
+                              {feature}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {customPlans.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold tracking-tight">Custom Plans</h2>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {customPlans.map((plan) => {
+              const price = getPlanPrice(plan.price_monthly, plan.price_yearly);
+              
+              return (
+                <Card 
+                  key={plan.id} 
+                  className={cn(
+                    'relative flex flex-col border-dashed border-2',
+                    !plan.is_active && 'opacity-60'
+                  )}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-5 w-5 text-indigo-600" />
+                        <CardTitle className="text-lg">{plan.display_name}</CardTitle>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditPlan(plan)}
+                      >
+                        <Edit className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </div>
+                    {plan.custom_for_tenant_name && (
                       <div className="text-sm text-muted-foreground mt-1">
-                        ${(price / 12).toFixed(2)}/month billed annually
+                        Created for: <span className="font-medium text-foreground">{plan.custom_for_tenant_name}</span>
                       </div>
                     )}
-                  </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                      <Users className="h-3.5 w-3.5" />
+                      Assigned to {plan.assigned_tenants_count || 0} tenant(s)
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="flex-1 flex flex-col pt-4">
+                    {/* Pricing */}
+                    <div className="mb-6">
+                      <div className="text-3xl font-bold">
+                        ${price}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          /{billingCycle === 'MONTHLY' ? 'mo' : 'yr'}
+                        </span>
+                      </div>
+                    </div>
 
-                  {/* Plan Limits */}
-                  <div className="space-y-3 mb-6">
-                    <p className="text-sm font-medium text-muted-foreground">Limits:</p>
-                    <ul className="space-y-2 text-sm">
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        <span>
-                          {plan.max_users === -1 ? 'Unlimited' : plan.max_users} users
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        <span>
-                          {plan.max_candidates === -1 ? 'Unlimited' : plan.max_candidates} candidates
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-primary" />
-                        <span>
-                          {plan.max_storage_gb === -1 ? 'Unlimited' : `${plan.max_storage_gb}GB`} storage
-                        </span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* Additional Features */}
-                  <div className="space-y-2 pt-4 border-t mt-auto">
-                    <p className="text-sm font-medium text-muted-foreground mb-3">Features:</p>
-                    {additionalFeatures.map(({ feature, plans: includedPlans }) => {
-                      const isIncluded = includedPlans.includes(plan.name);
-                      
-                      return (
-                        <div
-                          key={feature}
-                          className={cn(
-                            'flex items-start gap-2 text-sm',
-                            !isIncluded && 'text-muted-foreground'
-                          )}
-                        >
-                          {isIncluded ? (
-                            <Check className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                          ) : (
-                            <X className="h-4 w-4 text-muted-foreground/40 mt-0.5 flex-shrink-0" />
-                          )}
-                          <span className={!isIncluded ? 'line-through' : ''}>
-                            {feature}
+                    {/* Plan Limits */}
+                    <div className="space-y-3 mb-6">
+                      <p className="text-sm font-medium text-muted-foreground">Limits:</p>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                          <span>
+                            {plan.max_users === -1 ? 'Unlimited' : plan.max_users} users
                           </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                          <span>
+                            {plan.max_candidates === -1 ? 'Unlimited' : plan.max_candidates} candidates
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-indigo-600" />
+                          <span>
+                            {plan.max_storage_gb === -1 ? 'Unlimited' : `${plan.max_storage_gb}GB`} storage
+                          </span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="mt-auto text-xs text-muted-foreground text-center">
+                      Custom Plan ID: {plan.id}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Empty State */}
-      {plans && plans.length === 0 && (
+      {(!allPlans || allPlans.length === 0) && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
@@ -237,6 +337,17 @@ export function PlansPage() {
           </CardContent>
         </Card>
       )}
+
+      {editingPlan && (
+        <CustomPlanDialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          tenantId={0}
+          tenantName={editingPlan.custom_for_tenant_name || 'Tenant'}
+          existingPlan={editingPlan}
+        />
+      )}
     </div>
   );
 }
+

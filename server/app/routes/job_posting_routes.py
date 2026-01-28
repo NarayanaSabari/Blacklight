@@ -13,6 +13,7 @@ from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
 from app.models.user_email_integration import UserEmailIntegration
+from app.services.job_posting_service import JobPostingService
 from app.middleware.portal_auth import require_portal_auth
 from app.middleware.tenant_context import with_tenant_context
 from app.middleware.portal_auth import require_permission
@@ -186,148 +187,33 @@ def list_job_postings():
         status = request.args.get('status')
         search = request.args.get('search')
         location = request.args.get('location')
-        is_remote = request.args.get('is_remote')
-        sort_by = request.args.get('sort_by', 'date')  # Default: date (posted_date with created_at fallback)
+        is_remote_str = request.args.get('is_remote')
+        sort_by = request.args.get('sort_by', 'date')
         sort_order = request.args.get('sort_order', 'desc')
-        
-        # New filters for unified job view
-        source = request.args.get('source', 'all')  # all, email, scraped
-        platform = request.args.get('platform')  # indeed, dice, email, etc.
+        source = request.args.get('source', 'all')
+        platform = request.args.get('platform')
         sourced_by = request.args.get('sourced_by', type=int)
         
-        # Build base query with tenant visibility rules:
-        # - Scraped jobs (is_email_sourced=False): visible to all
-        # - Email jobs (is_email_sourced=True): only visible to source_tenant_id
-        if source == 'email':
-            # Only email-sourced jobs for this tenant
-            query = select(JobPosting).where(
-                JobPosting.is_email_sourced == True,
-                JobPosting.source_tenant_id == tenant_id
-            )
-        elif source == 'scraped':
-            # Only scraped jobs (global)
-            query = select(JobPosting).where(
-                JobPosting.is_email_sourced == False
-            )
-        else:
-            # All jobs: scraped (global) + email (tenant-specific)
-            query = select(JobPosting).where(
-                or_(
-                    JobPosting.is_email_sourced == False,
-                    and_(
-                        JobPosting.is_email_sourced == True,
-                        JobPosting.source_tenant_id == tenant_id
-                    )
-                )
-            )
+        is_remote = None
+        if is_remote_str is not None:
+            is_remote = is_remote_str.lower() in ('true', '1', 'yes')
         
-        # Apply filters
-        if status:
-            query = query.where(JobPosting.status == status)
+        result = JobPostingService.list_jobs_optimized(
+            tenant_id=tenant_id,
+            page=page,
+            per_page=per_page,
+            status=status,
+            search=search,
+            location=location,
+            is_remote=is_remote,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            source=source,
+            platform=platform,
+            sourced_by=sourced_by,
+        )
         
-        if platform:
-            query = query.where(JobPosting.platform == platform)
-        
-        if sourced_by:
-            query = query.where(JobPosting.sourced_by_user_id == sourced_by)
-        
-        if location:
-            query = query.where(JobPosting.location.ilike(f'%{location}%'))
-        
-        if is_remote is not None:
-            is_remote_bool = is_remote.lower() in ('true', '1', 'yes')
-            query = query.where(JobPosting.is_remote == is_remote_bool)
-        
-        if search:
-            search_filter = or_(
-                JobPosting.title.ilike(f'%{search}%'),
-                JobPosting.company.ilike(f'%{search}%'),
-                JobPosting.location.ilike(f'%{search}%'),
-                JobPosting.description.ilike(f'%{search}%'),
-                func.array_to_string(JobPosting.skills, ',').ilike(f'%{search}%')
-            )
-            query = query.where(search_filter)
-        
-        # Apply sorting
-        # 'date' uses COALESCE: prefer posted_date, fall back to created_at
-        # This ensures jobs are sorted by their actual post date when available
-        if sort_by == 'date':
-            # Cast posted_date (Date) to DateTime for COALESCE with created_at (DateTime)
-            sort_field = coalesce(
-                func.cast(JobPosting.posted_date, db.DateTime),
-                JobPosting.created_at
-            )
-        else:
-            valid_sort_fields = {
-                'posted_date': JobPosting.posted_date,
-                'title': JobPosting.title,
-                'company': JobPosting.company,
-                'salary_min': JobPosting.salary_min,
-                'created_at': JobPosting.created_at
-            }
-            sort_field = valid_sort_fields.get(sort_by, JobPosting.created_at)
-        
-        if sort_order.lower() == 'desc':
-            query = query.order_by(sort_field.desc().nullslast())
-        else:
-            query = query.order_by(sort_field.asc().nullslast())
-        
-        # Get total count with same filters
-        count_query = select(func.count(JobPosting.id))
-        
-        # Apply same visibility rules for count
-        if source == 'email':
-            count_query = count_query.where(
-                JobPosting.is_email_sourced == True,
-                JobPosting.source_tenant_id == tenant_id
-            )
-        elif source == 'scraped':
-            count_query = count_query.where(JobPosting.is_email_sourced == False)
-        else:
-            count_query = count_query.where(
-                or_(
-                    JobPosting.is_email_sourced == False,
-                    and_(
-                        JobPosting.is_email_sourced == True,
-                        JobPosting.source_tenant_id == tenant_id
-                    )
-                )
-            )
-        
-        if status:
-            count_query = count_query.where(JobPosting.status == status)
-        if platform:
-            count_query = count_query.where(JobPosting.platform == platform)
-        if sourced_by:
-            count_query = count_query.where(JobPosting.sourced_by_user_id == sourced_by)
-        if location:
-            count_query = count_query.where(JobPosting.location.ilike(f'%{location}%'))
-        if is_remote is not None:
-            count_query = count_query.where(JobPosting.is_remote == is_remote_bool)
-        if search:
-            count_query = count_query.where(search_filter)
-        
-        total = db.session.scalar(count_query)
-        
-        # Execute paginated query
-        jobs = db.session.scalars(
-            query.offset((page - 1) * per_page).limit(per_page)
-        ).all()
-        
-        # Build response with sourced_by info for email jobs
-        jobs_list = []
-        for job in jobs:
-            job_dict = job.to_dict()
-            job_dict = _add_sourced_by_info(job_dict, job)
-            jobs_list.append(job_dict)
-        
-        return jsonify({
-            'jobs': jobs_list,
-            'total': total,
-            'page': page,
-            'per_page': per_page,
-            'pages': (total + per_page - 1) // per_page if total > 0 else 0
-        }), 200
+        return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Error listing job postings: {str(e)}")
@@ -409,120 +295,9 @@ def get_job_statistics():
     try:
         tenant_id = g.tenant_id
         
-        # Visibility filter for all stats
-        visibility_filter = or_(
-            JobPosting.is_email_sourced == False,
-            and_(
-                JobPosting.is_email_sourced == True,
-                JobPosting.source_tenant_id == tenant_id
-            )
-        )
+        stats = JobPostingService.get_statistics_optimized(tenant_id)
         
-        # Get counts
-        total_jobs = db.session.scalar(
-            select(func.count(JobPosting.id)).where(visibility_filter)
-        )
-        
-        active_jobs = db.session.scalar(
-            select(func.count(JobPosting.id))
-            .where(visibility_filter, JobPosting.status == 'ACTIVE')
-        )
-        
-        remote_jobs = db.session.scalar(
-            select(func.count(JobPosting.id))
-            .where(visibility_filter, JobPosting.is_remote == True)
-        )
-        
-        # Scraped vs Email breakdown
-        scraped_jobs = db.session.scalar(
-            select(func.count(JobPosting.id))
-            .where(JobPosting.is_email_sourced == False)
-        )
-        
-        email_jobs = db.session.scalar(
-            select(func.count(JobPosting.id))
-            .where(
-                JobPosting.is_email_sourced == True,
-                JobPosting.source_tenant_id == tenant_id
-            )
-        )
-        
-        # Get unique companies and locations
-        unique_companies = db.session.scalar(
-            select(func.count(func.distinct(JobPosting.company)))
-            .where(visibility_filter)
-        )
-        
-        unique_locations = db.session.scalar(
-            select(func.count(func.distinct(JobPosting.location)))
-            .where(visibility_filter)
-        )
-        
-        # Platform breakdown
-        platform_counts = db.session.execute(
-            select(JobPosting.platform, func.count(JobPosting.id))
-            .where(visibility_filter)
-            .group_by(JobPosting.platform)
-        ).all()
-        
-        by_platform = {row[0]: row[1] for row in platform_counts if row[0]}
-        
-        # Email jobs by team member
-        email_by_user = []
-        if email_jobs > 0:
-            user_counts = db.session.execute(
-                select(
-                    JobPosting.sourced_by_user_id,
-                    func.count(JobPosting.id),
-                )
-                .where(
-                    JobPosting.is_email_sourced == True,
-                    JobPosting.source_tenant_id == tenant_id,
-                    JobPosting.sourced_by_user_id.isnot(None),
-                )
-                .group_by(JobPosting.sourced_by_user_id)
-            ).all()
-            
-            for user_id, count in user_counts:
-                user = db.session.get(PortalUser, user_id)
-                if user:
-                    email_by_user.append({
-                        "user_id": user_id,
-                        "name": f"{user.first_name} {user.last_name}",
-                        "email": user.email,
-                        "jobs_count": count,
-                    })
-        
-        # Email processing stats
-        emails_processed = db.session.scalar(
-            select(func.count(ProcessedEmail.id))
-            .where(ProcessedEmail.tenant_id == tenant_id)
-        ) or 0
-        
-        emails_converted = db.session.scalar(
-            select(func.count(ProcessedEmail.id))
-            .where(
-                ProcessedEmail.tenant_id == tenant_id,
-                ProcessedEmail.job_id.isnot(None),
-            )
-        ) or 0
-        
-        return jsonify({
-            'total_jobs': total_jobs,
-            'active_jobs': active_jobs,
-            'remote_jobs': remote_jobs,
-            'unique_companies': unique_companies,
-            'unique_locations': unique_locations,
-            # Source breakdown
-            'scraped_jobs': scraped_jobs,
-            'email_jobs': email_jobs,
-            'by_platform': by_platform,
-            # Email stats
-            'email_by_user': email_by_user,
-            'emails_processed': emails_processed,
-            'emails_converted': emails_converted,
-            'email_conversion_rate': round(emails_converted / emails_processed * 100, 1) if emails_processed > 0 else 0,
-        }), 200
+        return jsonify(stats), 200
         
     except Exception as e:
         logger.error(f"Error getting job statistics: {str(e)}")

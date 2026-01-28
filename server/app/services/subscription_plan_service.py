@@ -83,11 +83,23 @@ class SubscriptionPlanService:
             error_out=False,
         )
 
-        # Convert to response schemas
-        plans = [
-            SubscriptionPlanResponseSchema.model_validate(plan)
-            for plan in pagination.items
-        ]
+        plans = []
+        for plan in pagination.items:
+            plan_dict = plan.to_dict()
+            
+            if plan.is_custom and plan.custom_for_tenant_id:
+                custom_tenant = db.session.get(Tenant, plan.custom_for_tenant_id)
+                if custom_tenant:
+                    plan_dict['custom_for_tenant_name'] = custom_tenant.name
+                    plan_dict['custom_for_tenant_slug'] = custom_tenant.slug
+            
+            assigned_count = db.session.scalar(
+                select(func.count(Tenant.id))
+                .where(Tenant.subscription_plan_id == plan.id)
+            )
+            plan_dict['assigned_tenants_count'] = assigned_count or 0
+            
+            plans.append(SubscriptionPlanResponseSchema.model_validate(plan_dict))
 
         return SubscriptionPlanListResponseSchema(
             items=plans,

@@ -272,6 +272,64 @@ async def send_tenant_welcome_email_workflow(ctx: inngest.Context) -> dict:
     }
 
 
+@inngest_client.create_function(
+    fn_id="send-portal-user-welcome-email",
+    trigger=inngest.TriggerEvent(event="email/portal-user-welcome"),
+    retries=3,
+    name="Send Portal User Welcome Email"
+)
+async def send_portal_user_welcome_email_workflow(ctx: inngest.Context) -> dict:
+    """
+    Send welcome email to new portal user with credentials.
+    Triggered when a TENANT_ADMIN creates a new team member.
+    
+    Event data:
+        - user_id: int - The newly created user ID
+        - tenant_id: int - Tenant ID
+        - tenant_name: str - Tenant company name
+        - user_email: str - User's email
+        - user_name: str - User's full name
+        - password: str - The plain password before hashing
+        - login_url: str - URL to the portal login page
+        - role_name: str - User's role name
+    """
+    event = ctx.event
+    user_id = event.data.get("user_id")
+    tenant_id = event.data.get("tenant_id")
+    tenant_name = event.data.get("tenant_name")
+    user_email = event.data.get("user_email")
+    user_name = event.data.get("user_name")
+    password = event.data.get("password")
+    login_url = event.data.get("login_url")
+    role_name = event.data.get("role_name")
+    
+    logger.info(f"[INNGEST] Sending portal user welcome email to {user_email} for tenant {tenant_name}")
+    
+    if not all([user_email, user_name, tenant_name, password, login_url]):
+        logger.error(f"[INNGEST] Missing required data for portal user welcome email. Event data: {event.data}")
+        return {"email_sent": False, "error": "Missing required data"}
+    
+    result = await ctx.step.run(
+        "send-portal-user-welcome",
+        send_portal_user_welcome_step,
+        user_email,
+        user_name,
+        tenant_name,
+        password,
+        login_url,
+        role_name
+    )
+    
+    logger.info(f"[INNGEST] Portal user welcome email result for {user_email}: {result}")
+    
+    return {
+        "email_sent": result,
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "user_email": user_email
+    }
+
+
 # Step Functions
 
 def fetch_invitation_step(invitation_id: int, tenant_id: int) -> dict:
@@ -507,4 +565,24 @@ def send_tenant_welcome_step(
         tenant_name=tenant_name,
         temporary_password=temporary_password,
         login_url=login_url
+    )
+
+
+def send_portal_user_welcome_step(
+    user_email: str,
+    user_name: str,
+    tenant_name: str,
+    password: str,
+    login_url: str,
+    role_name: str = None
+) -> bool:
+    from app.services.email_service import EmailService
+    
+    return EmailService.send_portal_user_welcome_email(
+        to_email=user_email,
+        user_name=user_name,
+        tenant_name=tenant_name,
+        password=password,
+        login_url=login_url,
+        role_name=role_name
     )

@@ -795,6 +795,151 @@ class EmailService:
         )
     
     @staticmethod
+    def send_portal_user_welcome_email(
+        to_email: str,
+        user_name: str,
+        tenant_name: str,
+        password: str,
+        login_url: str,
+        role_name: str = None
+    ) -> bool:
+        """
+        Send welcome email to new portal user with credentials.
+        Uses global SMTP config since this is for new team member creation.
+        
+        Args:
+            to_email: User email
+            user_name: User's full name
+            tenant_name: Tenant/company name
+            password: User's password
+            login_url: URL to the portal login page
+            role_name: User's role name (optional)
+            
+        Returns:
+            True if sent successfully
+        """
+        if not settings.smtp_enabled:
+            logger.error("Cannot send portal user welcome email - SMTP not configured")
+            return False
+        
+        smtp_config = {
+            'host': settings.smtp_host,
+            'port': settings.smtp_port,
+            'username': settings.smtp_username,
+            'password': settings.smtp_password,
+            'from_email': settings.smtp_from_email,
+            'from_name': settings.smtp_from_name or 'Blacklight Platform',
+            'use_tls': settings.smtp_use_tls
+        }
+        
+        role_text = f" as {role_name}" if role_name else ""
+        subject = f"Welcome to {tenant_name} - Your Account is Ready! 🎉"
+        
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">Welcome to {tenant_name}</h1>
+                <p style="color: #e0e7ff; margin: 10px 0 0 0;">Blacklight HR Platform</p>
+            </div>
+            
+            <div style="padding: 30px; background-color: #f9fafb;">
+                <h2 style="color: #1e40af;">Hi {user_name},</h2>
+                
+                <p>Your team member account has been created on the Blacklight platform{role_text}.</p>
+                
+                <p>Here are your login credentials:</p>
+                
+                <div style="background-color: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;"><strong>Email:</strong></td>
+                            <td style="padding: 8px 0;">{to_email}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px 0; color: #6b7280;"><strong>Password:</strong></td>
+                            <td style="padding: 8px 0; font-family: monospace; background-color: #fef3c7; padding: 4px 8px; border-radius: 4px;">{password}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0;">
+                    <p style="margin: 0; color: #dc2626;"><strong>⚠️ Important Security Notice:</strong></p>
+                    <p style="margin: 10px 0 0 0;">Please change your password after your first login for security purposes.</p>
+                </div>
+                
+                <p style="text-align: center; margin: 30px 0;">
+                    <a href="{login_url}" 
+                       style="background-color: #1e40af; color: white; padding: 14px 32px; 
+                              text-decoration: none; border-radius: 8px; display: inline-block;
+                              font-weight: bold;">
+                        Login to Your Dashboard
+                    </a>
+                </p>
+                
+                <h3 style="color: #1e40af;">Getting Started:</h3>
+                <ul style="padding-left: 20px;">
+                    <li>Login with your credentials</li>
+                    <li>Change your password in settings</li>
+                    <li>Complete your profile</li>
+                    <li>Start collaborating with your team</li>
+                </ul>
+                
+                <p>If you have any questions, please contact your team administrator.</p>
+                
+                <p>Welcome aboard!</p>
+                
+                <p>Best regards,<br>
+                <strong>The Blacklight Team</strong></p>
+            </div>
+            
+            <div style="background-color: #1f2937; padding: 20px; text-align: center;">
+                <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                    This is an automated email from Blacklight Platform.<br>
+                    Please do not reply directly to this message.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        body_text = f"""
+        Welcome to {tenant_name}!
+        
+        Hi {user_name},
+        
+        Your team member account has been created on the Blacklight platform{role_text}.
+        
+        Here are your login credentials:
+        
+        Email: {to_email}
+        Password: {password}
+        
+        IMPORTANT: Please change your password after your first login.
+        
+        Login URL: {login_url}
+        
+        Getting Started:
+        - Login with your credentials
+        - Change your password in settings
+        - Complete your profile
+        - Start collaborating with your team
+        
+        Welcome aboard!
+        
+        Best regards,
+        The Blacklight Team
+        """
+        
+        return EmailService._send_email(
+            to=to_email,
+            subject=subject,
+            body_html=body_html,
+            body_text=body_text,
+            smtp_config=smtp_config
+        )
+    
+    @staticmethod
     def send_rejection_email(
         tenant_id: int,
         to_email: str,

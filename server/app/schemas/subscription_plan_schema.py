@@ -62,6 +62,9 @@ class SubscriptionPlanResponseSchema(BaseModel):
     sort_order: int
     is_custom: bool
     custom_for_tenant_id: Optional[int]
+    custom_for_tenant_name: Optional[str] = None
+    custom_for_tenant_slug: Optional[str] = None
+    assigned_tenants_count: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     
