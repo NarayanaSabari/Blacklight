@@ -290,6 +290,7 @@ class Submission(db.Model):
                 'current_title': self.candidate.current_title,
                 'skills': self.candidate.skills,
                 'location': self.candidate.location,
+                'visa_type': self.candidate.visa_type,
             }
         
         if include_job:
