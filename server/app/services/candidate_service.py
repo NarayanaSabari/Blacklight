@@ -924,31 +924,39 @@ class CandidateService:
                 )
                 logger.info(f"[APPROVAL-SERVICE] ✅ Role normalization event sent for candidate {candidate_id}")
             
-            candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
-            candidate_data = {
-                "full_name": candidate.full_name or candidate_name,
-                "email": candidate.email,
-                "phone": candidate.phone,
-                "current_title": candidate.current_title,
-                "experience_years": candidate.total_experience_years,
-                "skills": candidate.skills or [],
-                "preferred_roles": candidate.preferred_roles or [],
-            }
+            # ========================================
+            # TODO: CANDIDATE APPROVAL EMAIL - CURRENTLY DISABLED
+            # Uncomment the code below to re-enable approval emails to candidates after onboarding
+            # This sends a "Congratulations! Profile approved" email to the candidate
+            # ========================================
             
-            inngest_client.send_sync(
-                inngest.Event(
-                    name="email/approval",
-                    data={
-                        "candidate_id": candidate.id,
-                        "tenant_id": tenant_id,
-                        "to_email": candidate.email,
-                        "candidate_name": candidate_name,
-                        "candidate_data": candidate_data,
-                        "hr_edited_fields": []
-                    }
-                )
-            )
-            logger.info(f"Approval email triggered for candidate {candidate_id}")
+            # candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
+            # candidate_data = {
+            #     "full_name": candidate.full_name or candidate_name,
+            #     "email": candidate.email,
+            #     "phone": candidate.phone,
+            #     "current_title": candidate.current_title,
+            #     "experience_years": candidate.total_experience_years,
+            #     "skills": candidate.skills or [],
+            #     "preferred_roles": candidate.preferred_roles or [],
+            # }
+            # 
+            # inngest_client.send_sync(
+            #     inngest.Event(
+            #         name="email/approval",
+            #         data={
+            #             "candidate_id": candidate.id,
+            #             "tenant_id": tenant_id,
+            #             "to_email": candidate.email,
+            #             "candidate_name": candidate_name,
+            #             "candidate_data": candidate_data,
+            #             "hr_edited_fields": []
+            #         }
+            #     )
+            # )
+            # logger.info(f"Approval email triggered for candidate {candidate_id}")
+            
+            logger.info(f"Approval email DISABLED for candidate {candidate_id} (email sending is turned off)")
             
             # 2. Trigger job matching workflow (async)
             logger.info(f"[INNGEST] Triggering job matching for candidate {candidate_id}")

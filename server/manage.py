@@ -772,6 +772,126 @@ def import_all_jobs(app: Flask, jobs_dir: str = "../jobs") -> None:
         sys.exit(1)
 
 
+def clean_all_db(app: Flask, confirm: bool = False) -> None:
+    """
+    Clean ALL data from the entire database by truncating all tables.
+    
+    This function removes ALL data from ALL tables while preserving the schema structure.
+    
+    ⚠️  WARNING: This is a DESTRUCTIVE operation that cannot be undone!
+    
+    After cleaning, you should run:
+    - python manage.py seed-all (to recreate all base data)
+    
+    Args:
+        confirm: Skip confirmation prompt if True
+    """
+    from sqlalchemy import text, inspect
+    
+    if not confirm:
+        response = input(
+            "\n⚠️  DANGER: This will delete ALL data from EVERY table in the database!\n"
+            "   This includes:\n"
+            "   - All tenants and users\n"
+            "   - All candidates and applications\n"
+            "   - All jobs and matches\n"
+            "   - All subscription plans\n"
+            "   - All roles and permissions\n"
+            "   - EVERYTHING!\n\n"
+            "Are you ABSOLUTELY SURE you want to proceed? Type 'DELETE ALL' to confirm: "
+        )
+        if response != "DELETE ALL":
+            print("Operation cancelled")
+            return
+    
+    print("\n" + "=" * 80)
+    print("🗑️  CLEANING ENTIRE DATABASE - DELETING ALL DATA")
+    print("=" * 80)
+    print()
+    
+    try:
+        with app.app_context():
+            # Get database inspector
+            inspector = inspect(db.engine)
+            
+            # Get all table names
+            table_names = inspector.get_table_names()
+            
+            if not table_names:
+                print("⚠️  No tables found in database")
+                return
+            
+            print(f"Found {len(table_names)} tables to clean")
+            print()
+            
+            # Truncate all tables (CASCADE handles foreign keys automatically)
+            try:
+                total_deleted = 0
+                successful_tables = []
+                failed_tables = []
+                
+                # Process tables one by one
+                for table_name in table_names:
+                    try:
+                        # Count rows before deletion
+                        count_result = db.session.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        row_count = count_result.scalar()
+                        
+                        # Truncate table with CASCADE (automatically handles foreign keys)
+                        db.session.execute(text(f"TRUNCATE TABLE {table_name} CASCADE"))
+                        db.session.commit()
+                        
+                        total_deleted += row_count
+                        successful_tables.append((table_name, row_count))
+                        print(f"  ✅ {table_name}: {row_count} rows deleted")
+                        
+                    except Exception as e:
+                        failed_tables.append((table_name, str(e)))
+                        print(f"  ❌ {table_name}: {str(e)[:60]}")
+                        db.session.rollback()
+                
+                # Expire all cached instances
+                db.session.expire_all()
+                
+                # Summary
+                print("\n" + "=" * 80)
+                print("📊 CLEANING SUMMARY")
+                print("=" * 80)
+                print(f"   Total Tables: {len(table_names)}")
+                print(f"   Successfully Cleaned: {len(successful_tables)}")
+                print(f"   Failed: {len(failed_tables)}")
+                print(f"   Total Rows Deleted: {total_deleted}")
+                print()
+                
+                if failed_tables:
+                    print("⚠️  Failed Tables:")
+                    for table_name, error in failed_tables[:10]:  # Show first 10
+                        print(f"   • {table_name}: {error[:80]}")
+                    print()
+                
+                print("=" * 80)
+                print("✅ DATABASE CLEANING COMPLETED!")
+                print("=" * 80)
+                print("\n⚠️  Database is now EMPTY!")
+                print("\nNext steps:")
+                print("  1. Run 'python manage.py seed-all' to recreate base data")
+                print("  2. Or run 'python manage.py migrate' if schema needs updating")
+                print()
+                
+            except Exception as e:
+                db.session.rollback()
+                raise e
+            
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print("❌ DATABASE CLEANING FAILED")
+        print("=" * 80)
+        print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     app = create_app()
     
@@ -818,6 +938,10 @@ if __name__ == "__main__":
             app,
             confirm=sys.argv[2].lower() == 'yes' if len(sys.argv) > 2 else False
         ),
+        "clean-all": lambda: clean_all_db(
+            app,
+            confirm=sys.argv[2].lower() == 'yes' if len(sys.argv) > 2 else False
+        ),
     }
     
     if len(sys.argv) < 2:
@@ -859,6 +983,11 @@ if __name__ == "__main__":
         print("                        Usage: clean-data [yes]")
         print("                        Pass 'yes' to skip confirmation prompt")
         print("                        After cleaning, run 'seed-all' to recreate tenants")
+        print("  clean-all             - ⚠️  DANGER: Delete ALL data from ENTIRE database")
+        print("                        Usage: clean-all [yes]")
+        print("                        Pass 'yes' to skip confirmation prompt")
+        print("                        Truncates all tables but preserves schema")
+        print("                        After cleaning, run 'seed-all' to recreate everything")
         print("\nSetup Commands:")
         print("  setup-spacy         - Download and setup spaCy model for resume parsing")
         sys.exit(1)

@@ -1068,58 +1068,66 @@ class InvitationService:
         
         logger.info(f"Approved invitation {invitation.id}, created candidate {candidate.id}")
         
+        # ========================================
+        # TODO: CANDIDATE APPROVAL EMAIL - CURRENTLY DISABLED
+        # Uncomment the code below to re-enable approval emails to candidates after onboarding
+        # This sends a "Congratulations! Profile approved" email to the candidate
+        # ========================================
+        
         # Send approval email to candidate via Inngest with full candidate details
-        try:
-            from app.inngest import inngest_client
-            import inngest
-            
-            candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
-            
-            # Build comprehensive candidate data for the approval email
-            candidate_data = {
-                "first_name": candidate.first_name,
-                "last_name": candidate.last_name,
-                "full_name": candidate.full_name or candidate_name,
-                "email": candidate.email,
-                "phone": candidate.phone,
-                "location": candidate.location,
-                "linkedin_url": candidate.linkedin_url,
-                "portfolio_url": candidate.portfolio_url,
-                "current_title": candidate.current_title,
-                "total_experience_years": candidate.total_experience_years,
-                "expected_salary": candidate.expected_salary,
-                "visa_type": candidate.visa_type,
-                "professional_summary": candidate.professional_summary,
-                "skills": candidate.skills or [],
-                "certifications": candidate.certifications or [],
-                "languages": candidate.languages or [],
-                "preferred_locations": candidate.preferred_locations or [],
-                "preferred_roles": candidate.preferred_roles or [],
-                "education": candidate.education or [],
-                "work_experience": candidate.work_experience or [],
-            }
-            
-            # Track which fields were edited by HR
-            hr_edited_fields = list(edited_data.keys()) if edited_data else []
-            
-            logger.info(f"[INNGEST] Attempting to send event 'email/approval' for invitation {invitation.id}")
-            
-            event_result = inngest_client.send_sync(
-                inngest.Event(
-                    name="email/approval",
-                    data={
-                        "invitation_id": invitation.id,
-                        "tenant_id": invitation.tenant_id,
-                        "to_email": invitation.email,
-                        "candidate_name": candidate_name,
-                        "candidate_data": candidate_data,
-                        "hr_edited_fields": hr_edited_fields
-                    }
-                )
-            )
-            logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
-        except Exception as e:
-            logger.error(f"Failed to send Inngest event for approval email: {e}")
+        # try:
+        #     from app.inngest import inngest_client
+        #     import inngest
+        #     
+        #     candidate_name = f"{candidate.first_name} {candidate.last_name}".strip() if candidate.first_name else "Candidate"
+        #     
+        #     # Build comprehensive candidate data for the approval email
+        #     candidate_data = {
+        #         "first_name": candidate.first_name,
+        #         "last_name": candidate.last_name,
+        #         "full_name": candidate.full_name or candidate_name,
+        #         "email": candidate.email,
+        #         "phone": candidate.phone,
+        #         "location": candidate.location,
+        #         "linkedin_url": candidate.linkedin_url,
+        #         "portfolio_url": candidate.portfolio_url,
+        #         "current_title": candidate.current_title,
+        #         "total_experience_years": candidate.total_experience_years,
+        #         "expected_salary": candidate.expected_salary,
+        #         "visa_type": candidate.visa_type,
+        #         "professional_summary": candidate.professional_summary,
+        #         "skills": candidate.skills or [],
+        #         "certifications": candidate.certifications or [],
+        #         "languages": candidate.languages or [],
+        #         "preferred_locations": candidate.preferred_locations or [],
+        #         "preferred_roles": candidate.preferred_roles or [],
+        #         "education": candidate.education or [],
+        #         "work_experience": candidate.work_experience or [],
+        #     }
+        #     
+        #     # Track which fields were edited by HR
+        #     hr_edited_fields = list(edited_data.keys()) if edited_data else []
+        #     
+        #     logger.info(f"[INNGEST] Attempting to send event 'email/approval' for invitation {invitation.id}")
+        #     
+        #     event_result = inngest_client.send_sync(
+        #         inngest.Event(
+        #             name="email/approval",
+        #             data={
+        #                 "invitation_id": invitation.id,
+        #                 "tenant_id": invitation.tenant_id,
+        #                 "to_email": invitation.email,
+        #                 "candidate_name": candidate_name,
+        #                 "candidate_data": candidate_data,
+        #                 "hr_edited_fields": hr_edited_fields
+        #             }
+        #         )
+        #     )
+        #     logger.info(f"[INNGEST] ✅ Event sent successfully for {invitation.email}. Result: {event_result}")
+        # except Exception as e:
+        #     logger.error(f"Failed to send Inngest event for approval email: {e}")
+        
+        logger.info(f"Approval email DISABLED for invitation {invitation.id} (email sending is turned off)")
         
         # Trigger async resume re-parsing
         try:
