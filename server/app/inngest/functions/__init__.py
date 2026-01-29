@@ -8,7 +8,8 @@ from .email_sending import (
     send_approval_email_workflow,
     send_rejection_email_workflow,
     send_hr_notification_workflow,
-    send_tenant_welcome_email_workflow
+    send_tenant_welcome_email_workflow,
+    send_portal_user_welcome_email_workflow
 )
 from .scheduled_tasks import (
     check_expiring_invitations_workflow,
@@ -53,6 +54,7 @@ INNGEST_FUNCTIONS = [
     send_rejection_email_workflow,
     send_hr_notification_workflow,
     send_tenant_welcome_email_workflow,
+    send_portal_user_welcome_email_workflow,
     
     # Scheduled Tasks
     check_expiring_invitations_workflow,
