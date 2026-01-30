@@ -4,13 +4,14 @@ Hybrid parsing using spaCy (fast extraction) + Gemini AI with LangChain (complex
 """
 import re
 import json
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Type
 from datetime import datetime
 import spacy
 from spacy.matcher import Matcher
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
+from langchain_core.utils.json_schema import dereference_refs
 
 from config.settings import settings  # Use global settings instance
 
@@ -87,6 +88,23 @@ class ResumeParserService:
         # Initialize matcher for pattern matching
         self.matcher = Matcher(self.nlp.vocab)
         self._setup_patterns()
+    
+    @staticmethod
+    def _generate_dereferenced_schema(model: Type[BaseModel]) -> dict:
+        """
+        Fix Gemini schema compatibility by dereferencing $ref/$defs.
+        
+        Gemini's protobuf schema doesn't support JSON Schema references.
+        LangChain strips these out incorrectly, causing empty arrays for nested models.
+        This manually inlines all nested definitions before sending to Gemini.
+        """
+        raw_schema = model.model_json_schema(ref_template="#/defs/{model}")
+        if "$defs" in raw_schema:
+            raw_schema["defs"] = raw_schema.pop("$defs")
+        
+        inlined = dereference_refs(raw_schema)
+        inlined.pop("defs", None)
+        return inlined
     
     def _configure_ai(self):
         """Configure AI provider (Gemini via LangChain or OpenAI)"""
@@ -324,26 +342,159 @@ class ResumeParserService:
     
     def _parse_with_gemini(self, text: str, context: Dict) -> Dict[str, Any]:
         """
-        Use LangChain + Gemini for structured extraction with timeout handling
+        Use LangChain + Gemini for structured extraction with dual-strategy fallback
+        """
+        print(f"[DEBUG] Calling Gemini API via LangChain...")
+        print(f"[DEBUG] Resume text length: {len(text)} characters")
+        
+        result = self._try_structured_output(text)
+        
+        if result is None or self._is_result_incomplete(result):
+            print(f"[DEBUG] Structured output failed or incomplete, trying JSON fallback...")
+            result = self._try_json_fallback(text)
+        
+        if result is None or self._is_result_incomplete(result):
+            print(f"[ERROR] Both structured output and JSON fallback failed or returned empty arrays")
+            return {}
+        
+        return result
+    
+    def _try_structured_output(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempt extraction using fixed Pydantic schema with dereferencing
         """
         try:
-            print(f"[DEBUG] Calling Gemini API via LangChain...")
-            print(f"[DEBUG] Resume text length: {len(text)} characters")
+            dereferenced_schema = self._generate_dereferenced_schema(ResumeData)
+            structured_llm = self.ai_model.with_structured_output(
+                schema=dereferenced_schema,
+                method="json_schema"
+            )
             
-            # Create structured output model
-            structured_llm = self.ai_model.with_structured_output(ResumeData)
+            prompt = self._build_extraction_prompt(text)
+            result_dict = structured_llm.invoke([HumanMessage(content=prompt)])
             
-            # Build extraction prompt
-            prompt = f"""Extract ALL information from this resume and return structured data.
+            if isinstance(result_dict, dict):
+                result = ResumeData.model_validate(result_dict)
+            else:
+                result = result_dict
+            
+            print(f"[DEBUG] Structured data extracted successfully")
+            print(f"[DEBUG] Extracted name: {result.personal_info.full_name}")
+            print(f"[DEBUG] Extracted {len(result.skills)} skills")
+            print(f"[DEBUG] Extracted {len(result.work_experience)} work experiences")
+            print(f"[DEBUG] Extracted {len(result.education)} education entries")
+            
+            return result.model_dump()
+        
+        except Exception as e:
+            print(f"[WARNING] Structured output failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _try_json_fallback(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Fallback: Ask for explicit JSON response and parse manually
+        """
+        try:
+            prompt = self._build_extraction_prompt(text) + """
+
+IMPORTANT: Return your response as a valid JSON object with this EXACT structure.
+Do NOT use markdown code blocks. Return ONLY the raw JSON object:
+
+{
+  "personal_info": {
+    "full_name": "Name",
+    "email": "email@example.com",
+    "phone": "+1234567890",
+    "location": "City, State",
+    "linkedin_url": null,
+    "portfolio_url": null
+  },
+  "professional_summary": "Summary text",
+  "current_title": "Most recent job title",
+  "total_experience_years": 10,
+  "skills": ["Skill1", "Skill2", ...],
+  "education": [
+    {"degree": "Bachelor of Science", "field_of_study": "Computer Science", "institution": "University", "graduation_year": 2015, "gpa": null}
+  ],
+  "work_experience": [
+    {
+      "title": "Job Title",
+      "company": "Company Name",
+      "location": "City, State",
+      "start_date": "2020-01",
+      "end_date": "2023-12",
+      "is_current": false,
+      "description": "Job description",
+      "duration_months": 48
+    }
+  ],
+  "certifications": [],
+  "languages": [],
+  "notice_period": null,
+  "expected_salary": null,
+  "visa_type": null,
+  "preferred_locations": []
+}"""
+            
+            response = self.ai_model.invoke([HumanMessage(content=prompt)])
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
+            if json_match:
+                json_str = json_match.group(0)
+                json_str = re.sub(r'```json\s*|\s*```', '', json_str)
+                
+                parsed_json = json.loads(json_str)
+                
+                result = ResumeData.model_validate(parsed_json)
+                print(f"[DEBUG] JSON fallback successful")
+                print(f"[DEBUG] Extracted {len(result.work_experience)} work experiences via JSON fallback")
+                print(f"[DEBUG] Extracted {len(result.education)} education entries via JSON fallback")
+                
+                return result.model_dump()
+            else:
+                print(f"[WARNING] No valid JSON found in response")
+                return None
+        
+        except Exception as e:
+            print(f"[WARNING] JSON fallback failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _is_result_incomplete(self, result: Optional[Dict[str, Any]]) -> bool:
+        """
+        Check if extraction result is incomplete (empty critical arrays when data should exist)
+        """
+        if result is None:
+            return True
+        
+        work_exp = result.get('work_experience', [])
+        education = result.get('education', [])
+        skills = result.get('skills', [])
+        
+        if len(work_exp) == 0 or len(education) == 0 or len(skills) == 0:
+            print(f"[WARNING] Result incomplete - work_exp: {len(work_exp)}, education: {len(education)}, skills: {len(skills)}")
+            return True
+        
+        return False
+    
+    def _build_extraction_prompt(self, text: str) -> str:
+        """
+        Build comprehensive extraction prompt with explicit array instructions
+        """
+        return f"""Extract ALL information from this resume and return structured data.
 
 CRITICAL INSTRUCTIONS:
 1. Extract the candidate's ACTUAL name from the very top of the resume (usually in CAPS)
 2. Extract REAL email address (must contain @) - use null if not found
 3. Extract REAL phone number (10+ digits, NOT a year like 2024) - use null if not found
 4. Extract ACTUAL city/location (e.g., "Houston, TX", "New York, NY") from contact section ONLY - use null if not found
-5. Extract ALL work experiences with COMPLETE descriptions
-6. Extract ALL education entries from EDUCATION section
-7. Extract ALL technical and soft skills
+5. Extract ALL work experiences with COMPLETE descriptions - NEVER return empty array if work history exists
+6. Extract ALL education entries from EDUCATION section - NEVER return empty array if education exists
+7. Extract ALL technical and soft skills - NEVER return empty array if skills are mentioned
 8. Use null for missing values - do NOT make up data
 
 STRICT VALIDATION RULES:
@@ -359,39 +510,18 @@ STRICT VALIDATION RULES:
 RESUME TEXT:
 {text}
 
-OUTPUT REQUIREMENTS:
-- education: Array of ALL degrees with institutions and graduation years
-- work_experience: Array of ALL jobs with title, company, dates, and full descriptions
-- skills: Array of ALL skills mentioned (programming, tools, frameworks)
-- certifications: Array of certifications if any
-"""
-            
-            # Invoke with structured output
-            result: ResumeData = structured_llm.invoke([HumanMessage(content=prompt)])
-            
-            print(f"[DEBUG] Structured data extracted successfully")
-            print(f"[DEBUG] Extracted name: {result.personal_info.full_name}")
-            print(f"[DEBUG] Extracted email: {result.personal_info.email}")
-            print(f"[DEBUG] Extracted phone: {result.personal_info.phone}")
-            print(f"[DEBUG] Extracted location: {result.personal_info.location}")
-            print(f"[DEBUG] Extracted {len(result.skills)} skills")
-            print(f"[DEBUG] Extracted {len(result.work_experience)} work experiences")
-            print(f"[DEBUG] Extracted {len(result.education)} education entries")
-            
-            # Convert Pydantic model to dict
-            return result.model_dump()
-        
-        except Exception as e:
-            error_message = str(e)
-            print(f"[ERROR] LangChain Gemini parsing error: {error_message}")
-            
-            # Check if it's a timeout error
-            if 'timeout' in error_message.lower() or 'deadline' in error_message.lower() or '504' in error_message:
-                print(f"[WARNING] Gemini API timed out. Falling back to spaCy-only parsing.")
-            
-            import traceback
-            traceback.print_exc()
-            return {}
+OUTPUT REQUIREMENTS (CRITICAL - READ CAREFULLY):
+- work_experience: MUST be an array of ALL jobs with title, company, location, dates, and full descriptions
+  * NEVER return an empty array if the resume contains work history
+  * Extract EVERY job listed in the resume
+  * Include start_date, end_date, is_current, description, duration_months
+- education: MUST be an array of ALL degrees with institutions and graduation years
+  * NEVER return an empty array if the resume contains education
+  * Extract EVERY degree listed
+- skills: MUST be an array of ALL skills mentioned (programming languages, tools, frameworks, technologies)
+  * NEVER return an empty array if the resume mentions any skills
+  * Extract EVERY skill mentioned
+- certifications: Array of certifications if any (can be empty if none listed)"""
     
     def _parse_with_openai(self, text: str, context: Dict) -> Dict[str, Any]:
         """
