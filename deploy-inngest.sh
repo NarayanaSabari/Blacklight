@@ -55,7 +55,7 @@ check_prerequisites() {
         log_info "Or install Docker Compose v2 plugin: sudo apt install -y docker-compose-plugin"
         exit 1
     fi
-    
+
     log_info "Using: $DOCKER_COMPOSE"
 
     if [ ! -f "$ENV_FILE" ]; then
@@ -69,12 +69,12 @@ start_services() {
     check_prerequisites
     log_info "Starting Inngest server..."
     $DOCKER_COMPOSE -f $COMPOSE_FILE --env-file $ENV_FILE up -d --build
-    
+
     log_info "Waiting for services to be healthy..."
     sleep 15
-    
+
     $DOCKER_COMPOSE -f $COMPOSE_FILE ps
-    
+
     log_info ""
     log_info "Inngest server started!"
     log_info "Dashboard: http://$(hostname -I | awk '{print $1}'):8288"
@@ -111,17 +111,17 @@ show_status() {
 
 sync_functions() {
     log_info "Triggering function sync..."
-    
+
     # Read backend URL from env file
     BACKEND_URL=$(grep BACKEND_URL $ENV_FILE | cut -d '=' -f2)
-    
+
     if [ -z "$BACKEND_URL" ]; then
         log_error "BACKEND_URL not found in $ENV_FILE"
         exit 1
     fi
-    
+
     log_info "Syncing with backend: $BACKEND_URL"
-    
+
     # Trigger sync by calling the backend's inngest endpoint
     curl -s -X PUT "$BACKEND_URL/api/inngest" && log_info "Sync triggered successfully" || log_error "Sync failed"
 }
