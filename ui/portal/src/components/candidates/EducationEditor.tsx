@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, GraduationCap, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ interface EducationEditorProps {
     value: Education[];
     onChange: (education: Education[]) => void;
     disabled?: boolean;
+    errors?: Record<string, string>;
 }
 
 const emptyEducation: Education = {
@@ -31,6 +32,7 @@ export function EducationEditor({
     value = [],
     onChange,
     disabled = false,
+    errors = {},
 }: EducationEditorProps) {
     const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -57,28 +59,45 @@ export function EducationEditor({
         setExpandedIndex(expandedIndex === index ? null : index);
     };
 
+    const getFieldError = (index: number, field: string): string | undefined => {
+        const errorKey = `education.${index}.${field}`;
+        return errors[errorKey] || errors[`education.${field}`] || errors['education'];
+    };
+
+    const hasFieldError = (index: number, field: string): boolean => {
+        return !!getFieldError(index, field);
+    };
+
+    const hasEntryErrors = (index: number): boolean => {
+        const entryFields = ['degree', 'institution', 'graduation_year', 'gpa'];
+        return entryFields.some(field => hasFieldError(index, field));
+    };
+
     return (
         <div className="space-y-4">
             {value.map((edu, index) => (
                 <Card
                     key={index}
-                    className="border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                    className={`border-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${hasEntryErrors(index) ? 'border-red-600' : 'border-black'}`}
                 >
                     <CardHeader
-                        className="cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors"
+                        className={`cursor-pointer hover:bg-slate-100 transition-colors ${hasEntryErrors(index) ? 'bg-red-50' : 'bg-slate-50'}`}
                         onClick={() => toggleExpand(index)}
                     >
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <GraduationCap className="h-4 w-4 text-slate-600 flex-shrink-0" />
+                                <GraduationCap className={`h-4 w-4 flex-shrink-0 ${hasEntryErrors(index) ? 'text-red-600' : 'text-slate-600'}`} />
                                 <div className="min-w-0 flex-1">
-                                    <CardTitle className="text-base truncate">
+                                    <CardTitle className={`text-base truncate ${hasEntryErrors(index) ? 'text-red-700' : ''}`}>
                                         {edu.degree || 'New Degree'}
                                     </CardTitle>
                                     {edu.institution && (
                                         <p className="text-sm text-slate-600 truncate">{edu.institution}</p>
                                     )}
                                 </div>
+                                {hasEntryErrors(index) && !expandedIndex && (
+                                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                                 {!disabled && (
@@ -115,8 +134,11 @@ export function EducationEditor({
                                         onChange={(e) => updateEducation(index, 'degree', e.target.value)}
                                         placeholder="e.g. Bachelor of Science"
                                         disabled={disabled}
-                                        className="border-2 border-black"
+                                        className={`border-2 ${hasFieldError(index, 'degree') ? 'border-red-600 bg-red-50' : 'border-black'}`}
                                     />
+                                    {hasFieldError(index, 'degree') && (
+                                        <p className="text-red-600 text-xs mt-1">{getFieldError(index, 'degree')}</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -139,8 +161,11 @@ export function EducationEditor({
                                         onChange={(e) => updateEducation(index, 'institution', e.target.value)}
                                         placeholder="e.g. Massachusetts Institute of Technology"
                                         disabled={disabled}
-                                        className="border-2 border-black"
+                                        className={`border-2 ${hasFieldError(index, 'institution') ? 'border-red-600 bg-red-50' : 'border-black'}`}
                                     />
+                                    {hasFieldError(index, 'institution') && (
+                                        <p className="text-red-600 text-xs mt-1">{getFieldError(index, 'institution')}</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -160,8 +185,11 @@ export function EducationEditor({
                                         }
                                         placeholder="e.g. 2020"
                                         disabled={disabled}
-                                        className="border-2 border-black"
+                                        className={`border-2 ${hasFieldError(index, 'graduation_year') ? 'border-red-600 bg-red-50' : 'border-black'}`}
                                     />
+                                    {hasFieldError(index, 'graduation_year') && (
+                                        <p className="text-red-600 text-xs mt-1">{getFieldError(index, 'graduation_year')}</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -182,8 +210,11 @@ export function EducationEditor({
                                         }
                                         placeholder="e.g. 3.8"
                                         disabled={disabled}
-                                        className="border-2 border-black"
+                                        className={`border-2 ${hasFieldError(index, 'gpa') ? 'border-red-600 bg-red-50' : 'border-black'}`}
                                     />
+                                    {hasFieldError(index, 'gpa') && (
+                                        <p className="text-red-600 text-xs mt-1">{getFieldError(index, 'gpa')}</p>
+                                    )}
                                 </div>
                             </div>
                         </CardContent>

@@ -1266,6 +1266,7 @@ export function CandidateDetailPage() {
                       gpa: edu.gpa ?? undefined,
                     }))}
                     onChange={(edu) => updateField('education', edu)}
+                    errors={validationErrors}
                   />
                 ) : (
                   <div className="space-y-4">
