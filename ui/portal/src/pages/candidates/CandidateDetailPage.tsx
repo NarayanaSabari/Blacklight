@@ -653,13 +653,30 @@ export function CandidateDetailPage() {
 
       // Map Zod issues to a simple field -> message map
       result.error.issues.forEach((issue) => {
-        if (issue.path[0]) {
-          errors[issue.path[0].toString()] = issue.message;
-        }
+        const fieldPath = issue.path.join('.');
+        const fieldName = issue.path[0]?.toString() || 'unknown';
+        errors[fieldName] = issue.message;
+        
+        console.error(`[Validation Error] Field: ${fieldPath}, Message: ${issue.message}`, {
+          value: issue.path.reduce((obj, key) => obj?.[key as keyof typeof obj], formData as any),
+          path: issue.path,
+          code: issue.code,
+        });
       });
 
       setValidationErrors(errors);
-      toast.error('Please fix validation errors before saving');
+      
+      const errorList = Object.entries(errors)
+        .map(([field, message]) => `• ${field}: ${message}`)
+        .join('\n');
+      
+      console.error('[Validation Failed] All errors:', errors);
+      console.error('[Validation Failed] Form data:', formData);
+      
+      toast.error(
+        `Validation failed for ${Object.keys(errors).length} field(s):\n${errorList}`,
+        { duration: 10000 }
+      );
       return;
     }
 
@@ -987,6 +1004,22 @@ export function CandidateDetailPage() {
           </div>
         </div>
       </div>
+
+      {isEditMode && Object.keys(validationErrors).length > 0 && (
+        <Alert variant="destructive" className="border-2 border-red-600 shadow-[4px_4px_0px_0px_rgba(220,38,38,1)]">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="font-bold mb-2">Please fix the following validation errors:</div>
+            <ul className="list-disc list-inside space-y-1">
+              {Object.entries(validationErrors).map(([field, message]) => (
+                <li key={field} className="text-sm">
+                  <span className="font-semibold">{field.replace(/_/g, ' ')}:</span> {message}
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
