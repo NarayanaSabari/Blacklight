@@ -3,6 +3,7 @@ Text extraction utilities for resume files (PDF, DOCX)
 """
 import os
 import tempfile
+import traceback
 from typing import Optional, Dict, Any
 import fitz  # PyMuPDF
 from docx import Document
@@ -31,17 +32,43 @@ class TextExtractor:
         Returns:
             Dictionary with extracted text and metadata
         """
+        logger.debug(f"[TextExtractor] Starting extraction from file: {file_path}")
+        
         if not os.path.exists(file_path):
+            logger.error(f"[TextExtractor] File not found: {file_path}")
             raise FileNotFoundError(f"File not found: {file_path}")
         
         file_ext = os.path.splitext(file_path)[1].lower()
+        file_size = os.path.getsize(file_path)
         
-        if file_ext == '.pdf':
-            return TextExtractor.extract_from_pdf(file_path)
-        elif file_ext in ['.docx', '.doc']:
-            return TextExtractor.extract_from_docx_with_conversion(file_path)
-        else:
-            raise ValueError(f"Unsupported file type: {file_ext}")
+        logger.debug(f"[TextExtractor] File details - extension: {file_ext}, size: {file_size} bytes ({file_size / 1024:.2f} KB)")
+        
+        result = None
+        try:
+            if file_ext == '.pdf':
+                logger.debug(f"[TextExtractor] Detected PDF file, routing to extract_from_pdf")
+                result = TextExtractor.extract_from_pdf(file_path)
+            elif file_ext in ['.docx', '.doc']:
+                logger.debug(f"[TextExtractor] Detected DOCX/DOC file, routing to extract_from_docx_with_conversion")
+                result = TextExtractor.extract_from_docx_with_conversion(file_path)
+            else:
+                logger.error(f"[TextExtractor] Unsupported file type: {file_ext}")
+                raise ValueError(f"Unsupported file type: {file_ext}")
+            
+            # Log final result summary
+            text_length = len(result.get('text', '')) if result else 0
+            method_used = result.get('method', 'unknown') if result else 'none'
+            page_count = result.get('page_count', 0) if result else 0
+            
+            logger.debug(f"[TextExtractor] Extraction complete - method: {method_used}, "
+                        f"text_length: {text_length} chars, pages: {page_count}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"[TextExtractor] Extraction failed for {file_path}: {str(e)}")
+            logger.debug(f"[TextExtractor] Full traceback:\n{traceback.format_exc()}")
+            raise
     
     @staticmethod
     def extract_from_pdf(file_path: str) -> Dict[str, Any]:
@@ -61,6 +88,8 @@ class TextExtractor:
                 'metadata': dict
             }
         """
+        logger.debug(f"[TextExtractor] Starting PDF extraction: {file_path}")
+        
         result = {
             'text': '',
             'page_count': 0,
@@ -69,11 +98,19 @@ class TextExtractor:
             'metadata': {}
         }
         
+        # Method 1: PyMuPDF (primary)
+        logger.debug(f"[TextExtractor] Attempting extraction with PyMuPDF")
         try:
-            # Method 1: PyMuPDF (primary)
             text = TextExtractor._extract_with_pymupdf(file_path)
+            text_length = len(text) if text else 0
+            stripped_length = len(text.strip()) if text else 0
+            
+            logger.debug(f"[TextExtractor] PyMuPDF extraction - raw_chars: {text_length}, "
+                        f"stripped_chars: {stripped_length}")
             
             if text and len(text.strip()) > 50:  # Valid extraction
+                logger.debug(f"[TextExtractor] PyMuPDF extraction successful (>{50} chars)")
+                
                 doc = fitz.open(file_path)
                 result['text'] = text
                 result['page_count'] = len(doc)
@@ -87,14 +124,25 @@ class TextExtractor:
                         break
                 
                 doc.close()
+                
+                logger.debug(f"[TextExtractor] PyMuPDF result - pages: {result['page_count']}, "
+                            f"has_images: {result['has_images']}, text_chars: {len(result['text'])}")
                 return result
+            else:
+                logger.debug(f"[TextExtractor] PyMuPDF extraction insufficient "
+                            f"({stripped_length} chars, need >50)")
         
         except Exception as e:
-            print(f"PyMuPDF extraction failed: {e}")
+            logger.warning(f"[TextExtractor] PyMuPDF extraction failed: {str(e)}")
+            logger.debug(f"[TextExtractor] PyMuPDF traceback:\n{traceback.format_exc()}")
         
+        # Method 2: pdfplumber (fallback)
+        logger.debug(f"[TextExtractor] Falling back to pdfplumber extraction")
         try:
-            # Method 2: pdfplumber (fallback)
             text = TextExtractor._extract_with_pdfplumber(file_path)
+            text_length = len(text) if text else 0
+            
+            logger.debug(f"[TextExtractor] pdfplumber extraction - chars: {text_length}")
             
             if text:
                 with pdfplumber.open(file_path) as pdf:
@@ -103,10 +151,16 @@ class TextExtractor:
                     result['method'] = 'pdfplumber'
                     result['metadata'] = pdf.metadata
                 
+                logger.debug(f"[TextExtractor] pdfplumber extraction successful - "
+                            f"pages: {result['page_count']}, text_chars: {len(result['text'])}")
                 return result
+            else:
+                logger.warning(f"[TextExtractor] pdfplumber extraction returned empty text")
+                raise RuntimeError(f"Failed to extract text from PDF: {file_path}")
         
         except Exception as e:
-            print(f"pdfplumber extraction failed: {e}")
+            logger.error(f"[TextExtractor] pdfplumber extraction failed: {str(e)}")
+            logger.debug(f"[TextExtractor] pdfplumber traceback:\n{traceback.format_exc()}")
             raise RuntimeError(f"Failed to extract text from PDF: {file_path}")
     
     @staticmethod
@@ -236,33 +290,58 @@ class TextExtractor:
                 'metadata': dict
             }
         """
+        logger.debug(f"[TextExtractor] Starting DOCX extraction with conversion: {file_path}")
+        
+        file_ext = os.path.splitext(file_path)[1].lower()
+        file_size = os.path.getsize(file_path)
+        
+        logger.debug(f"[TextExtractor] DOCX file details - extension: {file_ext}, size: {file_size} bytes ({file_size / 1024:.2f} KB)")
+        
         if not is_docx_conversion_enabled():
-            logger.info("DOCX conversion not available, using direct extraction")
-            return TextExtractor.extract_from_docx(file_path)
+            logger.info("[TextExtractor] DOCX conversion not available, using direct extraction")
+            result = TextExtractor.extract_from_docx(file_path)
+            result['method'] = f"{result['method']}_direct_fallback"
+            logger.debug(f"[TextExtractor] Direct DOCX extraction complete - method: {result['method']}, "
+                        f"text_chars: {len(result.get('text', ''))}")
+            return result
         
         temp_pdf_path = None
         try:
-            logger.info(f"Converting DOCX to PDF for better extraction: {file_path}")
+            logger.info(f"[TextExtractor] Converting DOCX to PDF for better extraction: {file_path}")
             temp_pdf_path = DocxToPdfConverter.convert_to_temp_pdf(file_path)
+            temp_pdf_size = os.path.getsize(temp_pdf_path)
             
+            logger.debug(f"[TextExtractor] DOCX->PDF conversion successful - temp file: {temp_pdf_path}, "
+                        f"size: {temp_pdf_size} bytes")
+            
+            logger.debug(f"[TextExtractor] Extracting text from converted PDF")
             result = TextExtractor.extract_from_pdf(temp_pdf_path)
             result['method'] = f"{result['method']}_from_converted_docx"
             result['source_format'] = 'docx'
             
-            logger.info(f"Successfully extracted text via DOCX->PDF conversion (method: {result['method']})")
+            logger.info(f"[TextExtractor] Successfully extracted text via DOCX->PDF conversion "
+                       f"(method: {result['method']}, text_chars: {len(result.get('text', ''))})")
             return result
         
         except Exception as e:
-            logger.warning(f"DOCX to PDF conversion failed: {e}. Falling back to direct DOCX extraction")
-            return TextExtractor.extract_from_docx(file_path)
+            logger.warning(f"[TextExtractor] DOCX to PDF conversion failed: {str(e)}. Falling back to direct DOCX extraction")
+            logger.debug(f"[TextExtractor] Conversion failure traceback:\n{traceback.format_exc()}")
+            
+            logger.debug(f"[TextExtractor] Attempting direct DOCX extraction as fallback")
+            result = TextExtractor.extract_from_docx(file_path)
+            result['method'] = f"{result['method']}_direct_fallback"
+            
+            logger.debug(f"[TextExtractor] Direct DOCX fallback extraction complete - method: {result['method']}, "
+                        f"text_chars: {len(result.get('text', ''))}")
+            return result
         
         finally:
             if temp_pdf_path and os.path.exists(temp_pdf_path):
                 try:
                     os.remove(temp_pdf_path)
-                    logger.debug(f"Cleaned up temporary PDF: {temp_pdf_path}")
+                    logger.debug(f"[TextExtractor] Cleaned up temporary PDF: {temp_pdf_path}")
                 except Exception as cleanup_error:
-                    logger.warning(f"Failed to cleanup temp PDF {temp_pdf_path}: {cleanup_error}")
+                    logger.warning(f"[TextExtractor] Failed to cleanup temp PDF {temp_pdf_path}: {cleanup_error}")
     
     @staticmethod
     def clean_text(text: str) -> str:

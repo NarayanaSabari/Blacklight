@@ -113,9 +113,10 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
                 pass
         
         if not resume_text:
-            logger.error(f"[PARSE-RESUME] Failed to extract text from resume {resume_id}")
-            _update_resume_status(resume_id, 'failed', error="Could not extract text")
-            return {"status": "error", "message": "Could not extract resume text"}
+            error_msg = f"Failed to extract text from resume {resume_id}. Check logs for details - possible causes: file not found, empty file, unsupported format, or extraction error."
+            logger.error(f"[PARSE-RESUME] {error_msg}")
+            _update_resume_status(resume_id, 'failed', error="Could not extract text - check file format and content")
+            return {"status": "error", "message": "Could not extract resume text", "details": error_msg, "resume_id": resume_id}
         
         # Step 4: Run AI parsing
         parsed_data = await ctx.step.run(
@@ -407,10 +408,11 @@ async def _parse_resume_impl(ctx, resume: CandidateResume, candidate_id: int, te
                 pass
         
         if not resume_text:
-            logger.error(f"[PARSE-RESUME] Failed to extract text from resume {resume_id}")
-            _update_resume_status(resume_id, 'failed', error="Could not extract text")
+            error_msg = f"Failed to extract text from resume {resume_id}. Check logs for details - possible causes: file not found, empty file, unsupported format, or extraction error."
+            logger.error(f"[PARSE-RESUME] {error_msg}")
+            _update_resume_status(resume_id, 'failed', error="Could not extract text - check file format and content")
             _update_candidate_status(candidate_id, "pending_review")
-            return {"status": "error", "message": "Could not extract resume text"}
+            return {"status": "error", "message": "Could not extract resume text", "details": error_msg, "resume_id": resume_id}
         
         # AI parsing
         parsed_data = await ctx.step.run(
@@ -655,15 +657,53 @@ def _fetch_candidate(candidate_id: int, tenant_id: int) -> Optional[Candidate]:
 def _extract_resume_text(file_path: str) -> str:
     """Extract text from resume file"""
     if not file_path:
+        logger.error("[PARSE-RESUME] No file path provided for text extraction")
         return ""
     
+    import os
+    
+    # Debug file info
     try:
+        if not os.path.exists(file_path):
+            logger.error(f"[PARSE-RESUME] File does not exist: {file_path}")
+            return ""
+        
+        file_size = os.path.getsize(file_path)
+        logger.info(f"[PARSE-RESUME] File exists: {file_path}, Size: {file_size} bytes")
+        
+        if file_size == 0:
+            logger.error(f"[PARSE-RESUME] File is empty (0 bytes): {file_path}")
+            return ""
+        
+        if file_size > 50 * 1024 * 1024:  # 50MB limit
+            logger.warning(f"[PARSE-RESUME] Large file detected ({file_size} bytes): {file_path}")
+        
+    except Exception as e:
+        logger.error(f"[PARSE-RESUME] Error checking file info: {e}")
+    
+    try:
+        logger.info(f"[PARSE-RESUME] Starting text extraction from: {file_path}")
         result = TextExtractor.extract_from_file(file_path)
+        
+        if not result:
+            logger.error(f"[PARSE-RESUME] TextExtractor returned None for: {file_path}")
+            return ""
+        
         text = result.get('text', '')
-        logger.info(f"[PARSE-RESUME] Extracted {len(text)} characters from resume")
+        file_type = result.get('file_type', 'unknown')
+        pages = result.get('pages', 'unknown')
+        
+        logger.info(f"[PARSE-RESUME] Extracted {len(text)} characters from {file_type} file (pages: {pages}): {file_path}")
+        
+        if not text or len(text.strip()) == 0:
+            logger.error(f"[PARSE-RESUME] Extracted text is empty for: {file_path}")
+            return ""
+        
         return text
     except Exception as e:
-        logger.error(f"[PARSE-RESUME] Text extraction failed: {e}")
+        logger.error(f"[PARSE-RESUME] Text extraction failed for {file_path}: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"[PARSE-RESUME] Traceback: {traceback.format_exc()}")
         return ""
 
 
