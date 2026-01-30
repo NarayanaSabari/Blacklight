@@ -13,7 +13,7 @@ export const educationSchema = z.object({
     field_of_study: z.string().optional().nullable(),
     institution: z.string().min(1, 'Institution is required'),
     graduation_year: z.number().int().min(1950).max(2050).optional().nullable(),
-    gpa: z.number().min(0).max(4.0).optional().nullable(),
+    gpa: z.number().min(0).optional().nullable(),
 });
 
 // Work Experience schema
