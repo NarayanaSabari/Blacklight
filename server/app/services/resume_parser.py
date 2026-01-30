@@ -107,14 +107,14 @@ class ResumeParserService:
             # Get model from settings
             model_name = settings.gemini_model
             
-            # Initialize LangChain ChatGoogleGenerativeAI with timeout and retry config
+            # Initialize LangChain ChatGoogleGenerativeAI with extended timeout for large documents
             self.ai_model = ChatGoogleGenerativeAI(
                 model=model_name,
                 google_api_key=api_key,
                 temperature=0.1,
                 max_output_tokens=8192,
-                timeout=60,  # 60 second timeout
-                max_retries=2,  # Retry up to 2 times
+                timeout=180,
+                max_retries=2,
             )
             print(f"[DEBUG] Configured LangChain Gemini model: {model_name}")
         elif self.ai_provider == 'openai':
@@ -330,12 +330,6 @@ class ResumeParserService:
             print(f"[DEBUG] Calling Gemini API via LangChain...")
             print(f"[DEBUG] Resume text length: {len(text)} characters")
             
-            # Limit text to prevent timeouts
-            max_text_length = 6000  # 6000 chars for reliable processing
-            truncated_text = text[:max_text_length]
-            if len(text) > max_text_length:
-                print(f"[DEBUG] Resume text truncated from {len(text)} to {max_text_length} characters")
-            
             # Create structured output model
             structured_llm = self.ai_model.with_structured_output(ResumeData)
             
@@ -363,7 +357,7 @@ STRICT VALIDATION RULES:
   * If no city/state is found in contact section, use null
 
 RESUME TEXT:
-{truncated_text}
+{text}
 
 OUTPUT REQUIREMENTS:
 - education: Array of ALL degrees with institutions and graduation years
