@@ -8,6 +8,7 @@ Supports both:
 """
 import logging
 import os
+import traceback
 from typing import Dict, Any, Optional, List
 
 import inngest
@@ -23,6 +24,86 @@ from app.services.file_storage import FileStorageService
 from app.services.candidate_resume_service import CandidateResumeService
 
 logger = logging.getLogger(__name__)
+
+
+def _handle_workflow_error(
+    error: Exception,
+    resume_id: Optional[int],
+    candidate_id: Optional[int],
+    workflow_name: str
+) -> Dict[str, Any]:
+    """
+    Central error handler for resume parsing workflows.
+    
+    Logs the full error with traceback, updates resume status to 'failed',
+    updates candidate status to 'error', rolls back any pending transactions,
+    and returns a proper error response.
+    
+    Args:
+        error: The exception that occurred
+        resume_id: The ID of the resume being processed (if available)
+        candidate_id: The ID of the candidate being processed (if available)
+        workflow_name: Name of the workflow for logging context
+    
+    Returns:
+        Error response dict with status, error details, and IDs
+    """
+    # Build comprehensive error message
+    error_msg = str(error)
+    error_type = type(error).__name__
+    full_traceback = traceback.format_exc()
+    
+    # Log full error with traceback
+    logger.error(
+        f"[{workflow_name}] Workflow FAILED for resume_id={resume_id}, "
+        f"candidate_id={candidate_id}: {error_type}: {error_msg}\n"
+        f"Full traceback:\n{full_traceback}"
+    )
+    
+    # Rollback any pending database transactions
+    try:
+        db.session.rollback()
+        logger.info(f"[{workflow_name}] Database session rolled back successfully")
+    except Exception as rollback_error:
+        logger.error(
+            f"[{workflow_name}] Failed to rollback database session: {rollback_error}"
+        )
+    
+    # Update resume status to 'failed' with error details
+    if resume_id is not None:
+        try:
+            _update_resume_status(
+                resume_id=resume_id,
+                status='failed',
+                error=f"{error_type}: {error_msg}"
+            )
+            logger.info(f"[{workflow_name}] Resume {resume_id} status updated to 'failed'")
+        except Exception as resume_update_error:
+            logger.error(
+                f"[{workflow_name}] Failed to update resume {resume_id} status: {resume_update_error}"
+            )
+    
+    # Update candidate status to 'error'
+    if candidate_id is not None:
+        try:
+            _update_candidate_status(candidate_id, "error")
+            logger.info(f"[{workflow_name}] Candidate {candidate_id} status updated to 'error'")
+        except Exception as candidate_update_error:
+            logger.error(
+                f"[{workflow_name}] Failed to update candidate {candidate_id} status: {candidate_update_error}"
+            )
+    
+    # Return proper error response
+    error_response = {
+        "status": "error",
+        "error_type": error_type,
+        "error": error_msg,
+        "resume_id": resume_id,
+        "candidate_id": candidate_id,
+        "workflow": workflow_name
+    }
+    
+    return error_response
 
 
 # =============================================================================
@@ -60,6 +141,7 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
     resume_id = event_data.get("resume_id")
     tenant_id = event_data.get("tenant_id")
     update_profile = event_data.get("update_candidate_profile", True)
+    candidate_id = None  # Initialize for error handling
     
     logger.info(f"[PARSE-RESUME] Starting parsing for resume {resume_id}")
     
@@ -201,17 +283,42 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
         }
     
     except Exception as e:
-        logger.error(f"[PARSE-RESUME] Workflow failed for resume {resume_id}: {e}", exc_info=True)
-        try:
-            _update_resume_status(resume_id, 'failed', error=str(e))
-        except Exception:
-            pass
+        # Comprehensive error handling
+        error_type = type(e).__name__
+        error_msg = str(e)
+        import traceback
+        full_traceback = traceback.format_exc()
         
-        return {
-            "status": "error",
-            "resume_id": resume_id,
-            "error": str(e)
-        }
+        logger.error(
+            f"[PARSE-RESUME] Workflow FAILED for resume_id={resume_id}, "
+            f"candidate_id={candidate_id}: {error_type}: {error_msg}\n"
+            f"Full traceback:\n{full_traceback}"
+        )
+        
+        # Rollback database session
+        try:
+            db.session.rollback()
+            logger.info(f"[PARSE-RESUME] Database session rolled back")
+        except Exception as rollback_err:
+            logger.error(f"[PARSE-RESUME] Failed to rollback: {rollback_err}")
+        
+        # Update resume status to failed
+        try:
+            _update_resume_status(resume_id, 'failed', error=f"{error_type}: {error_msg}")
+            logger.info(f"[PARSE-RESUME] Resume {resume_id} status set to 'failed'")
+        except Exception as status_err:
+            logger.error(f"[PARSE-RESUME] Failed to update resume status: {status_err}")
+        
+        # Update candidate status to error
+        if candidate_id:
+            try:
+                _update_candidate_status(candidate_id, "error")
+                logger.info(f"[PARSE-RESUME] Candidate {candidate_id} status set to 'error'")
+            except Exception as cand_err:
+                logger.error(f"[PARSE-RESUME] Failed to update candidate status: {cand_err}")
+        
+        # Re-raise to mark Inngest function as failed
+        raise
 
 
 @inngest_client.create_function(
@@ -313,12 +420,33 @@ async def polish_candidate_resume_workflow(ctx) -> dict:
         }
     
     except Exception as e:
-        logger.error(f"[POLISH-RESUME] Error for resume {resume_id}: {e}", exc_info=True)
-        return {
-            "status": "error",
-            "resume_id": resume_id,
-            "error": str(e)
-        }
+        # Comprehensive error handling
+        error_type = type(e).__name__
+        error_msg = str(e)
+        import traceback
+        full_traceback = traceback.format_exc()
+        
+        logger.error(
+            f"[POLISH-RESUME] Workflow FAILED for resume_id={resume_id}: "
+            f"{error_type}: {error_msg}\nFull traceback:\n{full_traceback}"
+        )
+        
+        # Rollback database session
+        try:
+            db.session.rollback()
+            logger.info(f"[POLISH-RESUME] Database session rolled back")
+        except Exception as rollback_err:
+            logger.error(f"[POLISH-RESUME] Failed to rollback: {rollback_err}")
+        
+        # Update resume status to failed
+        try:
+            _update_resume_status(resume_id, 'failed', error=f"Polishing failed: {error_type}: {error_msg}")
+            logger.info(f"[POLISH-RESUME] Resume {resume_id} status set to 'failed'")
+        except Exception as status_err:
+            logger.error(f"[POLISH-RESUME] Failed to update resume status: {status_err}")
+        
+        # Re-raise to mark Inngest function as failed
+        raise
 
 
 # =============================================================================
