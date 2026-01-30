@@ -366,20 +366,26 @@ class ResumeParserService:
         try:
             dereferenced_schema = self._generate_dereferenced_schema(ResumeData)
             structured_llm = self.ai_model.with_structured_output(
-                schema=dereferenced_schema,
-                method="json_schema"
+                schema=dereferenced_schema
             )
             
             prompt = self._build_extraction_prompt(text)
-            result_dict = structured_llm.invoke([HumanMessage(content=prompt)])
+            result = structured_llm.invoke([HumanMessage(content=prompt)])
             
-            if isinstance(result_dict, dict):
-                result = ResumeData.model_validate(result_dict)
-            else:
-                result = result_dict
+            # Handle different return types from structured output
+            if isinstance(result, list):
+                print(f"[WARNING] Structured output returned list instead of object, using first item")
+                result = result[0] if result else None
+            
+            if result is None:
+                print(f"[WARNING] Structured output returned None")
+                return None
+            
+            if isinstance(result, dict):
+                result = ResumeData.model_validate(result)
             
             print(f"[DEBUG] Structured data extracted successfully")
-            print(f"[DEBUG] Extracted name: {result.personal_info.full_name}")
+            print(f"[DEBUG] Extracted name: {result.personal_info.full_name if hasattr(result, 'personal_info') else 'N/A'}")
             print(f"[DEBUG] Extracted {len(result.skills)} skills")
             print(f"[DEBUG] Extracted {len(result.work_experience)} work experiences")
             print(f"[DEBUG] Extracted {len(result.education)} education entries")
@@ -466,7 +472,8 @@ Do NOT use markdown code blocks. Return ONLY the raw JSON object:
     
     def _is_result_incomplete(self, result: Optional[Dict[str, Any]]) -> bool:
         """
-        Check if extraction result is incomplete (empty critical arrays when data should exist)
+        Check if extraction result is incomplete (empty ALL critical arrays)
+        Only fail if work_experience AND education AND skills are all empty
         """
         if result is None:
             return True
@@ -475,10 +482,13 @@ Do NOT use markdown code blocks. Return ONLY the raw JSON object:
         education = result.get('education', [])
         skills = result.get('skills', [])
         
-        if len(work_exp) == 0 or len(education) == 0 or len(skills) == 0:
-            print(f"[WARNING] Result incomplete - work_exp: {len(work_exp)}, education: {len(education)}, skills: {len(skills)}")
+        # Only consider incomplete if ALL three are empty
+        # Some resumes may not have education or may list skills differently
+        if len(work_exp) == 0 and len(education) == 0 and len(skills) == 0:
+            print(f"[WARNING] Result incomplete - all critical arrays empty: work_exp={len(work_exp)}, education={len(education)}, skills={len(skills)}")
             return True
         
+        print(f"[DEBUG] Result has data - work_exp: {len(work_exp)}, education: {len(education)}, skills: {len(skills)}")
         return False
     
     def _build_extraction_prompt(self, text: str) -> str:

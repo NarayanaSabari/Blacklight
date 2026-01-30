@@ -16,7 +16,7 @@ from app.inngest import inngest_client
 from app import db
 from app.models.candidate import Candidate
 from app.models.candidate_resume import CandidateResume
-from app.services.resume_parser import ResumeParserService
+from app.services.simple_resume_parser import SimpleResumeParserService
 from app.services.resume_polishing_service import ResumePolishingService
 from app.utils.text_extractor import TextExtractor
 from app.services.file_storage import FileStorageService
@@ -710,7 +710,7 @@ def _extract_resume_text(file_path: str) -> str:
 def _parse_with_ai(text: str, filename: str) -> Dict[str, Any]:
     """Run AI parsing on resume text"""
     try:
-        parser = ResumeParserService()
+        parser = SimpleResumeParserService()
         file_type = 'pdf' if filename.endswith('.pdf') else 'docx'
         parsed_data = parser.parse_resume(text, file_type)
         logger.info(f"[PARSE-RESUME] AI parsing completed successfully")
