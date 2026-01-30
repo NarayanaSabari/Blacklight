@@ -74,6 +74,7 @@ CRITICAL RULES:
 8. Extract ALL work experiences with company names, titles, dates, and locations
 9. Extract ALL education entries
 10. Extract ALL skills mentioned in the resume
+11. certifications must be an array of simple strings like ["AWS Certified", "Scrum Master"] - NOT objects with name/year fields
 
 RESUME TEXT:
 {text}
@@ -138,6 +139,22 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
                 print(f"[DEBUG] Work experiences: {len(parsed.get('work_experience', []))}")
                 print(f"[DEBUG] Education: {len(parsed.get('education', []))}")
                 print(f"[DEBUG] Skills: {len(parsed.get('skills', []))}")
+                
+                # Ensure certifications are strings, not dicts
+                certs = parsed.get('certifications', [])
+                if isinstance(certs, list):
+                    cert_strings = []
+                    for cert in certs:
+                        if isinstance(cert, dict):
+                            cert_name = cert.get('name', '')
+                            if cert_name:
+                                cert_strings.append(cert_name)
+                            else:
+                                cert_strings.append(str(cert))
+                        elif isinstance(cert, str):
+                            cert_strings.append(cert)
+                    parsed['certifications'] = cert_strings
+                
                 return parsed
             except json.JSONDecodeError as e:
                 print(f"[ERROR] JSON parsing failed: {e}")

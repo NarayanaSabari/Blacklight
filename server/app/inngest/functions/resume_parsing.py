@@ -792,7 +792,24 @@ def _update_candidate_with_parsed_data(candidate_id: int, parsed_data: Dict[str,
         if parsed_data.get('skills'):
             candidate.skills = parsed_data['skills']
         if parsed_data.get('certifications'):
-            candidate.certifications = parsed_data['certifications']
+            # Convert certification dicts to strings if needed
+            certs = parsed_data['certifications']
+            if isinstance(certs, list):
+                cert_strings = []
+                for cert in certs:
+                    if isinstance(cert, dict):
+                        # Extract name from dict, or create string representation
+                        cert_name = cert.get('name', '')
+                        if cert_name:
+                            cert_strings.append(cert_name)
+                        else:
+                            # Fallback: convert whole dict to string
+                            cert_strings.append(str(cert))
+                    elif isinstance(cert, str):
+                        cert_strings.append(cert)
+                candidate.certifications = cert_strings
+            else:
+                candidate.certifications = certs
         if parsed_data.get('languages'):
             candidate.languages = parsed_data.get('languages', [])
         if parsed_data.get('preferred_locations'):
