@@ -112,6 +112,12 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
             except Exception:
                 pass
         
+        # Debug: Log what we got from text extraction
+        if resume_text:
+            logger.info(f"[PARSE-RESUME] Text extraction SUCCESS - Length: {len(resume_text)} chars, Preview: {resume_text[:200]}...")
+        else:
+            logger.error(f"[PARSE-RESUME] Text extraction FAILED - resume_text is None or empty")
+        
         if not resume_text:
             error_msg = f"Failed to extract text from resume {resume_id}. Check logs for details - possible causes: file not found, empty file, unsupported format, or extraction error."
             logger.error(f"[PARSE-RESUME] {error_msg}")
@@ -119,10 +125,23 @@ async def parse_candidate_resume_workflow(ctx) -> dict:
             return {"status": "error", "message": "Could not extract resume text", "details": error_msg, "resume_id": resume_id}
         
         # Step 4: Run AI parsing
+        logger.info(f"[PARSE-RESUME] Starting AI parsing for resume {resume_id}, text length: {len(resume_text)}")
         parsed_data = await ctx.step.run(
             "ai-parse-resume",
             lambda: _parse_with_ai(resume_text, resume.original_filename or "resume.pdf")
         )
+        
+        # Debug: Log what AI returned
+        if parsed_data:
+            has_data = any([
+                parsed_data.get('full_name'),
+                parsed_data.get('email'),
+                parsed_data.get('work_experience'),
+                parsed_data.get('skills')
+            ])
+            logger.info(f"[PARSE-RESUME] AI parsing result: has_data={has_data}, full_name={parsed_data.get('full_name')}, email={parsed_data.get('email')}, work_exp_count={len(parsed_data.get('work_experience', []))}, skills_count={len(parsed_data.get('skills', []))}")
+        else:
+            logger.error(f"[PARSE-RESUME] AI parsing returned None/empty for resume {resume_id}")
         
         if not parsed_data:
             logger.warning(f"[PARSE-RESUME] AI parsing returned empty for resume {resume_id}")
