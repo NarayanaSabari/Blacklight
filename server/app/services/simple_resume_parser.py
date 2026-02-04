@@ -133,33 +133,42 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             try:
                 parsed = json.loads(json_str)
                 print(f"[DEBUG] Successfully parsed JSON")
-                print(f"[DEBUG] Name: {parsed.get('full_name')}")
-                print(f"[DEBUG] Email: {parsed.get('email')}")
-                print(f"[DEBUG] Phone: {parsed.get('phone')}")
-                print(f"[DEBUG] Work experiences: {len(parsed.get('work_experience', []))}")
-                print(f"[DEBUG] Education: {len(parsed.get('education', []))}")
-                print(f"[DEBUG] Skills: {len(parsed.get('skills', []))}")
-                
-                # Ensure certifications are strings, not dicts
-                certs = parsed.get('certifications', [])
-                if isinstance(certs, list):
-                    cert_strings = []
-                    for cert in certs:
-                        if isinstance(cert, dict):
-                            cert_name = cert.get('name', '')
-                            if cert_name:
-                                cert_strings.append(cert_name)
-                            else:
-                                cert_strings.append(str(cert))
-                        elif isinstance(cert, str):
-                            cert_strings.append(cert)
-                    parsed['certifications'] = cert_strings
-                
-                return parsed
             except json.JSONDecodeError as e:
-                print(f"[ERROR] JSON parsing failed: {e}")
-                print(f"[ERROR] JSON string: {json_str[:500]}...")
-                return self._empty_result()
+                print(f"[WARNING] JSON parsing failed, attempting repair: {e}")
+                print(f"[DEBUG] JSON string preview: {json_str[:500]}...")
+                
+                # Attempt to repair common JSON issues
+                parsed = self._repair_and_parse_json(json_str)
+                
+                if parsed is None:
+                    print(f"[ERROR] JSON repair failed, returning empty result")
+                    return self._empty_result()
+                
+                print(f"[DEBUG] Successfully repaired and parsed JSON")
+            
+            print(f"[DEBUG] Name: {parsed.get('full_name')}")
+            print(f"[DEBUG] Email: {parsed.get('email')}")
+            print(f"[DEBUG] Phone: {parsed.get('phone')}")
+            print(f"[DEBUG] Work experiences: {len(parsed.get('work_experience', []))}")
+            print(f"[DEBUG] Education: {len(parsed.get('education', []))}")
+            print(f"[DEBUG] Skills: {len(parsed.get('skills', []))}")
+            
+            # Ensure certifications are strings, not dicts
+            certs = parsed.get('certifications', [])
+            if isinstance(certs, list):
+                cert_strings = []
+                for cert in certs:
+                    if isinstance(cert, dict):
+                        cert_name = cert.get('name', '')
+                        if cert_name:
+                            cert_strings.append(cert_name)
+                        else:
+                            cert_strings.append(str(cert))
+                    elif isinstance(cert, str):
+                        cert_strings.append(cert)
+                parsed['certifications'] = cert_strings
+            
+            return parsed
                 
         except Exception as e:
             print(f"[ERROR] Extraction failed: {e}")
@@ -186,3 +195,156 @@ Return ONLY a JSON object in this exact format (no markdown, no explanation):
             'visa_type': None,
             'preferred_locations': [],
         }
+    
+    def _repair_and_parse_json(self, json_str: str) -> Optional[Dict[str, Any]]:
+        """
+        Attempt to repair malformed JSON from AI responses.
+        Common issues: truncated responses, missing brackets, unescaped quotes
+        """
+        # Try multiple repair strategies
+        strategies = [
+            self._fix_truncated_json,
+            self._fix_unescaped_quotes,
+            self._fix_trailing_commas,
+            self._extract_partial_json,
+        ]
+        
+        for strategy in strategies:
+            try:
+                repaired = strategy(json_str)
+                if repaired:
+                    result = json.loads(repaired)
+                    print(f"[DEBUG] JSON repair successful with {strategy.__name__}")
+                    return result
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"[DEBUG] Repair strategy {strategy.__name__} failed: {e}")
+                continue
+        
+        return None
+    
+    def _fix_truncated_json(self, json_str: str) -> Optional[str]:
+        """Fix JSON that was truncated mid-response"""
+        # Count opening/closing brackets
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+        
+        # Add missing closing brackets
+        repaired = json_str.rstrip()
+        
+        # Remove trailing incomplete elements
+        # Look for incomplete strings or objects
+        if repaired.endswith(','):
+            repaired = repaired[:-1]
+        
+        # Close any unclosed strings
+        quote_count = repaired.count('"') - repaired.count('\\"')
+        if quote_count % 2 == 1:
+            repaired += '"'
+        
+        # Add missing brackets in correct order (most recent first)
+        while close_brackets < open_brackets:
+            repaired += ']'
+            close_brackets += 1
+        
+        while close_braces < open_braces:
+            repaired += '}'
+            close_braces += 1
+        
+        return repaired
+    
+    def _fix_unescaped_quotes(self, json_str: str) -> Optional[str]:
+        """Fix unescaped quotes inside string values"""
+        # This is a simple heuristic - look for patterns like ": "value with "quotes" inside"
+        # Replace unescaped internal quotes
+        
+        # Pattern: find strings and escape internal quotes
+        result = []
+        in_string = False
+        escape_next = False
+        
+        for i, char in enumerate(json_str):
+            if escape_next:
+                result.append(char)
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                escape_next = True
+                result.append(char)
+                continue
+            
+            if char == '"':
+                # Check if this quote is a string delimiter or internal
+                if not in_string:
+                    in_string = True
+                    result.append(char)
+                else:
+                    # Look ahead to see if this closes the string
+                    remaining = json_str[i+1:i+10].lstrip()
+                    if remaining and remaining[0] in ':,}]':
+                        in_string = False
+                        result.append(char)
+                    elif remaining.startswith('\n'):
+                        in_string = False
+                        result.append(char)
+                    else:
+                        # This might be an internal quote - escape it
+                        result.append('\\"')
+            else:
+                result.append(char)
+        
+        return ''.join(result)
+    
+    def _fix_trailing_commas(self, json_str: str) -> Optional[str]:
+        """Remove trailing commas before closing brackets"""
+        # Remove trailing commas before ] or }
+        repaired = re.sub(r',\s*([}\]])', r'\1', json_str)
+        return repaired
+    
+    def _extract_partial_json(self, json_str: str) -> Optional[str]:
+        """
+        Extract the main fields even if the full JSON is broken.
+        Creates a valid JSON with at least the basic contact info.
+        """
+        result = self._empty_result()
+        
+        # Extract basic fields using regex
+        patterns = {
+            'full_name': r'"full_name"\s*:\s*"([^"]*)"',
+            'email': r'"email"\s*:\s*"([^"]*)"',
+            'phone': r'"phone"\s*:\s*"([^"]*)"',
+            'location': r'"location"\s*:\s*"([^"]*)"',
+            'linkedin_url': r'"linkedin_url"\s*:\s*"([^"]*)"',
+            'current_title': r'"current_title"\s*:\s*"([^"]*)"',
+        }
+        
+        for field, pattern in patterns.items():
+            match = re.search(pattern, json_str)
+            if match:
+                result[field] = match.group(1)
+                print(f"[DEBUG] Extracted {field}: {result[field][:50] if result[field] else None}...")
+        
+        # Extract professional summary (can be multiline)
+        summary_match = re.search(
+            r'"professional_summary"\s*:\s*"((?:[^"\\]|\\.)*)"',
+            json_str,
+            re.DOTALL
+        )
+        if summary_match:
+            result['professional_summary'] = summary_match.group(1).replace('\\n', '\n')
+        
+        # Extract skills array
+        skills_match = re.search(r'"skills"\s*:\s*\[((?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*)\]', json_str)
+        if skills_match:
+            skills_str = skills_match.group(1)
+            # Extract individual skill strings
+            skill_items = re.findall(r'"([^"]+)"', skills_str)
+            result['skills'] = skill_items[:50]  # Limit to 50 skills
+        
+        # Only return if we got at least a name or email
+        if result.get('full_name') or result.get('email'):
+            return json.dumps(result)
+        
+        return None
