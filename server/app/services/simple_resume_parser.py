@@ -80,7 +80,7 @@ class SimpleResumeParserService:
         # Add metadata
         elapsed = time.time() - start_time
         result['parsed_at'] = datetime.utcnow().isoformat()
-        result['parser_version'] = '2.2.0'  # Full work experience descriptions
+        result['parser_version'] = '2.3.0'  # Verbatim extraction - no modifications
         result['ai_provider'] = self.ai_provider
         result['parsing_duration_seconds'] = round(elapsed, 2)
         result['original_text_length'] = original_length
@@ -202,30 +202,39 @@ class SimpleResumeParserService:
         try:
             prompt = f"""Extract information from this resume and return it as a JSON object.
 
-CRITICAL RULES:
-1. Read the resume text carefully - extract actual information, don't guess
-2. Name should be from the top of the resume (usually in format "First Last" or "First Middle Last")
-3. Phone should be an actual phone number with 10+ digits (not a year like "2023" or "2024")
-4. Email must contain @ symbol and be a valid email format
-5. Location should be a city/state or city/country (not a skill or tool name)
-6. Current title is the job title right below the name or the most recent job
-7. Professional summary: write a concise 3-4 sentence professional overview of the candidate
-8. Extract ALL work experiences with company names, titles, dates, and locations
-9. Extract ALL education entries
-10. Extract ALL skills mentioned in the resume
-11. certifications must be an array of simple strings like ["AWS Certified", "Scrum Master"] - NOT objects with name/year fields
+CRITICAL EXTRACTION RULES - READ CAREFULLY:
 
-IMPORTANT FOR WORK EXPERIENCE DESCRIPTIONS:
-- Include ALL bullet points and responsibilities from the resume for each job
-- Preserve the full detail of each responsibility - do NOT summarize or truncate
-- Each description should be a comprehensive list of all duties mentioned
-- Use "\\n" to separate bullet points within the description string
-- This is critical for recruiter review - they need the full details
+**VERBATIM EXTRACTION - NO MODIFICATIONS:**
+- Extract ALL text EXACTLY as written in the resume - do NOT rewrite, rephrase, summarize, or improve grammar
+- Copy text word-for-word from the resume into the JSON fields
+- Do NOT combine, merge, or condense any bullet points
+- Do NOT fix spelling, grammar, or punctuation errors - keep them as-is
+- The goal is structured data extraction, NOT content improvement
+
+**FIELD-SPECIFIC RULES:**
+1. full_name: Extract from top of resume (usually "First Last" or "First Middle Last")
+2. phone: Must be actual phone number with 10+ digits (NOT a year like "2023")
+3. email: Must contain @ symbol
+4. location: City/state or city/country from resume header
+5. current_title: Job title from resume header or most recent position
+6. professional_summary: Copy the summary/objective paragraph EXACTLY as written - do NOT rewrite it
+7. skills: Extract ALL skills mentioned anywhere in resume
+8. certifications: Array of strings like ["AWS Certified", "Scrum Master"] - NOT objects
+
+**WORK EXPERIENCE - MOST IMPORTANT:**
+- For each job's "description" field: Copy EVERY bullet point and responsibility EXACTLY as written
+- Include ALL bullet points - do NOT skip, summarize, or combine any
+- Preserve the EXACT wording from the resume - no paraphrasing
+- Use "\\n" to separate each bullet point
+- If there are 15 bullet points, include all 15 verbatim
+
+**EDUCATION:**
+- Extract degree, field, institution, year exactly as shown
 
 RESUME TEXT:
 {text}
 
-Return ONLY a valid JSON object in this exact format (no markdown, no explanation, no trailing commas):
+Return ONLY valid JSON (no markdown, no explanation, no trailing commas):
 {{
   "full_name": "",
   "email": "",
@@ -233,7 +242,7 @@ Return ONLY a valid JSON object in this exact format (no markdown, no explanatio
   "location": "",
   "linkedin_url": "",
   "current_title": "",
-  "professional_summary": "",
+  "professional_summary": "Copy EXACTLY as written in resume",
   "total_experience_years": null,
   "skills": [],
   "education": [
@@ -253,7 +262,7 @@ Return ONLY a valid JSON object in this exact format (no markdown, no explanatio
       "start_date": "",
       "end_date": "",
       "is_current": false,
-      "description": "Include ALL bullet points and responsibilities here, separated by newlines. Do NOT summarize.",
+      "description": "Copy ALL bullet points EXACTLY as written, separated by \\n",
       "duration_months": null
     }}
   ],
