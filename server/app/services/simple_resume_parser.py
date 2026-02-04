@@ -47,7 +47,7 @@ class SimpleResumeParserService:
                 model=model_name,
                 google_api_key=api_key,
                 temperature=0.1,
-                max_output_tokens=8192,
+                max_output_tokens=16384,  # Increased for full work experience descriptions
                 timeout=180,
                 max_retries=2,
             )
@@ -80,7 +80,7 @@ class SimpleResumeParserService:
         # Add metadata
         elapsed = time.time() - start_time
         result['parsed_at'] = datetime.utcnow().isoformat()
-        result['parser_version'] = '2.1.0'
+        result['parser_version'] = '2.2.0'  # Full work experience descriptions
         result['ai_provider'] = self.ai_provider
         result['parsing_duration_seconds'] = round(elapsed, 2)
         result['original_text_length'] = original_length
@@ -209,12 +209,18 @@ CRITICAL RULES:
 4. Email must contain @ symbol and be a valid email format
 5. Location should be a city/state or city/country (not a skill or tool name)
 6. Current title is the job title right below the name or the most recent job
-7. Professional summary is the paragraph describing the candidate
+7. Professional summary: write a concise 3-4 sentence professional overview of the candidate
 8. Extract ALL work experiences with company names, titles, dates, and locations
 9. Extract ALL education entries
 10. Extract ALL skills mentioned in the resume
 11. certifications must be an array of simple strings like ["AWS Certified", "Scrum Master"] - NOT objects with name/year fields
-12. Keep JSON response concise - for descriptions, use 2-3 sentences max
+
+IMPORTANT FOR WORK EXPERIENCE DESCRIPTIONS:
+- Include ALL bullet points and responsibilities from the resume for each job
+- Preserve the full detail of each responsibility - do NOT summarize or truncate
+- Each description should be a comprehensive list of all duties mentioned
+- Use "\\n" to separate bullet points within the description string
+- This is critical for recruiter review - they need the full details
 
 RESUME TEXT:
 {text}
@@ -247,7 +253,7 @@ Return ONLY a valid JSON object in this exact format (no markdown, no explanatio
       "start_date": "",
       "end_date": "",
       "is_current": false,
-      "description": "",
+      "description": "Include ALL bullet points and responsibilities here, separated by newlines. Do NOT summarize.",
       "duration_months": null
     }}
   ],
