@@ -5,14 +5,10 @@
 # Or manually via workflow_dispatch
 #
 # Required GitHub Secrets:
-#   - GCP_PROJECT_ID: Your GCP project ID
-#   - GCP_SA_KEY: Service account JSON key with permissions:
-#       - roles/run.admin
-#       - roles/storage.admin
-#       - roles/artifactregistry.writer
-#       - roles/iam.serviceAccountUser
+#   - GCP_PROJECT_ID: Your GCP project ID (mvp-blacklight)
 #
-# Environment variables are set in Cloud Run console, not here.
+# Uses Workload Identity Federation for authentication (no JSON keys needed)
+# Environment variables are configured inline for the Cloud Run service.
 # ============================================================================
 
 name: Deploy Backend
@@ -31,6 +27,11 @@ env:
   SERVICE_NAME: blacklight-backend
   REPOSITORY: blacklight
 
+# Required for Workload Identity Federation
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   deploy:
     name: Build and Deploy Backend
@@ -40,11 +41,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Google Auth
+      - name: Google Auth (Workload Identity)
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          workload_identity_provider: 'projects/642824921295/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-deployer@mvp-blacklight.iam.gserviceaccount.com'
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -74,6 +76,37 @@ jobs:
             --image=${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --platform=managed \
+            --allow-unauthenticated \
+            --memory=1Gi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=5 \
+            --timeout=300 \
+            --concurrency=80 \
+            --service-account=blacklight-backend@mvp-blacklight.iam.gserviceaccount.com \
+            --vpc-connector=projects/mvp-blacklight/locations/asia-south1/connectors/blacklight-connector \
+            --vpc-egress=private-ranges-only \
+            --set-env-vars="ENVIRONMENT=production" \
+            --set-env-vars="SECRET_KEY=XSc09mzBcPcnNP0duiinO-HLmMMMtxhPcybjGK_vL5k" \
+            --set-env-vars="DATABASE_URL=postgresql://postgres:3FXymdgrCsyb5vImv8lBtc7W@10.84.0.3:5432/postgres" \
+            --set-env-vars="STORAGE_BACKEND=gcs" \
+            --set-env-vars="GCS_BUCKET_NAME=mvp-blacklight-files" \
+            --set-env-vars="GCS_PROJECT_ID=mvp-blacklight" \
+            --set-env-vars="SMTP_ENABLED=true" \
+            --set-env-vars="SMTP_HOST=smtp.gmail.com" \
+            --set-env-vars="SMTP_PORT=587" \
+            --set-env-vars="SMTP_USERNAME=sabariokg@gmail.com" \
+            --set-env-vars="SMTP_PASSWORD=rkmz ndbd wtbb nhjb" \
+            --set-env-vars="SMTP_USE_TLS=true" \
+            --set-env-vars="SMTP_FROM_EMAIL=sabariokg@gmail.com" \
+            --set-env-vars="SMTP_FROM_NAME=BlackLight Company HR" \
+            --set-env-vars="AI_PARSING_PROVIDER=gemini" \
+            --set-env-vars="GOOGLE_API_KEY=AIzaSyB0m6adlYxoNc34NSsFHjTAqwsGRZYCUHI" \
+            --set-env-vars="GEMINI_MODEL=gemini-2.5-flash" \
+            --set-env-vars="GEMINI_EMBEDDING_MODEL=gemini-embedding-001" \
+            --set-env-vars="GEMINI_EMBEDDING_DIMENSION=768" \
+            --set-env-vars="CORS_ORIGINS=*" \
+            --set-env-vars="LOG_LEVEL=info" \
             --quiet
 
       - name: Show deployed URL

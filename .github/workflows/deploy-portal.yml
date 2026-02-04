@@ -5,10 +5,10 @@
 # Or manually via workflow_dispatch
 #
 # Required GitHub Secrets:
-#   - GCP_PROJECT_ID: Your GCP project ID
-#   - GCP_SA_KEY: Service account JSON key
+#   - GCP_PROJECT_ID: Your GCP project ID (mvp-blacklight)
 #   - BACKEND_URL: Backend Cloud Run URL (e.g., https://blacklight-backend-xxx-el.a.run.app)
 #
+# Uses Workload Identity Federation for authentication (no JSON keys needed)
 # ============================================================================
 
 name: Deploy Portal
@@ -27,6 +27,11 @@ env:
   SERVICE_NAME: blacklight-portal
   REPOSITORY: blacklight
 
+# Required for Workload Identity Federation
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   deploy:
     name: Build and Deploy Portal
@@ -36,11 +41,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Google Auth
+      - name: Google Auth (Workload Identity)
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          workload_identity_provider: 'projects/642824921295/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-deployer@mvp-blacklight.iam.gserviceaccount.com'
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
