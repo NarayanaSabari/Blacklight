@@ -4,15 +4,20 @@ Text extraction utilities for resume files (PDF, DOCX)
 import os
 import tempfile
 import traceback
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import fitz  # PyMuPDF
 from docx import Document
 import pdfplumber
 import logging
+import unicodedata
 
 from app.utils.docx_converter import DocxToPdfConverter, is_docx_conversion_enabled
 
 logger = logging.getLogger(__name__)
+
+# Magic bytes for file type validation
+PDF_MAGIC = b'%PDF'
+DOCX_MAGIC = b'PK'  # DOCX is ZIP-based
 
 
 class TextExtractor:
@@ -20,6 +25,65 @@ class TextExtractor:
     Extract text from PDF and DOCX files
     Supports multiple extraction methods for better accuracy
     """
+    
+    @staticmethod
+    def validate_file(file_path: str) -> Tuple[bool, Optional[str]]:
+        """
+        Validate file integrity using magic bytes.
+        
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not os.path.exists(file_path):
+            return False, f"File not found: {file_path}"
+        
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            return False, "File is empty (0 bytes)"
+        
+        if file_size < 10:
+            return False, f"File too small ({file_size} bytes) - likely corrupted"
+        
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        try:
+            with open(file_path, 'rb') as f:
+                header = f.read(8)
+            
+            if file_ext == '.pdf':
+                if not header.startswith(PDF_MAGIC):
+                    return False, "Invalid PDF file - does not start with %PDF header"
+            elif file_ext in ['.docx', '.doc']:
+                if not header.startswith(DOCX_MAGIC):
+                    return False, "Invalid DOCX file - not a valid ZIP/DOCX format"
+            
+            return True, None
+            
+        except Exception as e:
+            return False, f"Cannot read file: {str(e)}"
+    
+    @staticmethod
+    def clean_extracted_text(text: str) -> str:
+        """
+        Clean and normalize extracted text.
+        Handles unicode issues and removes problematic characters.
+        """
+        if not text:
+            return ""
+        
+        # Unicode normalization
+        text = unicodedata.normalize('NFKD', text)
+        
+        # Remove null bytes and control characters (except newlines/tabs)
+        text = ''.join(
+            char for char in text 
+            if char == '\n' or char == '\t' or (ord(char) >= 32 and ord(char) != 127)
+        )
+        
+        # Encode/decode to handle any remaining encoding issues
+        text = text.encode('utf-8', errors='ignore').decode('utf-8')
+        
+        return text
     
     @staticmethod
     def extract_from_file(file_path: str) -> Dict[str, Any]:
@@ -34,9 +98,11 @@ class TextExtractor:
         """
         logger.debug(f"[TextExtractor] Starting extraction from file: {file_path}")
         
-        if not os.path.exists(file_path):
-            logger.error(f"[TextExtractor] File not found: {file_path}")
-            raise FileNotFoundError(f"File not found: {file_path}")
+        # Validate file first
+        is_valid, error_msg = TextExtractor.validate_file(file_path)
+        if not is_valid:
+            logger.error(f"[TextExtractor] File validation failed: {error_msg}")
+            raise ValueError(error_msg)
         
         file_ext = os.path.splitext(file_path)[1].lower()
         file_size = os.path.getsize(file_path)
@@ -59,6 +125,11 @@ class TextExtractor:
             text_length = len(result.get('text', '')) if result else 0
             method_used = result.get('method', 'unknown') if result else 'none'
             page_count = result.get('page_count', 0) if result else 0
+            
+            # Clean the extracted text
+            if result and result.get('text'):
+                result['text'] = TextExtractor.clean_extracted_text(result['text'])
+                text_length = len(result['text'])
             
             logger.debug(f"[TextExtractor] Extraction complete - method: {method_used}, "
                         f"text_length: {text_length} chars, pages: {page_count}")
@@ -111,19 +182,18 @@ class TextExtractor:
             if text and len(text.strip()) > 50:  # Valid extraction
                 logger.debug(f"[TextExtractor] PyMuPDF extraction successful (>{50} chars)")
                 
-                doc = fitz.open(file_path)
-                result['text'] = text
-                result['page_count'] = len(doc)
-                result['method'] = 'pymupdf'
-                result['metadata'] = doc.metadata
-                
-                # Check for images
-                for page in doc:
-                    if page.get_images():
-                        result['has_images'] = True
-                        break
-                
-                doc.close()
+                # Use context manager to prevent resource leaks
+                with fitz.open(file_path) as doc:
+                    result['text'] = text
+                    result['page_count'] = len(doc)
+                    result['method'] = 'pymupdf'
+                    result['metadata'] = dict(doc.metadata) if doc.metadata else {}
+                    
+                    # Check for images
+                    for page in doc:
+                        if page.get_images():
+                            result['has_images'] = True
+                            break
                 
                 logger.debug(f"[TextExtractor] PyMuPDF result - pages: {result['page_count']}, "
                             f"has_images: {result['has_images']}, text_chars: {len(result['text'])}")
@@ -167,16 +237,20 @@ class TextExtractor:
     def _extract_with_pymupdf(file_path: str) -> str:
         """
         Extract text using PyMuPDF (fast method)
+        Uses context manager to prevent resource leaks
         """
-        doc = fitz.open(file_path)
         text_parts = []
         
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            text = page.get_text()
-            text_parts.append(text)
+        with fitz.open(file_path) as doc:
+            # Check for encrypted/password-protected PDF
+            if doc.is_encrypted:
+                raise ValueError("Password-protected PDF cannot be processed")
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+                text_parts.append(text)
         
-        doc.close()
         return '\n\n'.join(text_parts)
     
     @staticmethod
@@ -369,21 +443,22 @@ class TextExtractor:
     def extract_metadata(file_path: str) -> Dict[str, Any]:
         """
         Extract only metadata from file (no text extraction)
+        Uses context managers to prevent resource leaks
         """
         file_ext = os.path.splitext(file_path)[1].lower()
         
         if file_ext == '.pdf':
             try:
-                doc = fitz.open(file_path)
-                metadata = {
-                    'page_count': len(doc),
-                    'metadata': doc.metadata,
-                    'file_size': os.path.getsize(file_path),
-                }
-                doc.close()
-                return metadata
+                with fitz.open(file_path) as doc:
+                    metadata = {
+                        'page_count': len(doc),
+                        'metadata': dict(doc.metadata) if doc.metadata else {},
+                        'file_size': os.path.getsize(file_path),
+                        'is_encrypted': doc.is_encrypted,
+                    }
+                    return metadata
             except Exception as e:
-                print(f"Failed to extract PDF metadata: {e}")
+                logger.warning(f"Failed to extract PDF metadata: {e}")
                 return {'error': str(e)}
         
         elif file_ext in ['.docx', '.doc']:
@@ -401,7 +476,7 @@ class TextExtractor:
                     'file_size': os.path.getsize(file_path),
                 }
             except Exception as e:
-                print(f"Failed to extract DOCX metadata: {e}")
+                logger.warning(f"Failed to extract DOCX metadata: {e}")
                 return {'error': str(e)}
         
         return {'error': f'Unsupported file type: {file_ext}'}
