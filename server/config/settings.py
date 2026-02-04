@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     gcs_project_id: str = Field(default="", env="GCS_PROJECT_ID")
     gcs_credentials_path: str = Field(default="", env="GCS_CREDENTIALS_PATH")  # Path to service account JSON
     gcs_credentials_json: str = Field(default="", env="GCS_CREDENTIALS_JSON")  # Or inline JSON string
+    gcs_credentials_base64: str = Field(default="", env="GCS_CREDENTIALS_BASE64")  # Base64-encoded JSON (for CI/CD)
     
     # File Upload Limits
     max_file_size_mb: int = Field(default=10, env="MAX_FILE_SIZE_MB")
