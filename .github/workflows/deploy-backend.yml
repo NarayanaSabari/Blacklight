@@ -107,6 +107,8 @@ jobs:
             --set-env-vars="GEMINI_EMBEDDING_DIMENSION=768" \
             --set-env-vars="CORS_ORIGINS=*" \
             --set-env-vars="LOG_LEVEL=info" \
+            --set-env-vars="REDIS_URL=redis://10.101.79.27:6379/0" \
+            --set-env-vars="REDIS_CACHE_URL=redis://10.101.79.27:6379/1" \
             --quiet
 
       - name: Show deployed URL
