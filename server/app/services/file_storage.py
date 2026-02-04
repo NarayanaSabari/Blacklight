@@ -7,7 +7,6 @@ Handles file uploads, storage, and retrieval with support for:
 import os
 import uuid
 import json
-import base64
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -88,26 +87,16 @@ class FileStorageService:
         # Initialize credentials (try multiple sources in order of priority)
         credentials = None
         
-        # Priority 1: Base64-encoded JSON (for CI/CD pipelines)
-        if settings.gcs_credentials_base64:
-            try:
-                decoded_json = base64.b64decode(settings.gcs_credentials_base64).decode('utf-8')
-                creds_dict = json.loads(decoded_json)
-                credentials = service_account.Credentials.from_service_account_info(creds_dict)
-                logger.info("GCS credentials loaded from base64-encoded JSON")
-            except Exception as e:
-                logger.error(f"Invalid GCS_CREDENTIALS_BASE64: {e}")
-                raise ValueError("Invalid GCS credentials base64")
-        # Priority 2: Inline JSON credentials
-        elif settings.gcs_credentials_json:
+        # Priority 1: Inline JSON credentials (from GCS_CREDENTIALS_JSON env var)
+        if settings.gcs_credentials_json:
             try:
                 creds_dict = json.loads(settings.gcs_credentials_json)
                 credentials = service_account.Credentials.from_service_account_info(creds_dict)
-                logger.info("GCS credentials loaded from inline JSON")
+                logger.info("GCS credentials loaded from inline JSON (GCS_CREDENTIALS_JSON)")
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid GCS_CREDENTIALS_JSON: {e}")
                 raise ValueError("Invalid GCS credentials JSON")
-        # Priority 3: Credentials file path
+        # Priority 2: Credentials file path
         elif settings.gcs_credentials_path:
             if not os.path.exists(settings.gcs_credentials_path):
                 raise FileNotFoundError(f"GCS credentials file not found: {settings.gcs_credentials_path}")

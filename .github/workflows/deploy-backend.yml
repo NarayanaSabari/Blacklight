@@ -17,6 +17,7 @@
 #   - MICROSOFT_OAUTH_CLIENT_SECRET: Microsoft/Azure OAuth client secret
 #   - INNGEST_EVENT_KEY: Inngest event key
 #   - INNGEST_SIGNING_KEY: Inngest signing key
+#   - GCS_CREDENTIALS_JSON: Service account JSON for GCS signed URLs
 #
 # Uses Workload Identity Federation for authentication (no JSON keys needed)
 # Environment variables are configured inline for the Cloud Run service.
@@ -139,7 +140,7 @@ jobs:
             --set-env-vars="MICROSOFT_OAUTH_CLIENT_SECRET=${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}" \
             --set-env-vars="MICROSOFT_OAUTH_REDIRECT_URI=https://blacklight-backend-bi6eujysoa-el.a.run.app/api/integrations/email/callback/outlook" \
             --set-env-vars="MICROSOFT_OAUTH_TENANT=common" \
-            --set-env-vars="GCS_CREDENTIALS_BASE64=${{ secrets.GCS_CREDENTIALS_BASE64 }}" \
+            --set-env-vars="GCS_CREDENTIALS_JSON=${{ secrets.GCS_CREDENTIALS_JSON }}" \
             --quiet
 
       - name: Show deployed URL
