@@ -82,6 +82,20 @@ jobs:
           docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }}
           docker push ${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPOSITORY }}/backend:latest
 
+      - name: Create GCS credentials secret in Secret Manager
+        run: |
+          # Check if secret exists, create or update
+          if gcloud secrets describe gcs-credentials --project=${{ secrets.GCP_PROJECT_ID }} 2>/dev/null; then
+            echo '${{ secrets.GCS_CREDENTIALS_JSON }}' | gcloud secrets versions add gcs-credentials --data-file=- --project=${{ secrets.GCP_PROJECT_ID }}
+          else
+            echo '${{ secrets.GCS_CREDENTIALS_JSON }}' | gcloud secrets create gcs-credentials --data-file=- --project=${{ secrets.GCP_PROJECT_ID }}
+            # Grant Cloud Run service account access to the secret
+            gcloud secrets add-iam-policy-binding gcs-credentials \
+              --member="serviceAccount:blacklight-backend@mvp-blacklight.iam.gserviceaccount.com" \
+              --role="roles/secretmanager.secretAccessor" \
+              --project=${{ secrets.GCP_PROJECT_ID }}
+          fi
+
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
@@ -140,7 +154,7 @@ jobs:
             --set-env-vars="MICROSOFT_OAUTH_CLIENT_SECRET=${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}" \
             --set-env-vars="MICROSOFT_OAUTH_REDIRECT_URI=https://blacklight-backend-bi6eujysoa-el.a.run.app/api/integrations/email/callback/outlook" \
             --set-env-vars="MICROSOFT_OAUTH_TENANT=common" \
-            --set-env-vars="GCS_CREDENTIALS_JSON=${{ secrets.GCS_CREDENTIALS_JSON }}" \
+            --set-secrets="GCS_CREDENTIALS_JSON=gcs-credentials:latest" \
             --quiet
 
       - name: Show deployed URL
