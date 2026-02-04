@@ -6,6 +6,17 @@
 #
 # Required GitHub Secrets:
 #   - GCP_PROJECT_ID: Your GCP project ID (mvp-blacklight)
+#   - SECRET_KEY: Flask secret key
+#   - DATABASE_URL: PostgreSQL connection string
+#   - SMTP_PASSWORD: Gmail app password
+#   - GOOGLE_API_KEY: Gemini API key for AI parsing
+#   - TOKEN_ENCRYPTION_KEY: Encryption key for OAuth tokens
+#   - GOOGLE_OAUTH_CLIENT_ID: Google OAuth client ID
+#   - GOOGLE_OAUTH_CLIENT_SECRET: Google OAuth client secret
+#   - MICROSOFT_OAUTH_CLIENT_ID: Microsoft/Azure OAuth client ID
+#   - MICROSOFT_OAUTH_CLIENT_SECRET: Microsoft/Azure OAuth client secret
+#   - INNGEST_EVENT_KEY: Inngest event key
+#   - INNGEST_SIGNING_KEY: Inngest signing key
 #
 # Uses Workload Identity Federation for authentication (no JSON keys needed)
 # Environment variables are configured inline for the Cloud Run service.
@@ -87,8 +98,9 @@ jobs:
             --vpc-connector=projects/mvp-blacklight/locations/asia-south1/connectors/blacklight-connector \
             --vpc-egress=private-ranges-only \
             --set-env-vars="ENVIRONMENT=production" \
-            --set-env-vars="SECRET_KEY=XSc09mzBcPcnNP0duiinO-HLmMMMtxhPcybjGK_vL5k" \
-            --set-env-vars="DATABASE_URL=postgresql://postgres:3FXymdgrCsyb5vImv8lBtc7W@10.84.0.3:5432/postgres" \
+            --set-env-vars="SECRET_KEY=${{ secrets.SECRET_KEY }}" \
+            --set-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }}" \
+            --set-env-vars="FRONTEND_BASE_URL=https://blacklight-portal-bi6eujysoa-el.a.run.app/portal" \
             --set-env-vars="STORAGE_BACKEND=gcs" \
             --set-env-vars="GCS_BUCKET_NAME=mvp-blacklight-files" \
             --set-env-vars="GCS_PROJECT_ID=mvp-blacklight" \
@@ -96,12 +108,12 @@ jobs:
             --set-env-vars="SMTP_HOST=smtp.gmail.com" \
             --set-env-vars="SMTP_PORT=587" \
             --set-env-vars="SMTP_USERNAME=sabariokg@gmail.com" \
-            --set-env-vars="SMTP_PASSWORD=rkmz ndbd wtbb nhjb" \
+            --set-env-vars="SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}" \
             --set-env-vars="SMTP_USE_TLS=true" \
             --set-env-vars="SMTP_FROM_EMAIL=sabariokg@gmail.com" \
             --set-env-vars="SMTP_FROM_NAME=BlackLight Company HR" \
             --set-env-vars="AI_PARSING_PROVIDER=gemini" \
-            --set-env-vars="GOOGLE_API_KEY=AIzaSyB0m6adlYxoNc34NSsFHjTAqwsGRZYCUHI" \
+            --set-env-vars="GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" \
             --set-env-vars="GEMINI_MODEL=gemini-2.5-flash" \
             --set-env-vars="GEMINI_EMBEDDING_MODEL=gemini-embedding-001" \
             --set-env-vars="GEMINI_EMBEDDING_DIMENSION=768" \
@@ -109,9 +121,27 @@ jobs:
             --set-env-vars="LOG_LEVEL=info" \
             --set-env-vars="REDIS_URL=redis://10.101.79.27:6379/0" \
             --set-env-vars="REDIS_CACHE_URL=redis://10.101.79.27:6379/1" \
+            --set-env-vars="INNGEST_DEV=false" \
+            --set-env-vars="INNGEST_BASE_URL=http://34.47.179.106:8288" \
+            --set-env-vars="INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}" \
+            --set-env-vars="INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}" \
+            --set-env-vars="INNGEST_SERVE_HOST=https://blacklight-backend-bi6eujysoa-el.a.run.app" \
+            --set-env-vars="INNGEST_SERVE_PATH=/api/inngest" \
+            --set-env-vars="TOKEN_ENCRYPTION_KEY=${{ secrets.TOKEN_ENCRYPTION_KEY }}" \
+            --set-env-vars="GOOGLE_OAUTH_CLIENT_ID=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
+            --set-env-vars="GOOGLE_OAUTH_CLIENT_SECRET=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
+            --set-env-vars="GOOGLE_OAUTH_REDIRECT_URI=https://blacklight-backend-bi6eujysoa-el.a.run.app/api/integrations/email/callback/gmail" \
+            --set-env-vars="EMAIL_SYNC_ENABLED=true" \
+            --set-env-vars="EMAIL_SYNC_FREQUENCY_MINUTES=15" \
+            --set-env-vars="EMAIL_SYNC_INITIAL_LOOKBACK_DAYS=10" \
+            --set-env-vars="EMAIL_SYNC_MAX_EMAILS_PER_PAGE=100" \
+            --set-env-vars="MICROSOFT_OAUTH_CLIENT_ID=${{ secrets.MICROSOFT_OAUTH_CLIENT_ID }}" \
+            --set-env-vars="MICROSOFT_OAUTH_CLIENT_SECRET=${{ secrets.MICROSOFT_OAUTH_CLIENT_SECRET }}" \
+            --set-env-vars="MICROSOFT_OAUTH_REDIRECT_URI=https://blacklight-backend-bi6eujysoa-el.a.run.app/api/integrations/email/callback/outlook" \
+            --set-env-vars="MICROSOFT_OAUTH_TENANT=common" \
             --quiet
 
       - name: Show deployed URL
         run: |
-          echo "✅ Backend deployed successfully!"
+          echo "Backend deployed successfully!"
           echo "URL: $(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')"
