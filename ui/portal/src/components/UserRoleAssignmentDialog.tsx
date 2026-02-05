@@ -35,7 +35,7 @@ interface UserRoleAssignmentDialogProps {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const fetchTenantRoles = async (tenantId: number, token: string): Promise<Role[]> => {
-  const response = await fetch(`${API_BASE_URL}/tenants/${tenantId}/roles`, {
+  const response = await fetch(`${API_BASE_URL}/portal/tenants/${tenantId}/roles`, {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
