@@ -69,7 +69,7 @@ class OutlookOAuthService:
             "scope": " ".join(self.SCOPES),
             "state": state,
             "response_mode": "query",
-            "prompt": "consent",  # Force consent to ensure we get refresh token
+            "prompt": "select_account",  # Let user pick account; admin consent already granted
         }
         
         return f"{self.auth_url}?{urlencode(params)}"

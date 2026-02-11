@@ -23,23 +23,19 @@ def _get_rate_limit_key():
     Get key for rate limiting. Returns None for exempt endpoints.
     Returning None disables rate limiting for that request.
     """
-    if has_request_context():
-        # Exempt OPTIONS requests (CORS preflight)
-        if request.method == 'OPTIONS':
+    if has_request_context() and request.path:
+        # Exempt Inngest endpoint from rate limiting (heartbeat + function execution)
+        if request.path.startswith('/api/inngest'):
             return None
-        if request.path:
-            # Exempt Inngest endpoint from rate limiting (heartbeat + function execution)
-            if request.path.startswith('/api/inngest'):
-                return None
-            # Exempt scraper monitoring routes (admin dashboard polling)
-            if request.path.startswith('/api/scraper-monitoring'):
-                return None
+        # Exempt scraper monitoring routes (admin dashboard polling)
+        if request.path.startswith('/api/scraper-monitoring'):
+            return None
     # For all other endpoints, use remote address
     return get_remote_address()
 
 limiter = Limiter(
     key_func=_get_rate_limit_key,
-    default_limits=[]  # No default rate limiting - only apply explicit limits
+    default_limits=[]
 )
 redis_client = None
 
