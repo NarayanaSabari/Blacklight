@@ -17,6 +17,7 @@ from typing import Optional
 
 import google.generativeai as genai
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models.job_posting import JobPosting
@@ -540,6 +541,8 @@ Important:
            - Uses: subject + first 500 chars of body (normalized)
            - Scoped to tenant_id for multi-tenant isolation
         2. Email ID fallback: Prevents duplicates on Inngest retries
+        3. Race condition handling: If unique constraint violation occurs,
+           fetch the existing job that another worker created
         
         Args:
             integration: Source integration
@@ -559,6 +562,7 @@ Important:
         # Normalize: lowercase, strip whitespace, take first 500 chars of body
         content_to_hash = f"{subject.lower().strip()}|{body[:500].lower().strip()}"
         content_hash = hashlib.sha256(content_to_hash.encode()).hexdigest()[:16]
+        external_job_id = f"email-{email_id}-{content_hash}"
         
         # Check for duplicate by content hash WITHIN the same tenant
         # This catches: Same email forwarded to multiple recruiters in tenant
@@ -584,8 +588,6 @@ Important:
             return (existing_by_content, False)
         
         # Check for exact email ID match (same email, same user - Inngest retry)
-        external_job_id = f"email-{email_id}-{content_hash}"
-        
         stmt = select(JobPosting).where(
             JobPosting.platform == "email",
             JobPosting.external_job_id == external_job_id
@@ -693,11 +695,94 @@ Important:
             },
         )
         
-        db.session.add(job)
-        db.session.flush()  # Get job ID without committing
+        try:
+            db.session.add(job)
+            db.session.flush()  # Get job ID without committing
+        except IntegrityError as e:
+            # Race condition: another worker created the job first
+            # Rollback and fetch the existing job
+            logger.warning(f"Race condition in job creation, fetching existing job: {e}")
+            db.session.rollback()
+            
+            # Fetch the job that was created by the other worker
+            stmt = select(JobPosting).where(
+                JobPosting.platform == "email",
+                JobPosting.external_job_id == external_job_id
+            )
+            existing_job = db.session.scalar(stmt)
+            
+            if existing_job:
+                # Add this recruiter to the additional_source_users list
+                self._add_additional_source_user(
+                    existing_job, 
+                    integration, 
+                    email_id, 
+                    received_at_raw
+                )
+                logger.info(f"Found existing job after race condition: job_id={existing_job.id}")
+                return (existing_job, False)
+            else:
+                # This shouldn't happen, but log and return None
+                logger.error(f"Failed to find job after IntegrityError for email {email_id}")
+                return (None, False)
         
         # Normalize job title and create RoleJobMapping for candidate matching
-        self._normalize_and_link_job_role(job)
+        # This is optional - if it fails, we still want to create the job
+        try:
+            self._normalize_and_link_job_role(job)
+        except Exception as e:
+            # If normalization causes a DB error, the session might be in a bad state
+            # We need to check and recover
+            logger.warning(f"Role normalization failed for job {job.id}, checking session state: {e}")
+            try:
+                # Test if session is usable by trying a simple operation
+                db.session.execute(db.text("SELECT 1"))
+            except Exception as session_error:
+                # Session is corrupted, need to rollback and re-add the job
+                logger.error(f"Session corrupted after role normalization, recovering: {session_error}")
+                db.session.rollback()
+                # Re-create the job since rollback undid it
+                # Make sure to detach and re-create to avoid stale object issues
+                db.session.expunge(job)
+                job = JobPosting(
+                    external_job_id=external_job_id,
+                    platform="email",
+                    title=job_data.get("title") or "Untitled Position",
+                    company=job_data.get("company") or self._extract_company_from_sender(email_data.get("sender", "")),
+                    description=job_data.get("description") or email_data.get("body", "")[:2000],
+                    job_url=f"email://{email_id}",
+                    location=job_data.get("location"),
+                    salary_range=job_data.get("salary_range"),
+                    salary_min=job_data.get("salary_min"),
+                    salary_max=job_data.get("salary_max"),
+                    job_type=job_type,
+                    is_remote=is_remote,
+                    experience_required=job_data.get("experience_required"),
+                    experience_min=job_data.get("experience_min"),
+                    experience_max=job_data.get("experience_max"),
+                    posted_date=received_at.date() if received_at else datetime.now(timezone.utc).date(),
+                    skills=skills if skills else None,
+                    snippet=job_data.get("snippet"),
+                    requirements=job_data.get("requirements"),
+                    status="ACTIVE",
+                    is_email_sourced=True,
+                    source_tenant_id=integration.tenant_id,
+                    sourced_by_user_id=integration.user_id,
+                    source_email_id=email_id,
+                    source_email_subject=email_data.get("subject", "")[:500] if email_data.get("subject") else None,
+                    source_email_sender=email_data.get("sender", "")[:255] if email_data.get("sender") else None,
+                    source_email_date=received_at,
+                    raw_metadata={
+                        "source": "email",
+                        "confidence_score": job_data.get("confidence_score"),
+                        "match_reason": email_data.get("match_reason"),
+                        "integration_id": integration.id,
+                        "thread_id": email_data.get("thread_id"),
+                    },
+                )
+                db.session.add(job)
+                db.session.flush()
+                logger.info(f"Recovered job creation after session error, new job ID: {job.id}")
         
         return (job, True)  # New job created
     
@@ -771,38 +856,34 @@ Important:
         This enables automatic job matching: candidates with the same preferred
         role will see this job in their matches.
         
-        NOTE: If normalization fails, we log the error but don't fail the job creation.
-        The job will be created without a role link.
+        NOTE: This method may raise exceptions on DB errors. The caller should
+        handle these to recover the session state.
         
         Args:
             job: The JobPosting to normalize and link
+            
+        Raises:
+            Exception: Re-raises any exception for caller to handle session recovery
         """
         if not job.title:
             logger.warning(f"Job {job.id} has no title, skipping role normalization")
             return
         
-        try:
-            from app.services.ai_role_normalization_service import AIRoleNormalizationService
-            
-            role_service = AIRoleNormalizationService()
-            global_role, similarity, method = role_service.normalize_job_title(
-                job_title=job.title,
-                job_posting_id=job.id
+        from app.services.ai_role_normalization_service import AIRoleNormalizationService
+        
+        role_service = AIRoleNormalizationService()
+        global_role, similarity, method = role_service.normalize_job_title(
+            job_title=job.title,
+            job_posting_id=job.id
+        )
+        
+        if global_role:
+            logger.info(
+                f"Job {job.id} '{job.title}' linked to role '{global_role.name}' "
+                f"(similarity: {similarity:.2%}, method: {method})"
             )
-            
-            if global_role:
-                logger.info(
-                    f"Job {job.id} '{job.title}' linked to role '{global_role.name}' "
-                    f"(similarity: {similarity:.2%}, method: {method})"
-                )
-            else:
-                logger.warning(f"Failed to normalize job {job.id} title '{job.title}'")
-                
-        except Exception as e:
-            logger.error(f"Error normalizing job {job.id} title: {e}", exc_info=True)
-            # Don't fail the entire job creation, just log the error
-            # Note: If this is a DB error, the session might be in a bad state
-            # The caller (parse_emails_to_jobs_batch) will handle the rollback if needed
+        else:
+            logger.warning(f"Failed to normalize job {job.id} title '{job.title}'")
     
     def _record_processed_email(
         self,

@@ -443,48 +443,114 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
             from app.models.candidate import Candidate
             from app.models.candidate_job_match import CandidateJobMatch
             from app.services.job_matching_service import JobMatchingService
-            from sqlalchemy import select
+            from sqlalchemy import select, func
             
-            # Get all approved candidates in tenant with embeddings
+            # Get candidates ready for job matching
+            # Valid statuses for matching: ready_for_assignment (fully onboarded)
+            # Could also include: new, screening, interviewed (active pipeline)
+            matchable_statuses = ['ready_for_assignment', 'new', 'screening', 'interviewed']
+            
             stmt = select(Candidate).where(
                 Candidate.tenant_id == tenant_id,
-                Candidate.status.in_(['approved', 'ready_for_assignment']),
+                Candidate.status.in_(matchable_statuses),
                 Candidate.embedding.isnot(None),
             )
             candidates = list(db.session.scalars(stmt).all())
             
             if not candidates:
-                logger.info(f"[INNGEST] No matching candidates found in tenant {tenant_id}")
+                # Diagnostic logging to understand why no candidates matched
+                total_count = db.session.scalar(
+                    select(func.count(Candidate.id)).where(Candidate.tenant_id == tenant_id)
+                )
+                status_count = db.session.scalar(
+                    select(func.count(Candidate.id)).where(
+                        Candidate.tenant_id == tenant_id,
+                        Candidate.status.in_(matchable_statuses)
+                    )
+                )
+                embedding_count = db.session.scalar(
+                    select(func.count(Candidate.id)).where(
+                        Candidate.tenant_id == tenant_id,
+                        Candidate.embedding.isnot(None)
+                    )
+                )
+                logger.warning(
+                    f"[INNGEST] No matching candidates in tenant {tenant_id}. "
+                    f"Total: {total_count}, With matchable status: {status_count}, "
+                    f"With embeddings: {embedding_count}"
+                )
                 return {"candidates_found": 0, "matches_created": 0}
             
+            # Load all jobs in one query (avoid N queries)
+            jobs_stmt = select(JobPosting).where(
+                JobPosting.id.in_(job_ids),
+                JobPosting.embedding.isnot(None),
+            )
+            jobs = list(db.session.scalars(jobs_stmt).all())
+            
+            if not jobs:
+                # Diagnostic: check why no jobs have embeddings
+                jobs_without_embedding = db.session.scalar(
+                    select(func.count(JobPosting.id)).where(
+                        JobPosting.id.in_(job_ids),
+                        JobPosting.embedding.is_(None)
+                    )
+                )
+                logger.warning(
+                    f"[INNGEST] No jobs with embeddings found. "
+                    f"Job IDs: {job_ids}, Jobs missing embeddings: {jobs_without_embedding}"
+                )
+                return {"candidates_found": len(candidates), "matches_created": 0}
+            
+            # Get all existing matches in one query to avoid N*M queries
+            candidate_ids = [c.id for c in candidates]
+            existing_matches_stmt = select(CandidateJobMatch).where(
+                CandidateJobMatch.candidate_id.in_(candidate_ids),
+                CandidateJobMatch.job_posting_id.in_(job_ids),
+            )
+            existing_matches = list(db.session.scalars(existing_matches_stmt).all())
+            existing_match_keys = {(m.candidate_id, m.job_posting_id) for m in existing_matches}
+            
             # Initialize matching service
-            # Use UnifiedScorerService for consistent scoring
             from app.services.unified_scorer_service import UnifiedScorerService
             unified_scorer = UnifiedScorerService()
             matches_created = 0
+            matches_skipped = 0
+            low_score_matches = 0
             
-            # For each job, calculate match scores against all candidates
-            for job_id in job_ids:
-                job = db.session.get(JobPosting, job_id)
-                if not job or job.embedding is None:
-                    continue
-                
+            # Track detailed match results per job for Inngest traces
+            job_match_details = []
+            
+            logger.info(
+                f"[INNGEST] Starting matching: {len(jobs)} jobs × {len(candidates)} candidates, "
+                f"{len(existing_match_keys)} existing matches to skip"
+            )
+            
+            # Calculate and store matches (without individual commits)
+            for job in jobs:
+                job_matches = []
                 for candidate in candidates:
                     try:
-                        # Check if match already exists
-                        existing = CandidateJobMatch.query.filter_by(
-                            candidate_id=candidate.id,
-                            job_posting_id=job.id,
-                        ).first()
-                        
-                        if existing:
+                        # Skip if match already exists
+                        if (candidate.id, job.id) in existing_match_keys:
+                            matches_skipped += 1
                             continue
                         
-                        # Calculate and store match using unified scorer
-                        match = unified_scorer.calculate_and_store_match(candidate, job)
+                        # Calculate and store match (will add to session but not commit)
+                        match = unified_scorer.calculate_and_store_match_no_commit(candidate, job)
                         
-                        if match and match.match_score >= 50:
-                            matches_created += 1
+                        if match:
+                            match_info = {
+                                "candidate_id": candidate.id,
+                                "candidate_name": f"{candidate.first_name} {candidate.last_name or ''}".strip(),
+                                "candidate_email": candidate.email,
+                                "score": match.match_score,
+                            }
+                            if match.match_score >= 50:
+                                matches_created += 1
+                                job_matches.append(match_info)
+                            else:
+                                low_score_matches += 1
                     
                     except Exception as e:
                         logger.error(
@@ -492,11 +558,42 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                             f"and job {job.id}: {e}"
                         )
                         continue
+                
+                # Add job match summary
+                job_match_details.append({
+                    "job_id": job.id,
+                    "job_title": job.title,
+                    "company": job.company_name,
+                    "matches_count": len(job_matches),
+                    "top_matches": sorted(job_matches, key=lambda x: x["score"], reverse=True)[:10],
+                })
             
+            # Single commit for all matches
             db.session.commit()
+            
+            logger.info(
+                f"[INNGEST] Matching complete: {matches_created} high-score matches, "
+                f"{low_score_matches} low-score matches, {matches_skipped} skipped (existing)"
+            )
+            
+            # Build candidate summary for trace visibility
+            candidate_summary = [
+                {
+                    "id": c.id,
+                    "name": f"{c.first_name} {c.last_name or ''}".strip(),
+                    "email": c.email,
+                    "status": c.status,
+                }
+                for c in candidates[:20]  # Limit to first 20 for trace readability
+            ]
+            
             return {
                 "candidates_found": len(candidates),
+                "candidates_evaluated": candidate_summary,
                 "matches_created": matches_created,
+                "low_score_matches": low_score_matches,
+                "skipped_existing": matches_skipped,
+                "job_matches": job_match_details,
             }
     
     match_result = await ctx.step.run("generate-candidate-matches", generate_candidate_matches)
@@ -511,7 +608,11 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
         "jobs_processed": embedding_result["jobs_processed"],
         "embeddings_generated": embedding_result["embeddings_generated"],
         "candidates_found": match_result["candidates_found"],
+        "candidates_evaluated": match_result.get("candidates_evaluated", []),
         "matches_created": match_result["matches_created"],
+        "low_score_matches": match_result.get("low_score_matches", 0),
+        "skipped_existing": match_result.get("skipped_existing", 0),
+        "job_matches": match_result.get("job_matches", []),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

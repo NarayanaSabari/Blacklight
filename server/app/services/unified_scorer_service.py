@@ -499,6 +499,71 @@ class UnifiedScorerService:
         
         return match
     
+    def calculate_and_store_match_no_commit(
+        self,
+        candidate: Candidate,
+        job_posting: JobPosting,
+        candidate_resume_text: Optional[str] = None
+    ) -> CandidateJobMatch:
+        """
+        Calculate score and store/update CandidateJobMatch record WITHOUT committing.
+        
+        Use this for batch operations where you want to commit all matches at once.
+        The caller is responsible for calling db.session.commit().
+        
+        Args:
+            candidate: Candidate model instance
+            job_posting: JobPosting model instance
+            candidate_resume_text: Optional resume text
+            
+        Returns:
+            CandidateJobMatch record (new or updated)
+        """
+        # Calculate score
+        score = self.calculate_score(candidate, job_posting, candidate_resume_text)
+        
+        # Check for existing match
+        existing_match = db.session.query(CandidateJobMatch).filter_by(
+            candidate_id=candidate.id,
+            job_posting_id=job_posting.id
+        ).first()
+        
+        if existing_match:
+            # Update existing match
+            match = existing_match
+            match.updated_at = datetime.utcnow()
+        else:
+            # Create new match
+            match = CandidateJobMatch(
+                candidate_id=candidate.id,
+                job_posting_id=job_posting.id,
+                matched_at=datetime.utcnow()
+            )
+            db.session.add(match)
+        
+        # Update scores
+        match.match_score = Decimal(str(score.overall_score))
+        match.match_grade = score.match_grade
+        match.skill_match_score = Decimal(str(score.skill_score))
+        match.keyword_match_score = None  # Keywords removed to speed up job imports
+        match.experience_match_score = Decimal(str(score.experience_score))
+        match.semantic_similarity = Decimal(str(score.semantic_score))
+        
+        # Update details
+        match.matched_skills = score.matched_skills
+        match.missing_skills = score.missing_skills
+        match.matched_keywords = None  # Keywords removed
+        match.missing_keywords = None  # Keywords removed
+        match.match_reasons = score.match_reasons
+        
+        # Determine recommendation
+        match.is_recommended = score.overall_score >= 60
+        match.recommendation_reason = score.explanation
+        
+        # NO commit here - caller will commit
+        
+        return match
+    
     # ===========================================
     # Component Scoring Methods
     # ===========================================
