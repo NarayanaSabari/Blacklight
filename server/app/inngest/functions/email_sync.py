@@ -396,27 +396,51 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
             embedding_service = EmbeddingService()
             embeddings_generated = 0
             job_infos = []
+            embedding_errors = []
             
             for job_id in job_ids:
                 job = db.session.get(JobPosting, job_id)
                 if not job:
+                    embedding_errors.append({
+                        "job_id": job_id,
+                        "error": "Job not found in database"
+                    })
                     continue
                 
                 # Generate embedding if missing
                 if job.embedding is None:
                     try:
+                        logger.info(f"[INNGEST] Generating embedding for job {job_id}: {job.title}")
                         embedding = embedding_service.generate_job_embedding(job)
                         if embedding:
                             job.embedding = embedding
                             embeddings_generated += 1
+                            logger.info(f"[INNGEST] Successfully generated embedding for job {job_id}")
+                        else:
+                            embedding_errors.append({
+                                "job_id": job_id,
+                                "title": job.title,
+                                "error": "Embedding service returned None"
+                            })
                     except Exception as e:
-                        logger.error(f"[INNGEST] Failed to generate embedding for job {job_id}: {e}")
+                        import traceback
+                        error_detail = traceback.format_exc()
+                        logger.error(f"[INNGEST] Failed to generate embedding for job {job_id}: {e}\n{error_detail}")
+                        embedding_errors.append({
+                            "job_id": job_id,
+                            "title": job.title,
+                            "error": str(e),
+                            "traceback": error_detail[:500]  # Truncate for trace readability
+                        })
                         continue
+                else:
+                    logger.info(f"[INNGEST] Job {job_id} already has embedding")
                 
                 job_infos.append({
                     "id": job.id,
                     "title": job.title,
                     "source_tenant_id": job.source_tenant_id,
+                    "has_embedding": job.embedding is not None,
                 })
             
             db.session.commit()
@@ -424,6 +448,7 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                 "embeddings_generated": embeddings_generated,
                 "jobs_processed": len(job_infos),
                 "job_infos": job_infos,
+                "embedding_errors": embedding_errors,
             }
     
     embedding_result = await ctx.step.run("generate-email-job-embeddings", generate_job_embeddings)
@@ -563,7 +588,7 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                 job_match_details.append({
                     "job_id": job.id,
                     "job_title": job.title,
-                    "company": job.company_name,
+                    "company": job.company,
                     "matches_count": len(job_matches),
                     "top_matches": sorted(job_matches, key=lambda x: x["score"], reverse=True)[:10],
                 })
@@ -607,6 +632,8 @@ async def match_email_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
         "status": "completed",
         "jobs_processed": embedding_result["jobs_processed"],
         "embeddings_generated": embedding_result["embeddings_generated"],
+        "embedding_errors": embedding_result.get("embedding_errors", []),
+        "job_infos": embedding_result.get("job_infos", []),
         "candidates_found": match_result["candidates_found"],
         "candidates_evaluated": match_result.get("candidates_evaluated", []),
         "matches_created": match_result["matches_created"],
