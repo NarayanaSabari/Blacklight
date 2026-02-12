@@ -682,7 +682,10 @@ Return ONLY the normalized job title, nothing else."""
             if job:
                 job.normalized_role_id = global_role.id
             
-            db.session.commit()
+            # Use flush() instead of commit() - let the caller manage the transaction
+            # This is called from email_job_parser_service which batches multiple operations
+            # and commits at the end
+            db.session.flush()
             
             logger.info(
                 f"✅ Job {job_posting_id} linked to role '{global_role.name}' "
@@ -693,10 +696,8 @@ Return ONLY the normalized job title, nothing else."""
             
         except Exception as e:
             logger.error(f"Failed to normalize job title '{job_title}': {e}", exc_info=True)
-            try:
-                db.session.rollback()
-            except (RuntimeError, ValueError) as rollback_error:
-                logger.error(f"Failed to rollback session: {rollback_error}")
+            # Don't rollback here - let the caller handle the transaction
+            # Rollback here would undo ALL pending work including the job posting
             return None, 0.0, "error"
     
     def _link_job_to_role(self, job_posting_id: int, global_role: GlobalRole):

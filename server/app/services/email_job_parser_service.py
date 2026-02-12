@@ -246,6 +246,10 @@ Important:
             
         except Exception as e:
             logger.error(f"Batch processing failed for integration {integration.id}: {e}", exc_info=True)
+            # CRITICAL: Rollback the failed transaction before attempting to record errors
+            # Without this, the session is in a PendingRollback state and any operations will fail
+            db.session.rollback()
+            
             for email_data in emails_data:
                 self._record_processed_email(
                     integration=integration,
@@ -767,6 +771,9 @@ Important:
         This enables automatic job matching: candidates with the same preferred
         role will see this job in their matches.
         
+        NOTE: If normalization fails, we log the error but don't fail the job creation.
+        The job will be created without a role link.
+        
         Args:
             job: The JobPosting to normalize and link
         """
@@ -794,6 +801,8 @@ Important:
         except Exception as e:
             logger.error(f"Error normalizing job {job.id} title: {e}", exc_info=True)
             # Don't fail the entire job creation, just log the error
+            # Note: If this is a DB error, the session might be in a bad state
+            # The caller (parse_emails_to_jobs_batch) will handle the rollback if needed
     
     def _record_processed_email(
         self,
