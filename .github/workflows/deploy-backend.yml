@@ -123,7 +123,7 @@ jobs:
             --set-env-vars="REDIS_URL=redis://10.101.79.27:6379/0" \
             --set-env-vars="REDIS_CACHE_URL=redis://10.101.79.27:6379/1" \
             --set-env-vars="INNGEST_DEV=false" \
-            --set-env-vars="INNGEST_BASE_URL=http://34.47.179.106:8288" \
+            --set-env-vars="INNGEST_BASE_URL=http://34.93.3.245:8288/" \
             --set-env-vars="INNGEST_EVENT_KEY=${{ secrets.INNGEST_EVENT_KEY }}" \
             --set-env-vars="INNGEST_SIGNING_KEY=${{ secrets.INNGEST_SIGNING_KEY }}" \
             --set-env-vars="INNGEST_SERVE_HOST=https://blacklight-backend-bi6eujysoa-el.a.run.app" \

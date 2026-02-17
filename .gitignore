@@ -74,3 +74,6 @@ credentials/gcs-credentials.json
 github-deployer-key.json
 
 Resume-Matcher
+
+# Local tools (not for production)
+tools/email-scraper/
