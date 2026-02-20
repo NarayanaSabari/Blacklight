@@ -2,7 +2,7 @@
 Embedding service for generating semantic embeddings using Google Gemini API.
 
 This service provides functionality to:
-- Generate 768-dimensional embeddings using models/embedding-001
+- Generate 768-dimensional embeddings using Gemini embedding model
 - Batch process multiple texts efficiently
 - Handle errors and implement retry logic
 - Cache embeddings to avoid regeneration
@@ -28,12 +28,12 @@ class EmbeddingService:
     """
     Service for generating embeddings using Google Gemini API.
     
-    Uses models/embedding-001 to generate 768-dimensional vectors
-    for semantic similarity matching.
+    Uses the Gemini embedding model (configurable via GEMINI_EMBEDDING_MODEL)
+    to generate embedding vectors for semantic similarity matching.
     """
     
     # Gemini API configuration
-    MODEL_NAME = "models/embedding-001"
+    DEFAULT_MODEL_NAME = "models/gemini-embedding-001"
     EMBEDDING_DIMENSION = 768
     
     # Batch processing configuration
@@ -64,7 +64,24 @@ class EmbeddingService:
         # Configure Gemini API
         genai.configure(api_key=self.api_key)
         
-        logger.info(f"EmbeddingService initialized with model: {self.MODEL_NAME}")
+        # Use model from settings, falling back to default
+        model_from_settings = getattr(settings, 'gemini_embedding_model', None)
+        if model_from_settings:
+            # Ensure it has the "models/" prefix
+            if not model_from_settings.startswith("models/"):
+                model_from_settings = f"models/{model_from_settings}"
+            self.model_name = model_from_settings
+        else:
+            self.model_name = self.DEFAULT_MODEL_NAME
+        
+        # Also read dimension from settings
+        dim_from_settings = getattr(settings, 'gemini_embedding_dimension', None)
+        if dim_from_settings:
+            self.embedding_dimension = int(dim_from_settings)
+        else:
+            self.embedding_dimension = self.EMBEDDING_DIMENSION
+        
+        logger.info(f"EmbeddingService initialized with model: {self.model_name}")
     
     @retry(
         stop=stop_after_attempt(MAX_RETRIES),
@@ -109,18 +126,24 @@ class EmbeddingService:
             logger.debug(f"Generating embedding for text (length: {len(text)})")
             
             # Generate embedding using Gemini API
-            result = genai.embed_content(
-                model=self.MODEL_NAME,
-                content=text,
-                task_type=task_type
-            )
+            embed_kwargs = {
+                "model": self.model_name,
+                "content": text,
+                "task_type": task_type,
+            }
+            # Request specific output dimensionality if configured
+            # (gemini-embedding-001 defaults to 3072, but we need 768 for compatibility)
+            if self.embedding_dimension:
+                embed_kwargs["output_dimensionality"] = self.embedding_dimension
+            
+            result = genai.embed_content(**embed_kwargs)
             
             embedding = result['embedding']
             
             # Validate embedding dimension
-            if len(embedding) != self.EMBEDDING_DIMENSION:
+            if len(embedding) != self.embedding_dimension:
                 raise ValueError(
-                    f"Unexpected embedding dimension: {len(embedding)} (expected {self.EMBEDDING_DIMENSION})"
+                    f"Unexpected embedding dimension: {len(embedding)} (expected {self.embedding_dimension})"
                 )
             
             logger.debug(f"Successfully generated embedding (dimension: {len(embedding)})")
@@ -199,11 +222,15 @@ class EmbeddingService:
                 logger.debug(f"Processing batch {batch_num}/{total_batches} ({len(batch_texts)} texts)")
                 
                 # Generate embeddings for batch
-                result = genai.embed_content(
-                    model=self.MODEL_NAME,
-                    content=batch_texts,
-                    task_type=task_type
-                )
+                embed_kwargs = {
+                    "model": self.model_name,
+                    "content": batch_texts,
+                    "task_type": task_type,
+                }
+                if self.embedding_dimension:
+                    embed_kwargs["output_dimensionality"] = self.embedding_dimension
+                
+                result = genai.embed_content(**embed_kwargs)
                 
                 batch_embeddings = result['embedding']
                 
@@ -214,9 +241,23 @@ class EmbeddingService:
                     )
                 
                 for embedding in batch_embeddings:
-                    if len(embedding) != self.EMBEDDING_DIMENSION:
+                    if len(embedding) != self.embedding_dimension:
                         raise ValueError(
-                            f"Unexpected embedding dimension: {len(embedding)} (expected {self.EMBEDDING_DIMENSION})"
+                            f"Unexpected embedding dimension: {len(embedding)} (expected {self.embedding_dimension})"
+                        )
+                
+                batch_embeddings = result['embedding']
+                
+                # Validate batch embeddings
+                if len(batch_embeddings) != len(batch_texts):
+                    raise ValueError(
+                        f"Batch embedding count mismatch: got {len(batch_embeddings)}, expected {len(batch_texts)}"
+                    )
+                
+                for embedding in batch_embeddings:
+                    if len(embedding) != self.embedding_dimension:
+                        raise ValueError(
+                            f"Unexpected embedding dimension: {len(embedding)} (expected {self.embedding_dimension})"
                         )
                 
                 all_embeddings.extend(batch_embeddings)

@@ -772,6 +772,118 @@ def import_all_jobs(app: Flask, jobs_dir: str = "../jobs") -> None:
         sys.exit(1)
 
 
+def backfill_job_roles(app: Flask, batch_size: int = 10) -> None:
+    """
+    Backfill role_job_mappings for existing jobs that lack a normalized_role_id.
+    
+    This runs AIRoleNormalizationService.normalize_job_title() on each job,
+    which:
+    1. Generates an embedding for the job title
+    2. Finds or creates a matching GlobalRole
+    3. Creates a RoleJobMapping linking the job to the role
+    4. Sets normalized_role_id on the job
+    
+    This enables the job matching chain:
+    candidates -> candidate_global_roles -> global_roles -> role_job_mappings -> job_postings
+    
+    Args:
+        batch_size: Number of jobs to process per batch (default: 10)
+    """
+    from app.models.job_posting import JobPosting
+    from sqlalchemy import select
+    import time
+    
+    print("=" * 80)
+    print("BACKFILL JOB ROLE MAPPINGS")
+    print("=" * 80)
+    
+    try:
+        with app.app_context():
+            from app.services.ai_role_normalization_service import AIRoleNormalizationService
+            
+            service = AIRoleNormalizationService()
+            start_time = time.time()
+            
+            # Find jobs without normalized_role_id
+            stmt = select(JobPosting).where(
+                JobPosting.normalized_role_id.is_(None)
+            ).order_by(JobPosting.id)
+            jobs = list(db.session.scalars(stmt))
+            
+            total_jobs = len(jobs)
+            print(f"\nFound {total_jobs} jobs without role mappings")
+            
+            if total_jobs == 0:
+                print("All jobs already have role mappings!")
+                return
+            
+            print(f"Processing in batches of {batch_size}...\n")
+            
+            successful = 0
+            failed = 0
+            
+            for i in range(0, total_jobs, batch_size):
+                batch = jobs[i:i + batch_size]
+                batch_num = (i // batch_size) + 1
+                total_batches = (total_jobs + batch_size - 1) // batch_size
+                
+                print(f"Batch {batch_num}/{total_batches} ({len(batch)} jobs):")
+                
+                for job in batch:
+                    try:
+                        role, similarity, method = service.normalize_job_title(
+                            job_title=job.title,
+                            job_posting_id=job.id
+                        )
+                        
+                        if role:
+                            db.session.commit()
+                            successful += 1
+                            print(f"  OK {job.id}: '{job.title}' -> '{role.name}' ({similarity:.0%}, {method})")
+                        else:
+                            failed += 1
+                            print(f"  FAIL {job.id}: '{job.title}' - normalization returned None")
+                            
+                    except Exception as e:
+                        failed += 1
+                        print(f"  FAIL {job.id}: '{job.title}' - {str(e)[:80]}")
+                        db.session.rollback()
+                
+                # Rate limiting delay between batches
+                if i + batch_size < total_jobs:
+                    print(f"  Waiting 1s (rate limit)...\n")
+                    time.sleep(1)
+            
+            duration = time.time() - start_time
+            
+            # Final stats
+            print("\n" + "=" * 80)
+            print("BACKFILL RESULTS")
+            print("=" * 80)
+            print(f"   Total Jobs: {total_jobs}")
+            print(f"   Successful: {successful}")
+            print(f"   Failed: {failed}")
+            print(f"   Success Rate: {(successful/total_jobs*100):.1f}%")
+            print(f"   Duration: {duration:.1f}s")
+            
+            # Show role mapping stats
+            from app.models.role_job_mapping import RoleJobMapping
+            from app.models.global_role import GlobalRole
+            from sqlalchemy import func
+            
+            mapping_count = db.session.scalar(select(func.count(RoleJobMapping.id)))
+            role_count = db.session.scalar(select(func.count(GlobalRole.id)))
+            print(f"\n   Total role_job_mappings: {mapping_count}")
+            print(f"   Total global_roles: {role_count}")
+            print()
+            
+    except Exception as e:
+        print(f"\nFATAL ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def clean_all_db(app: Flask, confirm: bool = False) -> None:
     """
     Clean ALL data from the entire database by truncating all tables.
@@ -942,6 +1054,10 @@ if __name__ == "__main__":
             app,
             confirm=sys.argv[2].lower() == 'yes' if len(sys.argv) > 2 else False
         ),
+        "backfill-job-roles": lambda: backfill_job_roles(
+            app,
+            batch_size=int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        ),
     }
     
     if len(sys.argv) < 2:
@@ -990,6 +1106,11 @@ if __name__ == "__main__":
         print("                        After cleaning, run 'seed-all' to recreate everything")
         print("\nSetup Commands:")
         print("  setup-spacy         - Download and setup spaCy model for resume parsing")
+        print("\nBackfill Commands:")
+        print("  backfill-job-roles  - Normalize job titles and create role_job_mappings")
+        print("                        Enables job matching for existing jobs")
+        print("                        Usage: backfill-job-roles [batch_size]")
+        print("                        Example: backfill-job-roles 10")
         sys.exit(1)
     
     command = sys.argv[1]

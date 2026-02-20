@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     # Google Gemini API Configuration
     google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
     gemini_model: str = Field(default="gemini-1.5-flash", env="GEMINI_MODEL")
-    gemini_embedding_model: str = Field(default="models/embedding-001", env="GEMINI_EMBEDDING_MODEL")
+    gemini_embedding_model: str = Field(default="gemini-embedding-001", env="GEMINI_EMBEDDING_MODEL")
     gemini_embedding_dimension: int = Field(default=768, env="GEMINI_EMBEDDING_DIMENSION")
     email_job_parsing_batch_size: int = Field(default=10, env="EMAIL_JOB_PARSING_BATCH_SIZE")
     

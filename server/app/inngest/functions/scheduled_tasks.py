@@ -442,3 +442,130 @@ def clear_expired_cooldowns_step() -> int:
     from app.services.scraper_credential_service import ScraperCredentialService
     return ScraperCredentialService.clear_expired_cooldowns()
 
+
+# ============================================================================
+# JOB ROLE NORMALIZATION BACKFILL
+# ============================================================================
+
+@inngest_client.create_function(
+    fn_id="backfill-orphaned-job-roles",
+    trigger=inngest.TriggerCron(cron="0 */3 * * *"),  # Every 3 hours
+    name="Backfill Orphaned Job Roles",
+    retries=2
+)
+async def backfill_orphaned_job_roles_workflow(ctx) -> dict:
+    """
+    Find job postings with no normalized_role_id (orphaned during email import
+    when role normalization failed) and retry normalization.
+
+    Runs every 3 hours. Processes up to 50 jobs per run to avoid overloading
+    the Gemini API.
+    """
+    logger.info("[INNGEST] Running orphaned job role backfill")
+
+    # Step 1: Find orphaned jobs
+    orphaned_jobs = await ctx.step.run(
+        "find-orphaned-jobs",
+        find_orphaned_jobs_step
+    )
+
+    if not orphaned_jobs:
+        logger.info("[INNGEST] No orphaned jobs found")
+        return {"orphaned_found": 0, "normalized": 0, "failed": 0}
+
+    logger.info(f"[INNGEST] Found {len(orphaned_jobs)} orphaned jobs to normalize")
+
+    # Step 2: Normalize each job (one step per job for retryability)
+    normalized = 0
+    failed = 0
+
+    for job_info in orphaned_jobs:
+        try:
+            result = await ctx.step.run(
+                f"normalize-job-{job_info['id']}",
+                normalize_orphaned_job_step,
+                job_info
+            )
+            if result.get("success"):
+                normalized += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.error(
+                f"[INNGEST] Failed to normalize job {job_info['id']}: {e}"
+            )
+            failed += 1
+
+    logger.info(
+        f"[INNGEST] Backfill complete: {normalized} normalized, {failed} failed "
+        f"out of {len(orphaned_jobs)} orphaned jobs"
+    )
+
+    return {
+        "orphaned_found": len(orphaned_jobs),
+        "normalized": normalized,
+        "failed": failed
+    }
+
+
+def find_orphaned_jobs_step() -> list:
+    """Find job postings without a normalized_role_id (max 50)."""
+    from app import db
+    from app.models.job_posting import JobPosting
+    from sqlalchemy import select
+
+    stmt = (
+        select(JobPosting.id, JobPosting.title)
+        .where(
+            JobPosting.normalized_role_id.is_(None),
+            JobPosting.title.isnot(None),
+            JobPosting.title != ""
+        )
+        .order_by(JobPosting.created_at.desc())
+        .limit(50)
+    )
+
+    rows = db.session.execute(stmt).all()
+
+    return [{"id": row[0], "title": row[1]} for row in rows]
+
+
+def normalize_orphaned_job_step(job_info: dict) -> dict:
+    """Normalize a single orphaned job's title and create its RoleJobMapping."""
+    from app import db
+    from app.services.ai_role_normalization_service import AIRoleNormalizationService
+
+    job_id = job_info["id"]
+    job_title = job_info["title"]
+
+    logger.info(f"[INNGEST] Backfill normalizing job {job_id}: '{job_title}'")
+
+    try:
+        service = AIRoleNormalizationService()
+        global_role, similarity, method = service.normalize_job_title(
+            job_title=job_title,
+            job_posting_id=job_id
+        )
+
+        if global_role:
+            db.session.commit()
+            logger.info(
+                f"[INNGEST] Job {job_id} linked to role '{global_role.name}' "
+                f"(similarity: {similarity:.2%}, method: {method})"
+            )
+            return {
+                "success": True,
+                "job_id": job_id,
+                "role_name": global_role.name,
+                "similarity": similarity,
+                "method": method
+            }
+        else:
+            logger.warning(f"[INNGEST] Normalization returned None for job {job_id}")
+            return {"success": False, "job_id": job_id, "reason": "normalization_returned_none"}
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"[INNGEST] Error normalizing job {job_id}: {e}", exc_info=True)
+        return {"success": False, "job_id": job_id, "reason": str(e)}
+
