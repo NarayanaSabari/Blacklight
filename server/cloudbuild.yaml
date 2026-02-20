@@ -1,0 +1,12 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/blacklight-mvp-2/blacklight/backend:latest'
+      - '-f'
+      - 'Dockerfile.cloudrun'
+      - '.'
+images:
+  - 'asia-south1-docker.pkg.dev/blacklight-mvp-2/blacklight/backend:latest'
+timeout: 1800s

@@ -8,6 +8,7 @@ import os
 import uuid
 import json
 import logging
+import urllib.request
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
@@ -18,6 +19,8 @@ from werkzeug.datastructures import FileStorage
 try:
     from google.cloud import storage
     from google.oauth2 import service_account
+    import google.auth
+    from google.auth import compute_engine
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
@@ -86,12 +89,16 @@ class FileStorageService:
         
         # Initialize credentials (try multiple sources in order of priority)
         credentials = None
+        self._has_sa_key = False  # Track if we have a service account private key
+        self._sa_email = None  # Service account email for IAM signing fallback
         
         # Priority 1: Inline JSON credentials (from GCS_CREDENTIALS_JSON env var)
         if settings.gcs_credentials_json:
             try:
                 creds_dict = json.loads(settings.gcs_credentials_json)
                 credentials = service_account.Credentials.from_service_account_info(creds_dict)
+                self._has_sa_key = True
+                self._sa_email = creds_dict.get('client_email')
                 logger.info("GCS credentials loaded from inline JSON (GCS_CREDENTIALS_JSON)")
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid GCS_CREDENTIALS_JSON: {e}")
@@ -103,6 +110,8 @@ class FileStorageService:
             credentials = service_account.Credentials.from_service_account_file(
                 settings.gcs_credentials_path
             )
+            self._has_sa_key = True
+            self._sa_email = credentials.service_account_email
             logger.info(f"GCS credentials loaded from file: {settings.gcs_credentials_path}")
         
         # Initialize storage client
@@ -112,8 +121,27 @@ class FileStorageService:
                 credentials=credentials
             )
         else:
-            # Use default credentials (e.g., from GOOGLE_APPLICATION_CREDENTIALS env var)
+            # Use default credentials (e.g., Cloud Run attached SA or GOOGLE_APPLICATION_CREDENTIALS)
             self.gcs_client = storage.Client(project=settings.gcs_project_id or None)
+            # Detect service account email for IAM signing
+            try:
+                default_creds, _ = google.auth.default()
+                if isinstance(default_creds, service_account.Credentials):
+                    self._has_sa_key = True
+                    self._sa_email = default_creds.service_account_email
+                elif hasattr(default_creds, 'service_account_email'):
+                    # Compute Engine / Cloud Run credentials return "default" for
+                    # service_account_email. Fetch the real email from metadata server.
+                    sa_email = default_creds.service_account_email
+                    if not sa_email or sa_email == 'default':
+                        sa_email = self._fetch_sa_email_from_metadata()
+                    self._sa_email = sa_email
+                    if self._sa_email:
+                        logger.info(f"Using attached SA for IAM signing: {self._sa_email}")
+                    else:
+                        logger.warning("Could not determine SA email for IAM signing")
+            except Exception as e:
+                logger.warning(f"Could not detect default credentials for signing: {e}")
         
         # Get bucket and verify connection
         try:
@@ -145,6 +173,30 @@ class FileStorageService:
                 "bucket": self.bucket_name
             })
             raise
+    
+    def _fetch_sa_email_from_metadata(self) -> Optional[str]:
+        """Fetch the service account email from GCE metadata server.
+        
+        On Cloud Run / Compute Engine, the default credentials return 'default'
+        for service_account_email. This method queries the metadata server to
+        get the actual email address needed for IAM signBlob.
+        """
+        metadata_url = (
+            "http://metadata.google.internal/computeMetadata/v1/"
+            "instance/service-accounts/default/email"
+        )
+        req = urllib.request.Request(
+            metadata_url,
+            headers={"Metadata-Flavor": "Google"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                email = resp.read().decode("utf-8").strip()
+                logger.info(f"Fetched SA email from metadata server: {email}")
+                return email
+        except Exception as e:
+            logger.warning(f"Failed to fetch SA email from metadata server: {e}")
+            return None
     
     def _get_file_key(
         self,
@@ -512,19 +564,43 @@ class FileStorageService:
             return None, f"URL generation failed: {str(e)}"
     
     def _generate_gcs_signed_url(self, file_key: str, expiry_seconds: int) -> Tuple[Optional[str], Optional[str]]:
-        """Generate signed URL for GCS file"""
+        """Generate signed URL for GCS file.
+        
+        Supports two signing methods:
+        1. Direct signing with SA private key (when GCS_CREDENTIALS_JSON or GCS_CREDENTIALS_PATH is set)
+        2. IAM signBlob API (when running on Cloud Run with attached SA, no JSON key needed)
+        """
         try:
             blob = self.bucket.blob(file_key)
             
             if not blob.exists():
                 return None, "File not found"
             
-            # Generate signed URL
-            url = blob.generate_signed_url(
-                version="v4",
-                expiration=timedelta(seconds=expiry_seconds),
-                method="GET"
-            )
+            if self._has_sa_key:
+                # Direct signing with private key (fastest, no extra API call)
+                url = blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(seconds=expiry_seconds),
+                    method="GET"
+                )
+            elif self._sa_email:
+                # IAM signBlob API (works on Cloud Run without JSON key)
+                # Requires iam.serviceAccounts.signBlob permission on the SA
+                # Refresh credentials to ensure we have a valid access token
+                credentials = self.gcs_client._credentials
+                if hasattr(credentials, 'refresh') and hasattr(credentials, 'valid'):
+                    if not credentials.valid:
+                        import google.auth.transport.requests
+                        credentials.refresh(google.auth.transport.requests.Request())
+                url = blob.generate_signed_url(
+                    version="v4",
+                    expiration=timedelta(seconds=expiry_seconds),
+                    method="GET",
+                    service_account_email=self._sa_email,
+                    access_token=credentials.token,
+                )
+            else:
+                return None, "No credentials available for signed URL generation"
             
             return url, None
         
