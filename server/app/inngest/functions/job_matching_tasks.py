@@ -420,10 +420,18 @@ async def update_job_embeddings_workflow(ctx):
     
     logger.info(f"[INNGEST] Successfully updated embedding for job {job_id}")
     
+    # Step 2: Re-score all existing candidate-job matches for this job
+    rescore_result = await ctx.step.run(
+        "rescore-affected-matches",
+        rescore_job_matches_step,
+        job_id
+    )
+    
     return {
         "status": "completed",
         "job_id": job_id,
-        "embedding_generated": True
+        "embedding_generated": True,
+        "matches_rescored": rescore_result.get("rescored", 0)
     }
 
 
@@ -493,14 +501,23 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
                     successful_candidates += 1
                     continue
                 
-                # Get jobs matching candidate's preferred roles
+                # Get jobs matching candidate's preferred roles via RoleJobMapping
+                # (standardized join path — same as on-the-fly route and email sync)
+                from app.models.role_job_mapping import RoleJobMapping
+                matching_job_ids_rows = db.session.execute(
+                    select(RoleJobMapping.job_posting_id).where(
+                        RoleJobMapping.global_role_id.in_(role_ids)
+                    ).distinct()
+                ).all()
+                matching_job_id_list = [row[0] for row in matching_job_ids_rows]
+                
                 matching_jobs = db.session.scalars(
                     select(JobPosting).where(
-                        JobPosting.normalized_role_id.in_(role_ids),
+                        JobPosting.id.in_(matching_job_id_list),
                         JobPosting.embedding.isnot(None),
                         JobPosting.status == 'ACTIVE'
                     )
-                ).all()
+                ).all() if matching_job_id_list else []
                 
                 matching_job_ids = {job.id for job in matching_jobs}
                 
@@ -682,14 +699,23 @@ def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -
                 "message": "No preferred roles configured"
             }
         
-        # Get jobs matching candidate's preferred roles
+        # Get jobs matching candidate's preferred roles via RoleJobMapping
+        # (standardized join path — same as on-the-fly route and email sync)
+        from app.models.role_job_mapping import RoleJobMapping
+        job_id_rows = db.session.execute(
+            select(RoleJobMapping.job_posting_id).where(
+                RoleJobMapping.global_role_id.in_(role_ids)
+            ).distinct()
+        ).all()
+        job_id_list = [row[0] for row in job_id_rows]
+        
         jobs = db.session.scalars(
             select(JobPosting).where(
-                JobPosting.normalized_role_id.in_(role_ids),
+                JobPosting.id.in_(job_id_list),
                 JobPosting.embedding.isnot(None),
                 JobPosting.status == 'ACTIVE'
             )
-        ).all()
+        ).all() if job_id_list else []
         
         # Initialize unified scorer
         unified_scorer = UnifiedScorerService()
@@ -755,6 +781,59 @@ def update_candidate_status_step(candidate_id: int, status: str) -> bool:
         logger.error(f"[INNGEST] Error updating candidate {candidate_id} status: {str(e)}")
         db.session.rollback()
         return False
+
+
+def rescore_job_matches_step(job_id: int) -> Dict[str, Any]:
+    """
+    Re-score all existing CandidateJobMatch records for a specific job.
+    
+    Called after a job's embedding is regenerated to ensure match scores
+    reflect the updated embedding. Only updates matches that already exist
+    (does NOT create new ones — that's the nightly refresh's job).
+    """
+    try:
+        job = db.session.get(JobPosting, job_id)
+        if not job or job.embedding is None:
+            return {"rescored": 0, "error": "Job not found or has no embedding"}
+        
+        # Find all existing matches for this job
+        existing_matches = db.session.scalars(
+            select(CandidateJobMatch).where(
+                CandidateJobMatch.job_posting_id == job_id
+            )
+        ).all()
+        
+        if not existing_matches:
+            logger.info(f"[INNGEST] No existing matches to rescore for job {job_id}")
+            return {"rescored": 0}
+        
+        scorer = UnifiedScorerService()
+        rescored = 0
+        
+        for match in existing_matches:
+            try:
+                candidate = db.session.get(Candidate, match.candidate_id)
+                if not candidate or candidate.embedding is None:
+                    continue
+                
+                scorer.calculate_and_store_match(candidate, job)
+                rescored += 1
+                
+            except Exception as e:
+                logger.error(
+                    f"[INNGEST] Error rescoring candidate {match.candidate_id} "
+                    f"vs job {job_id}: {e}"
+                )
+        
+        db.session.commit()
+        db.session.expire_all()
+        
+        logger.info(f"[INNGEST] Rescored {rescored} matches for job {job_id}")
+        return {"rescored": rescored}
+        
+    except Exception as e:
+        logger.error(f"[INNGEST] Error rescoring matches for job {job_id}: {e}")
+        return {"rescored": 0, "error": str(e)}
 
 
 def generate_job_embedding_step(job_id: int) -> Dict[str, Any]:

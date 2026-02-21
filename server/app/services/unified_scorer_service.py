@@ -23,14 +23,13 @@ from decimal import Decimal
 from datetime import datetime
 from difflib import SequenceMatcher
 from pydantic import BaseModel, Field
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
+import numpy as np
 
 from app import db
 from app.models.candidate import Candidate
 from app.models.job_posting import JobPosting
 from app.models.candidate_job_match import CandidateJobMatch
-from app.services.embedding_service import EmbeddingService
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -329,18 +328,48 @@ class UnifiedScorerService:
         """
         Initialize the unified scorer service.
         
+        Lazy-initializes EmbeddingService and ChatGoogleGenerativeAI only when
+        they are actually needed (AI compatibility analysis, not calculate_score).
+        
         Args:
             api_key: Google API key for embeddings and AI. If not provided, reads from settings.
         """
         self.api_key = api_key or settings.google_api_key
         
-        if not self.api_key:
-            logger.warning("Google API key not provided. Semantic scoring and AI analysis will be disabled.")
-            self.embedding_service = None
-            self.model = None
-        else:
-            self.embedding_service = EmbeddingService(api_key=self.api_key)
-            self.model = ChatGoogleGenerativeAI(
+        # Lazy-init: these are only needed for AI compatibility analysis,
+        # NOT for calculate_score() which uses pre-loaded embeddings from ORM.
+        self._embedding_service = None
+        self._model = None
+        
+        # Pre-build reverse synonym lookup for O(1) skill matching
+        self._reverse_synonym_map: Dict[str, str] = {}
+        for base_skill, synonyms in self.SKILL_SYNONYMS.items():
+            self._reverse_synonym_map[base_skill] = base_skill
+            for syn in synonyms:
+                self._reverse_synonym_map[syn] = base_skill
+        
+        logger.info("UnifiedScorerService initialized (lazy-init for AI services)")
+    
+    @property
+    def embedding_service(self):
+        """Lazy-init embedding service — only created on first access."""
+        if self._embedding_service is None:
+            if not self.api_key:
+                logger.warning("Google API key not provided. Embedding service unavailable.")
+                return None
+            from app.services.embedding_service import EmbeddingService
+            self._embedding_service = EmbeddingService(api_key=self.api_key)
+        return self._embedding_service
+    
+    @property
+    def model(self):
+        """Lazy-init Gemini chat model — only created on first access."""
+        if self._model is None:
+            if not self.api_key:
+                logger.warning("Google API key not provided. AI model unavailable.")
+                return None
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            self._model = ChatGoogleGenerativeAI(
                 model=settings.gemini_model,
                 google_api_key=self.api_key,
                 temperature=0.2,
@@ -348,8 +377,7 @@ class UnifiedScorerService:
                 timeout=60,
                 max_retries=2,
             )
-        
-        logger.info("UnifiedScorerService initialized")
+        return self._model
     
     # ===========================================
     # Main Scoring Method
@@ -602,9 +630,16 @@ class UnifiedScorerService:
         missing_skills = []
         match_details = {}
         
+        # Build set of candidate base skills using reverse synonym map for O(1) lookup
+        candidate_base_skills = set()
+        for cs in candidate_skills_normalized:
+            base = self._reverse_synonym_map.get(cs)
+            if base:
+                candidate_base_skills.add(base)
+            candidate_base_skills.add(cs)  # Always add the raw skill too
+        
         for job_skill in job_skills_normalized:
             is_matched = False
-            match_type = None
             
             # Strategy 1: Exact match
             if job_skill in candidate_skills_normalized:
@@ -613,31 +648,13 @@ class UnifiedScorerService:
                 is_matched = True
                 continue
             
-            # Strategy 2: Synonym match
+            # Strategy 2: Synonym match via reverse lookup (O(1) instead of O(N))
             if not is_matched:
-                for base_skill, synonyms in self.SKILL_SYNONYMS.items():
-                    # Check if job skill matches base or any synonym
-                    if job_skill == base_skill or job_skill in synonyms:
-                        # Check if candidate has base or any synonym
-                        if base_skill in candidate_skills_normalized or \
-                           any(syn in candidate_skills_normalized for syn in synonyms):
-                            matched_skills.append(job_skill)
-                            match_details[job_skill] = 'synonym'
-                            is_matched = True
-                            break
-                    
-                    # Also check reverse: if candidate skill is base, job might be synonym
-                    if not is_matched:
-                        for candidate_skill in candidate_skills_normalized:
-                            if candidate_skill in self.SKILL_SYNONYMS:
-                                syns = self.SKILL_SYNONYMS[candidate_skill]
-                                if job_skill in syns or job_skill == candidate_skill:
-                                    matched_skills.append(job_skill)
-                                    match_details[job_skill] = 'synonym'
-                                    is_matched = True
-                                    break
-                        if is_matched:
-                            break
+                job_base = self._reverse_synonym_map.get(job_skill)
+                if job_base and job_base in candidate_base_skills:
+                    matched_skills.append(job_skill)
+                    match_details[job_skill] = 'synonym'
+                    is_matched = True
             
             # Strategy 3: Fuzzy match
             if not is_matched:
@@ -740,22 +757,21 @@ class UnifiedScorerService:
             return 50.0  # Default to neutral if embeddings not available
         
         try:
-            # Convert to lists if needed
-            cand_vec = list(candidate_embedding) if hasattr(candidate_embedding, '__iter__') else []
-            job_vec = list(job_embedding) if hasattr(job_embedding, '__iter__') else []
+            # Convert to numpy arrays for vectorized computation (10-50x faster)
+            cand_vec = np.asarray(candidate_embedding, dtype=np.float64)
+            job_vec = np.asarray(job_embedding, dtype=np.float64)
             
-            if not cand_vec or not job_vec:
+            if cand_vec.size == 0 or job_vec.size == 0:
                 return 50.0
             
-            # Calculate cosine similarity
-            dot_product = sum(a * b for a, b in zip(cand_vec, job_vec))
-            magnitude_cand = sum(a * a for a in cand_vec) ** 0.5
-            magnitude_job = sum(b * b for b in job_vec) ** 0.5
+            # Cosine similarity via numpy dot product + norms
+            magnitude_cand = np.linalg.norm(cand_vec)
+            magnitude_job = np.linalg.norm(job_vec)
             
             if magnitude_cand == 0 or magnitude_job == 0:
                 return 50.0
             
-            cosine_similarity = dot_product / (magnitude_cand * magnitude_job)
+            cosine_similarity = float(np.dot(cand_vec, job_vec) / (magnitude_cand * magnitude_job))
             
             # Normalize to 0-100 scale
             # Cosine similarity ranges from -1 to 1, but for text it's typically 0 to 1

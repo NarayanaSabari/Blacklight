@@ -54,13 +54,11 @@ class CandidateGlobalRole(db.Model):
     global_role = db.relationship('GlobalRole', back_populates='candidate_links')
     
     # Indexes and Constraints
+    # NOTE: Single-column indexes on candidate_id and global_role_id are already
+    # created by inline index=True on the FK columns above. No need to duplicate.
     __table_args__ = (
         # Unique: candidate can only have each role once
         UniqueConstraint('candidate_id', 'global_role_id', name='uq_candidate_global_role'),
-        # Find all candidates for a role (for matching after job import)
-        Index('idx_candidate_global_roles_role', 'global_role_id'),
-        # Find all roles for a candidate
-        Index('idx_candidate_global_roles_candidate', 'candidate_id'),
     )
     
     def __repr__(self):

@@ -53,13 +53,11 @@ class RoleJobMapping(db.Model):
     job_posting = db.relationship('JobPosting', back_populates='role_job_mappings')
     
     # Indexes and Constraints
+    # NOTE: Single-column indexes on global_role_id and job_posting_id are already
+    # created by inline index=True on the FK columns above. No need to duplicate.
     __table_args__ = (
         # Unique: one mapping per role-job pair
         UniqueConstraint('global_role_id', 'job_posting_id', name='uq_role_job_mapping'),
-        # Role lookup (get jobs for a role)
-        Index('idx_role_job_mapping_role', 'global_role_id'),
-        # Job lookup (which roles found this job)
-        Index('idx_role_job_mapping_job', 'job_posting_id'),
     )
     
     def __repr__(self):

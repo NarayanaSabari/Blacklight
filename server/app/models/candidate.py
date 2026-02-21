@@ -9,6 +9,8 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
+from sqlalchemy import Index
+
 from app import db
 
 
@@ -31,6 +33,15 @@ class Candidate(BaseModel):
     """
 
     __tablename__ = "candidates"
+
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_candidates_tenant', 'tenant_id'),
+        Index('idx_candidates_tenant_status', 'tenant_id', 'status'),
+        Index('idx_candidates_tenant_created', 'tenant_id', db.text('created_at DESC')),
+        # IVFFlat ANN index on embedding is created via raw SQL in migration
+        # (pgvector indexes require special CREATE INDEX syntax)
+    )
 
     # Tenant relationship (multi-tenant support)
     tenant_id = db.Column(

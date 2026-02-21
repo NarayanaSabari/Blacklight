@@ -40,7 +40,10 @@ def error_response(message: str, status: int = 400, details: dict = None):
 @require_permission('candidates.view')
 def generate_matches_for_candidate(candidate_id: int):
     """
-    Generate job matches for a specific candidate.
+    Generate job matches for a specific candidate using UnifiedScorerService.
+    
+    Finds jobs via RoleJobMapping (candidate's preferred roles) and scores
+    each pair, storing results in candidate_job_matches table.
     
     POST /api/job-matches/candidates/:id/generate
     
@@ -52,6 +55,9 @@ def generate_matches_for_candidate(candidate_id: int):
     
     Permissions: candidates.view
     """
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.role_job_mapping import RoleJobMapping
+    
     try:
         tenant_id = g.tenant_id
         
@@ -75,13 +81,60 @@ def generate_matches_for_candidate(candidate_id: int):
         if not isinstance(limit, int) or limit < 1 or limit > 200:
             return error_response("limit must be between 1 and 200")
         
-        # Generate matches
-        service = JobMatchingService(tenant_id=tenant_id)
-        matches = service.generate_matches_for_candidate(
-            candidate_id=candidate_id,
-            min_score=min_score,
-            limit=limit
-        )
+        # Get candidate's preferred role IDs for role-based filtering
+        role_ids = [
+            row[0] for row in db.session.execute(
+                select(CandidateGlobalRole.global_role_id).where(
+                    CandidateGlobalRole.candidate_id == candidate_id
+                )
+            ).all()
+        ]
+        
+        if not role_ids:
+            return jsonify({
+                'message': 'No preferred roles assigned. Cannot generate matches.',
+                'candidate_id': candidate_id,
+                'total_matches': 0,
+                'matches': []
+            }), 200
+        
+        # Get jobs via RoleJobMapping (standardized join path)
+        job_ids = [
+            row[0] for row in db.session.execute(
+                select(RoleJobMapping.job_posting_id).where(
+                    RoleJobMapping.global_role_id.in_(role_ids)
+                ).distinct()
+            ).all()
+        ]
+        
+        jobs = db.session.scalars(
+            select(JobPosting).where(
+                JobPosting.id.in_(job_ids),
+                JobPosting.embedding.isnot(None),
+                JobPosting.status == 'ACTIVE'
+            )
+        ).all() if job_ids else []
+        
+        # Score using UnifiedScorerService
+        scorer = UnifiedScorerService()
+        matches = []
+        
+        for job in jobs:
+            try:
+                match = scorer.calculate_and_store_match(candidate, job)
+                if float(match.match_score) >= min_score:
+                    matches.append(match)
+                else:
+                    db.session.delete(match)
+            except Exception as e:
+                logger.error(f"Error scoring candidate {candidate_id} vs job {job.id}: {e}")
+        
+        db.session.commit()
+        db.session.expire_all()
+        
+        # Sort by score descending and limit
+        matches.sort(key=lambda m: float(m.match_score), reverse=True)
+        matches = matches[:limit]
         
         return jsonify({
             'message': 'Matches generated successfully',
@@ -103,7 +156,9 @@ def generate_matches_for_candidate(candidate_id: int):
 @require_permission('candidates.view')
 def generate_matches_for_all():
     """
-    Generate job matches for all active candidates in tenant.
+    Generate job matches for all active candidates in tenant using UnifiedScorerService.
+    
+    Uses role-based filtering via RoleJobMapping for each candidate.
     
     POST /api/job-matches/generate-all
     
@@ -115,6 +170,10 @@ def generate_matches_for_all():
     
     Permissions: candidates.view
     """
+    import time
+    from app.models.candidate_global_role import CandidateGlobalRole
+    from app.models.role_job_mapping import RoleJobMapping
+    
     try:
         tenant_id = g.tenant_id
         
@@ -130,16 +189,108 @@ def generate_matches_for_all():
         if not isinstance(batch_size, int) or batch_size < 1 or batch_size > 50:
             return error_response("batch_size must be between 1 and 50")
         
-        # Generate matches for all candidates
-        service = JobMatchingService(tenant_id=tenant_id)
-        stats = service.generate_matches_for_all_candidates(
-            batch_size=batch_size,
-            min_score=min_score
-        )
+        start_time = time.time()
+        
+        # Fetch all active candidates for this tenant
+        candidates = db.session.scalars(
+            select(Candidate).where(
+                Candidate.tenant_id == tenant_id,
+                Candidate.status.in_(['approved', 'ready_for_assignment', 'new', 'screening']),
+            )
+        ).all()
+        
+        total_candidates = len(candidates)
+        if total_candidates == 0:
+            return jsonify({
+                'message': 'Bulk match generation complete',
+                'stats': {
+                    'total_candidates': 0,
+                    'successful_candidates': 0,
+                    'failed_candidates': 0,
+                    'total_matches': 0,
+                    'avg_matches_per_candidate': 0.0,
+                    'processing_time_seconds': 0.0
+                }
+            }), 200
+        
+        scorer = UnifiedScorerService()
+        successful_count = 0
+        failed_count = 0
+        total_matches = 0
+        
+        for i in range(0, total_candidates, batch_size):
+            batch = candidates[i:i + batch_size]
+            
+            for candidate in batch:
+                try:
+                    # Get candidate's role IDs
+                    role_ids = [
+                        row[0] for row in db.session.execute(
+                            select(CandidateGlobalRole.global_role_id).where(
+                                CandidateGlobalRole.candidate_id == candidate.id
+                            )
+                        ).all()
+                    ]
+                    
+                    if not role_ids:
+                        successful_count += 1
+                        continue
+                    
+                    # Get jobs via RoleJobMapping
+                    job_ids = [
+                        row[0] for row in db.session.execute(
+                            select(RoleJobMapping.job_posting_id).where(
+                                RoleJobMapping.global_role_id.in_(role_ids)
+                            ).distinct()
+                        ).all()
+                    ]
+                    
+                    jobs = db.session.scalars(
+                        select(JobPosting).where(
+                            JobPosting.id.in_(job_ids),
+                            JobPosting.embedding.isnot(None),
+                            JobPosting.status == 'ACTIVE'
+                        )
+                    ).all() if job_ids else []
+                    
+                    candidate_matches = 0
+                    for job in jobs:
+                        try:
+                            match = scorer.calculate_and_store_match(candidate, job)
+                            if float(match.match_score) >= min_score:
+                                candidate_matches += 1
+                            else:
+                                db.session.delete(match)
+                        except Exception as e:
+                            logger.error(f"Error scoring candidate {candidate.id} vs job {job.id}: {e}")
+                    
+                    total_matches += candidate_matches
+                    successful_count += 1
+                    
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"Failed to generate matches for candidate {candidate.id}: {e}")
+            
+            db.session.commit()
+            
+            # Small delay between batches
+            if i + batch_size < total_candidates:
+                time.sleep(0.1)
+        
+        db.session.expire_all()
+        processing_time = time.time() - start_time
+        avg_matches = total_matches / successful_count if successful_count > 0 else 0.0
         
         return jsonify({
             'message': 'Bulk match generation complete',
-            'stats': stats
+            'stats': {
+                'total_candidates': total_candidates,
+                'successful_candidates': successful_count,
+                'failed_candidates': failed_count,
+                'total_matches': total_matches,
+                'avg_matches_per_candidate': round(avg_matches, 2),
+                'processing_time_seconds': round(processing_time, 2)
+            }
         }), 200
         
     except Exception as e:
@@ -314,14 +465,15 @@ def get_candidate_matches(candidate_id: int):
     """
     Get job matches for a specific candidate.
     
-    Fetches jobs linked to the candidate's preferred roles (via RoleJobMapping)
-    and calculates match scores on-the-fly. No pre-computation required.
+    Reads pre-computed scores from candidate_job_matches table (populated by
+    nightly refresh and job-import events). Falls back to on-the-fly scoring
+    only for jobs that have no stored match yet.
     
     GET /api/job-matches/candidates/:id?page=1&per_page=20&min_score=0
     
     Query params:
     - page: Page number (default 1)
-    - per_page: Matches per page (default 20, max 100)
+    - per_page: Matches per page (default 20, max 500)
     - min_score: Minimum match score filter (default 0)
     - sort_by: Sort field (created_at, match_score, posted_date, default: created_at)
     - sort_order: Sort order (asc, desc, default: desc)
@@ -440,11 +592,74 @@ def get_candidate_matches(candidate_id: int):
                 }
             }), 200
         
-        # Fetch ACTIVE jobs with email job visibility rules:
-        # - Scraped jobs (is_email_sourced=False): visible to all tenants
-        # - Email jobs (is_email_sourced=True): only visible to source tenant
-        job_query = select(JobPosting).where(
-            JobPosting.id.in_(job_ids),
+        # ------------------------------------------------------------------
+        # Read pre-computed scores from CandidateJobMatch table.
+        # Join with JobPosting to apply visibility/status/platform/source filters.
+        # ------------------------------------------------------------------
+        
+        # Base query: join CandidateJobMatch with JobPosting
+        match_query = (
+            select(CandidateJobMatch, JobPosting)
+            .join(JobPosting, CandidateJobMatch.job_posting_id == JobPosting.id)
+            .where(
+                CandidateJobMatch.candidate_id == candidate_id,
+                CandidateJobMatch.job_posting_id.in_(job_ids),
+                JobPosting.status == 'ACTIVE',
+                # Email job visibility: scraped jobs visible to all, email jobs only to source tenant
+                or_(
+                    JobPosting.is_email_sourced == False,
+                    and_(
+                        JobPosting.is_email_sourced == True,
+                        JobPosting.source_tenant_id == tenant_id
+                    )
+                )
+            )
+        )
+        
+        # Apply min_score filter
+        if min_score > 0:
+            match_query = match_query.where(
+                CandidateJobMatch.match_score >= min_score
+            )
+        
+        # Apply grade filter
+        if grades_filter:
+            match_query = match_query.where(
+                CandidateJobMatch.match_grade.in_(grades_filter)
+            )
+        
+        # Apply source filter
+        if source_filter == 'email':
+            match_query = match_query.where(JobPosting.is_email_sourced == True)
+        elif source_filter == 'scraped':
+            match_query = match_query.where(JobPosting.is_email_sourced == False)
+        
+        # Apply platform filter
+        if platforms_filter:
+            match_query = match_query.where(
+                func.lower(JobPosting.platform).in_(platforms_filter)
+            )
+        
+        # Sorting
+        reverse_order = (sort_order != 'asc')
+        if sort_by == 'match_score':
+            order_col = CandidateJobMatch.match_score.desc() if reverse_order else CandidateJobMatch.match_score.asc()
+        elif sort_by == 'posted_date':
+            order_col = JobPosting.posted_date.desc() if reverse_order else JobPosting.posted_date.asc()
+        else:  # default: created_at
+            order_col = JobPosting.created_at.desc() if reverse_order else JobPosting.created_at.asc()
+        
+        match_query = match_query.order_by(order_col)
+        
+        # ------------------------------------------------------------------
+        # Collect available_platforms and available_sources BEFORE pagination
+        # (lightweight aggregation over the filtered set)
+        # ------------------------------------------------------------------
+        
+        # We need unfiltered-by-platform query for available_platforms
+        base_visibility_filter = and_(
+            CandidateJobMatch.candidate_id == candidate_id,
+            CandidateJobMatch.job_posting_id.in_(job_ids),
             JobPosting.status == 'ACTIVE',
             or_(
                 JobPosting.is_email_sourced == False,
@@ -454,110 +669,78 @@ def get_candidate_matches(candidate_id: int):
                 )
             )
         )
-        all_jobs = db.session.execute(job_query).scalars().all()
         
-        if not all_jobs:
-            return jsonify({
-                'candidate_id': candidate_id,
-                'total_matches': 0,
-                'page': page,
-                'per_page': per_page,
-                'total_pages': 0,
-                'matches': [],
-                'available_platforms': [],
-                'available_sources': [],
-                'message': 'No active jobs found for assigned roles.'
-            }), 200
+        # Available platforms
+        platform_query = (
+            select(func.lower(JobPosting.platform))
+            .join(CandidateJobMatch, CandidateJobMatch.job_posting_id == JobPosting.id)
+            .where(base_visibility_filter)
+            .where(JobPosting.platform.isnot(None))
+            .distinct()
+        )
+        available_platforms = sorted([row[0] for row in db.session.execute(platform_query).all()])
         
-        # Collect available sources (email, scraped)
+        # Available sources
+        source_query = (
+            select(JobPosting.is_email_sourced)
+            .join(CandidateJobMatch, CandidateJobMatch.job_posting_id == JobPosting.id)
+            .where(base_visibility_filter)
+            .distinct()
+        )
+        source_rows = [row[0] for row in db.session.execute(source_query).all()]
         available_sources = []
-        has_email_jobs = any(job.is_email_sourced for job in all_jobs)
-        has_scraped_jobs = any(not job.is_email_sourced for job in all_jobs)
-        if has_scraped_jobs:
+        if False in source_rows:
             available_sources.append('scraped')
-        if has_email_jobs:
+        if True in source_rows:
             available_sources.append('email')
         
-        # Apply source filter
+        # ------------------------------------------------------------------
+        # Get total count (for pagination) and paginated results
+        # ------------------------------------------------------------------
+        
+        # Total count
+        from sqlalchemy import func as sqla_func
+        count_query = (
+            select(sqla_func.count())
+            .select_from(CandidateJobMatch)
+            .join(JobPosting, CandidateJobMatch.job_posting_id == JobPosting.id)
+            .where(
+                CandidateJobMatch.candidate_id == candidate_id,
+                CandidateJobMatch.job_posting_id.in_(job_ids),
+                JobPosting.status == 'ACTIVE',
+                or_(
+                    JobPosting.is_email_sourced == False,
+                    and_(
+                        JobPosting.is_email_sourced == True,
+                        JobPosting.source_tenant_id == tenant_id
+                    )
+                )
+            )
+        )
+        if min_score > 0:
+            count_query = count_query.where(CandidateJobMatch.match_score >= min_score)
+        if grades_filter:
+            count_query = count_query.where(CandidateJobMatch.match_grade.in_(grades_filter))
         if source_filter == 'email':
-            all_jobs = [job for job in all_jobs if job.is_email_sourced]
+            count_query = count_query.where(JobPosting.is_email_sourced == True)
         elif source_filter == 'scraped':
-            all_jobs = [job for job in all_jobs if not job.is_email_sourced]
-        # 'all' - no filtering needed
-        
-        # Collect all available platforms (before filtering)
-        available_platforms = sorted(list(set(
-            job.platform.lower() for job in all_jobs 
-            if job.platform
-        )))
-        
-        # Apply platform filter if specified
+            count_query = count_query.where(JobPosting.is_email_sourced == False)
         if platforms_filter:
-            jobs = [job for job in all_jobs if job.platform and job.platform.lower() in platforms_filter]
-        else:
-            jobs = all_jobs
+            count_query = count_query.where(func.lower(JobPosting.platform).in_(platforms_filter))
         
-        # Initialize unified scoring service and calculate scores on-the-fly
-        service = UnifiedScorerService()
-        scored_matches = []
-        
-        for job in jobs:
-            try:
-                match_result = service.calculate_score(candidate, job)
-                overall_score = match_result.overall_score
-                match_grade = match_result.match_grade
-                
-                # Apply min_score filter
-                if overall_score >= min_score:
-                    # Apply grade filter if specified
-                    if grades_filter and match_grade not in grades_filter:
-                        continue
-                    scored_matches.append({
-                        'job': job,
-                        'match_result': match_result
-                    })
-            except Exception as e:
-                logger.warning(f"Failed to calculate score for job {job.id}: {e}")
-                continue
-        
-        # Sort matches
-        reverse_order = (sort_order != 'asc')
-        if sort_by == 'created_at':
-            from datetime import datetime as dt
-            scored_matches.sort(
-                key=lambda x: x['job'].created_at or dt.min, 
-                reverse=reverse_order
-            )
-        elif sort_by == 'match_score':
-            scored_matches.sort(key=lambda x: x['match_result'].overall_score, reverse=reverse_order)
-        elif sort_by == 'posted_date':
-            from datetime import datetime as dt
-            scored_matches.sort(
-                key=lambda x: x['job'].posted_date or dt.min.date(), 
-                reverse=reverse_order
-            )
-        else:
-            # Default: sort by created_at (latest first)
-            from datetime import datetime as dt
-            scored_matches.sort(
-                key=lambda x: x['job'].created_at or dt.min, 
-                reverse=reverse_order
-            )
-        
-        # Total count (after filtering)
-        total_matches = len(scored_matches)
+        total_matches = db.session.scalar(count_query) or 0
         total_pages = (total_matches + per_page - 1) // per_page if total_matches > 0 else 0
         
-        # Pagination
-        start = (page - 1) * per_page
-        end = start + per_page
-        paginated_matches = scored_matches[start:end]
+        # Paginated results
+        offset = (page - 1) * per_page
+        paginated_query = match_query.offset(offset).limit(per_page)
+        paginated_rows = db.session.execute(paginated_query).all()
         
-        # Format response to match expected JobMatch interface (using unified scoring)
+        # Format response to match expected JobMatch interface
         matches_response = []
-        for m in paginated_matches:
-            job = m['job']
-            result = m['match_result']
+        for row in paginated_rows:
+            match = row[0]  # CandidateJobMatch
+            job = row[1]    # JobPosting
             
             # Get sourced_by user info for email jobs
             sourced_by_info = None
@@ -572,21 +755,21 @@ def get_candidate_matches(candidate_id: int):
                     }
             
             matches_response.append({
-                'id': None,  # No stored match ID for on-the-fly matches
+                'id': match.id,
                 'candidate_id': candidate_id,
                 'job_posting_id': job.id,
-                'match_score': round(result.overall_score, 2),
-                'match_grade': result.match_grade,
-                'skill_match_score': round(result.skill_score, 2),
+                'match_score': float(match.match_score) if match.match_score else 0.0,
+                'match_grade': match.match_grade,
+                'skill_match_score': float(match.skill_match_score) if match.skill_match_score else 0.0,
                 'keyword_match_score': None,  # DEPRECATED - no longer used
-                'experience_match_score': round(result.experience_score, 2),
-                'semantic_similarity': round(result.semantic_score, 2),
-                'matched_skills': result.matched_skills,
-                'missing_skills': result.missing_skills,
+                'experience_match_score': float(match.experience_match_score) if match.experience_match_score else 0.0,
+                'semantic_similarity': float(match.semantic_similarity) if match.semantic_similarity else 0.0,
+                'matched_skills': match.matched_skills or [],
+                'missing_skills': match.missing_skills or [],
                 'matched_keywords': None,  # DEPRECATED - no longer used
                 'missing_keywords': None,  # DEPRECATED - no longer used
-                'status': 'SUGGESTED',
-                'is_recommended': True,
+                'status': match.status or 'SUGGESTED',
+                'is_recommended': match.is_recommended,
                 'job_posting': {
                     'id': job.id,
                     'title': job.title,
