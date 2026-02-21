@@ -12,6 +12,8 @@ from app import db
 from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
+from app.models.candidate_job_match import CandidateJobMatch
+from app.models.candidate import Candidate
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +218,56 @@ class JobPostingService:
         
         # Build response with sourced_by info (already loaded via eager loading)
         jobs_list = []
+        
+        # Batch fetch top matched candidates for all jobs on this page
+        job_ids = [job.id for job in jobs]
+        matches_by_job: Dict[int, list] = {}
+        
+        if job_ids:
+            # Use a window function to rank matches per job and pick top 5
+            # This avoids N+1 queries (one per job)
+            from sqlalchemy import desc
+            
+            match_query = (
+                select(
+                    CandidateJobMatch.job_posting_id,
+                    CandidateJobMatch.match_score,
+                    CandidateJobMatch.match_grade,
+                    Candidate.id.label('candidate_id'),
+                    Candidate.first_name,
+                    Candidate.last_name,
+                )
+                .join(Candidate, CandidateJobMatch.candidate_id == Candidate.id)
+                .where(
+                    CandidateJobMatch.job_posting_id.in_(job_ids),
+                    CandidateJobMatch.match_score >= 50,
+                    Candidate.tenant_id == tenant_id,
+                )
+                .order_by(
+                    CandidateJobMatch.job_posting_id,
+                    desc(CandidateJobMatch.match_score),
+                )
+            )
+            
+            match_rows = db.session.execute(match_query).all()
+            
+            # Group by job and keep top 5 per job
+            for row in match_rows:
+                jp_id = row.job_posting_id
+                if jp_id not in matches_by_job:
+                    matches_by_job[jp_id] = []
+                if len(matches_by_job[jp_id]) < 5:
+                    name_parts = [
+                        row.first_name or '',
+                        row.last_name or '',
+                    ]
+                    matches_by_job[jp_id].append({
+                        'candidate_id': row.candidate_id,
+                        'name': ' '.join(p for p in name_parts if p).strip() or 'Unnamed',
+                        'match_score': float(row.match_score) if row.match_score else 0,
+                        'match_grade': row.match_grade,
+                    })
+
         for job in jobs:
             job_dict = job.to_dict()
             
@@ -245,6 +297,13 @@ class JobPostingService:
                     }
             
             jobs_list.append(job_dict)
+        
+        # Add matched candidates to each job dict (from batch fetch)
+        for job_dict in jobs_list:
+            job_id = job_dict.get('id')
+            matched = matches_by_job.get(job_id, [])
+            job_dict['matched_candidates'] = matched
+            job_dict['matched_candidates_count'] = len(matched)
         
         return {
             'jobs': jobs_list,

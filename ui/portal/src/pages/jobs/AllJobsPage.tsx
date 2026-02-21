@@ -57,6 +57,7 @@ import {
   Inbox,
   LayoutGrid,
   List,
+  Users,
 } from 'lucide-react';
 import { jobPostingApi, type JobSourceFilter, type JobPostingWithSource } from '@/lib/jobPostingApi';
 import { format } from 'date-fns';
@@ -200,6 +201,12 @@ export function AllJobsPage() {
         {job.platform || 'Scraped'}
       </Badge>
     );
+  };
+
+  const getGradeColor = (grade: string) => {
+    if (grade?.startsWith('A')) return 'bg-green-100 text-green-700';
+    if (grade?.startsWith('B')) return 'bg-yellow-100 text-yellow-700';
+    return 'bg-orange-100 text-orange-700';
   };
 
   const totalPages = jobsData?.pages || 0;
@@ -409,6 +416,33 @@ export function AllJobsPage() {
                               )}
                             </div>
                           )}
+
+                          {/* Matched Candidates */}
+                          {job.matched_candidates && job.matched_candidates.length > 0 && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <Users className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                              <div className="flex flex-wrap gap-1.5">
+                                {job.matched_candidates.map((match) => (
+                                  <Tooltip key={match.candidate_id}>
+                                    <TooltipTrigger asChild>
+                                      <Badge
+                                        className={`text-xs font-normal cursor-pointer ${getGradeColor(match.match_grade)}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/candidates/${match.candidate_id}`);
+                                        }}
+                                      >
+                                        {match.name} ({Math.round(match.match_score)}%)
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Grade {match.match_grade} - Click to view candidate
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Email Sourced Info */}
@@ -549,6 +583,43 @@ export function AllJobsPage() {
                                   +{job.skills.length - 4}
                                 </Badge>
                               )}
+                            </div>
+                          )}
+
+                          {/* Matched Candidates */}
+                          {job.matched_candidates && job.matched_candidates.length > 0 && (
+                            <div className="pt-2 border-t">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <Users className="h-3.5 w-3.5 text-emerald-600" />
+                                <span className="text-xs font-medium text-emerald-700">
+                                  {job.matched_candidates_count || job.matched_candidates.length} Matched
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {job.matched_candidates.slice(0, 3).map((match) => (
+                                  <Tooltip key={match.candidate_id}>
+                                    <TooltipTrigger asChild>
+                                      <Badge
+                                        className={`text-xs font-normal cursor-pointer ${getGradeColor(match.match_grade)}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/candidates/${match.candidate_id}`);
+                                        }}
+                                      >
+                                        {match.name} ({Math.round(match.match_score)}%)
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Grade {match.match_grade} - Click to view candidate
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ))}
+                                {job.matched_candidates.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{job.matched_candidates.length - 3} more
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
                           )}
 

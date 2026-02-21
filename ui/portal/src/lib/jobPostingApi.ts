@@ -7,6 +7,14 @@
 import { apiRequest } from './api-client';
 import type { JobPosting } from '@/types';
 
+/** Matched candidate info returned with job listing */
+export interface MatchedCandidate {
+  candidate_id: number;
+  name: string;
+  match_score: number;
+  match_grade: string;
+}
+
 /** Extended JobPosting with sourced_by info */
 export interface JobPostingWithSource extends JobPosting {
   sourced_by?: {
@@ -25,6 +33,8 @@ export interface JobPostingWithSource extends JobPosting {
     email_address: string;
     email_direct_link: string | null;
   } | null;
+  matched_candidates?: MatchedCandidate[];
+  matched_candidates_count?: number;
 }
 
 /** Job source filter type */
