@@ -208,11 +208,12 @@ export function CandidateDetailPage() {
   // Get current assignment
   const currentAssignment = assignmentsData?.assignments?.find(a => a.status === 'ACTIVE');
 
-  // Fetch top job matches (currently commented out in UI, kept for future use)
-  const { data: _matchesData } = useQuery({
+  // Fetch top job matches for sidebar preview
+  const { data: matchesData } = useQuery({
     queryKey: ['candidateMatches', id],
     queryFn: () => jobMatchApi.getCandidateMatches(Number(id), { per_page: 3, sort_by: 'match_score', sort_order: 'desc' }),
     enabled: !!id,
+    staleTime: 0,
   });
 
   // Fetch candidate submissions
@@ -1389,7 +1390,7 @@ export function CandidateDetailPage() {
         {/* Right Column - Sidebar */}
         <div className="space-y-6">
           {/* Job Matches Preview */}
-          {/* {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
+          {!isReviewMode && matchesData && matchesData.total_matches > 0 && (
             <Card className="border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-gradient-to-br from-primary/5 to-secondary/5">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -1461,7 +1462,7 @@ export function CandidateDetailPage() {
                 ))}
               </CardContent>
             </Card>
-          )} */}
+          )}
 
           {/* Submissions Preview */}
           {!isReviewMode && submissionsData && submissionsData.total > 0 && (
