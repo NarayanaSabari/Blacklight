@@ -37,7 +37,8 @@ class AIRoleNormalizationService:
     - 10% of cases: Gemini AI for new roles
     """
     
-    SIMILARITY_THRESHOLD = 0.85  # 85% similarity for auto-match
+    SIMILARITY_THRESHOLD = 0.85  # 85% similarity for candidate role auto-match
+    JOB_SIMILARITY_THRESHOLD = 0.75  # 75% for job titles (more verbose than candidate roles)
     
     def __init__(self):
         """Initialize service with embedding service and Gemini API."""
@@ -120,21 +121,43 @@ class AIRoleNormalizationService:
                     aliases.append(raw_role)
                     existing.aliases = aliases
             else:
-                # Create new global role
+                # Secondary embedding check: generate embedding for canonical name
+                # and search again to catch near-duplicates like "Python Engineer"
+                # vs "Python Developer"
                 role_embedding_for_new = self.embedding_service.generate_embedding(
                     canonical_name,
                     task_type="SEMANTIC_SIMILARITY"
                 )
-                
-                global_role = GlobalRole(
-                    name=canonical_name,
-                    embedding=role_embedding_for_new,
-                    aliases=[raw_role] if raw_role.lower() != canonical_name.lower() else [],
-                    queue_status='pending',  # New roles need PM_ADMIN review
-                    priority='normal'
+                secondary_match = self._find_similar_role(
+                    role_embedding_for_new, threshold=self.SIMILARITY_THRESHOLD
                 )
-                db.session.add(global_role)
-                similarity = 1.0
+                
+                if secondary_match:
+                    global_role = secondary_match["role"]
+                    similarity = secondary_match["similarity"]
+                    
+                    logger.info(
+                        f"Secondary embedding match: AI canonical '{canonical_name}' "
+                        f"matched existing role '{global_role.name}' ({similarity:.2%})"
+                    )
+                    
+                    # Add both raw_role and canonical as aliases
+                    aliases = list(global_role.aliases or [])
+                    for alias in [raw_role, canonical_name]:
+                        if alias.lower() not in [a.lower() for a in aliases]:
+                            aliases.append(alias)
+                    global_role.aliases = aliases
+                else:
+                    # Truly new role
+                    global_role = GlobalRole(
+                        name=canonical_name,
+                        embedding=role_embedding_for_new,
+                        aliases=[raw_role] if raw_role.lower() != canonical_name.lower() else [],
+                        queue_status='pending',  # New roles need PM_ADMIN review
+                        priority='normal'
+                    )
+                    db.session.add(global_role)
+                    similarity = 1.0
             
             method = "ai_created"
         
@@ -145,16 +168,20 @@ class AIRoleNormalizationService:
         
         return global_role, similarity, method
     
-    def _find_similar_role(self, embedding: List[float]) -> Optional[Dict[str, Any]]:
+    def _find_similar_role(self, embedding: List[float], threshold: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """
         Find similar existing role using vector similarity search.
         
         Args:
             embedding: 768-dimensional embedding vector
+            threshold: Minimum similarity threshold (defaults to SIMILARITY_THRESHOLD)
         
         Returns:
             Dict with "role" and "similarity" if found, None otherwise
         """
+        if threshold is None:
+            threshold = self.SIMILARITY_THRESHOLD
+        
         try:
             # Convert embedding to PostgreSQL array format
             embedding_str = '[' + ','.join(map(str, embedding)) + ']'
@@ -172,7 +199,7 @@ class AIRoleNormalizationService:
             
             result = db.session.execute(query, {"embedding": embedding_str}).fetchone()
             
-            if result and result.similarity >= self.SIMILARITY_THRESHOLD:
+            if result and result.similarity >= threshold:
                 role = db.session.get(GlobalRole, result.id)
                 return {
                     "role": role,
@@ -233,6 +260,74 @@ Return ONLY the normalized job title, nothing else."""
                 return self._basic_normalize(raw_role)
         except Exception as e:
             logger.error(f"AI normalization failed: {e}")
+            return self._basic_normalize(raw_role)
+    
+    def _get_existing_role_names(self) -> List[str]:
+        """
+        Get all existing global role names for feeding into AI prompts.
+        
+        Returns:
+            List of existing role names, sorted alphabetically
+        """
+        try:
+            stmt = select(GlobalRole.name).order_by(GlobalRole.name)
+            return list(db.session.scalars(stmt).all())
+        except Exception as e:
+            logger.warning(f"Failed to fetch existing role names: {e}")
+            return []
+    
+    def _ai_normalize_role_with_existing(
+        self, raw_role: str, existing_roles: List[str]
+    ) -> str:
+        """
+        Use Gemini AI to normalize a role name, preferring existing role names.
+        
+        This variant includes existing role names in the prompt so the AI
+        can map to an existing role rather than inventing a new canonical name.
+        
+        Args:
+            raw_role: Raw role name (e.g., "Java Fullstack Developer")
+            existing_roles: List of existing GlobalRole names to prefer
+        
+        Returns:
+            Canonical role name, preferably one that already exists
+        """
+        if not self.ai_model:
+            return self._basic_normalize(raw_role)
+        
+        # Build the existing roles list for the prompt (limit to avoid token overflow)
+        roles_list = "\n".join(f"- {r}" for r in existing_roles[:200])
+        
+        prompt = f"""Normalize this job title to a standard, canonical form.
+
+Job Title: "{raw_role}"
+
+IMPORTANT: Prefer mapping to one of these EXISTING roles if the job title is semantically equivalent:
+{roles_list}
+
+Rules:
+1. If the job title is semantically equivalent to an existing role above, return that EXACT existing role name
+2. "Semantically equivalent" means the same job function, even if the title uses different words
+   (e.g., "Java Fullstack Developer" = "Full Stack Developer", "Azure DevOps Engineer" = "DevOps Engineer")
+3. Remove seniority prefixes (Sr., Senior, Jr., Junior, Lead, Staff, Principal)
+4. Use common industry-standard names
+5. Expand abbreviations (Dev → Developer, Eng → Engineer)
+6. Keep it concise (2-4 words max)
+7. Only create a NEW role name if no existing role covers this job function
+
+Return ONLY the normalized job title, nothing else."""
+
+        try:
+            response = self.ai_model.generate_content(prompt)
+            normalized = response.text.strip().strip('"').strip("'")
+            
+            if normalized and len(normalized) <= 100:
+                return normalized
+            else:
+                logger.warning(f"AI returned invalid response: {response.text}")
+                return self._basic_normalize(raw_role)
+        except Exception as e:
+            logger.error(f"AI normalization with existing roles failed: {e}")
             return self._basic_normalize(raw_role)
     
     def _basic_normalize(self, raw_role: str) -> str:
@@ -596,6 +691,10 @@ Return ONLY the normalized job title, nothing else."""
         This enables job matching: candidates with matching preferred roles will
         automatically see jobs linked to the same GlobalRole.
         
+        Uses a lower similarity threshold (75%) than candidate roles since job titles
+        tend to be more verbose. Also performs a secondary embedding check after AI
+        normalization to prevent creating duplicate roles.
+        
         Args:
             job_title: Raw job title (e.g., "Senior Python Developer")
             job_posting_id: Job posting ID to link
@@ -617,8 +716,8 @@ Return ONLY the normalized job title, nothing else."""
                 task_type="SEMANTIC_SIMILARITY"
             )
             
-            # Step 2: Search for similar existing roles (FAST PATH)
-            similar_role = self._find_similar_role(job_embedding)
+            # Step 2: Search for similar existing roles with lower threshold for jobs
+            similar_role = self._find_similar_role(job_embedding, threshold=self.JOB_SIMILARITY_THRESHOLD)
             
             if similar_role:
                 global_role = similar_role["role"]
@@ -635,12 +734,14 @@ Return ONLY the normalized job title, nothing else."""
                     aliases.append(job_title)
                     global_role.aliases = aliases
             else:
-                # Step 3: No match - call Gemini AI to normalize (SLOW PATH)
-                canonical_name = self._ai_normalize_role(job_title)
+                # Step 3: No embedding match - call Gemini AI to normalize (SLOW PATH)
+                # Feed existing role names into the prompt to encourage reuse
+                existing_roles = self._get_existing_role_names()
+                canonical_name = self._ai_normalize_role_with_existing(job_title, existing_roles)
                 
                 logger.info(f"AI normalized job title '{job_title}' to '{canonical_name}'")
                 
-                # Check if AI-normalized name already exists
+                # Check if AI-normalized name already exists (exact match)
                 stmt = select(GlobalRole).where(GlobalRole.name == canonical_name)
                 existing = db.session.scalar(stmt)
                 
@@ -655,22 +756,50 @@ Return ONLY the normalized job title, nothing else."""
                         aliases.append(job_title)
                         existing.aliases = aliases
                 else:
-                    # Create new global role
-                    role_embedding = self.embedding_service.generate_embedding(
+                    # Step 3b: Secondary embedding check — generate embedding for the
+                    # AI-normalized canonical name and search again. This catches cases
+                    # like "Python Engineer" vs "Python Developer" that are semantically
+                    # identical but have different string names.
+                    canonical_embedding = self.embedding_service.generate_embedding(
                         canonical_name,
                         task_type="SEMANTIC_SIMILARITY"
                     )
-                    
-                    global_role = GlobalRole(
-                        name=canonical_name,
-                        embedding=role_embedding,
-                        aliases=[job_title] if job_title.lower() != canonical_name.lower() else [],
-                        queue_status='approved',  # Job-sourced roles are auto-approved (real jobs exist)
-                        priority='normal'
+                    secondary_match = self._find_similar_role(
+                        canonical_embedding, threshold=self.SIMILARITY_THRESHOLD
                     )
-                    db.session.add(global_role)
-                    db.session.flush()  # Get ID
-                    similarity = 1.0
+                    
+                    if secondary_match:
+                        # Found a match via secondary embedding check
+                        global_role = secondary_match["role"]
+                        similarity = secondary_match["similarity"]
+                        
+                        logger.info(
+                            f"Secondary embedding match: AI canonical '{canonical_name}' "
+                            f"matched existing role '{global_role.name}' ({similarity:.2%})"
+                        )
+                        
+                        # Add both the original job title and canonical name as aliases
+                        aliases = list(global_role.aliases or [])
+                        for alias in [job_title, canonical_name]:
+                            if alias.lower() not in [a.lower() for a in aliases]:
+                                aliases.append(alias)
+                        global_role.aliases = aliases
+                    else:
+                        # Truly new role — create it
+                        global_role = GlobalRole(
+                            name=canonical_name,
+                            embedding=canonical_embedding,
+                            aliases=[job_title] if job_title.lower() != canonical_name.lower() else [],
+                            queue_status='approved',  # Job-sourced roles are auto-approved (real jobs exist)
+                            priority='normal'
+                        )
+                        db.session.add(global_role)
+                        db.session.flush()  # Get ID
+                        similarity = 1.0
+                        
+                        logger.info(
+                            f"Created new role '{canonical_name}' for job title '{job_title}'"
+                        )
                 
                 method = "ai_created"
             
@@ -688,7 +817,7 @@ Return ONLY the normalized job title, nothing else."""
             db.session.flush()
             
             logger.info(
-                f"✅ Job {job_posting_id} linked to role '{global_role.name}' "
+                f"Job {job_posting_id} linked to role '{global_role.name}' "
                 f"(similarity: {similarity:.2%}, method: {method})"
             )
             
