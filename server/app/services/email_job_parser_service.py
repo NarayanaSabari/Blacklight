@@ -783,6 +783,14 @@ Important:
                 db.session.add(job)
                 db.session.flush()
                 logger.info(f"Recovered job creation after session error, new job ID: {job.id}")
+                # Re-attempt role normalization on recovered job
+                try:
+                    self._normalize_and_link_job_role(job)
+                except Exception as norm_err:
+                    logger.warning(
+                        f"Role normalization also failed on recovered job {job.id}, "
+                        f"backfill cron will handle it: {norm_err}"
+                    )
         
         return (job, True)  # New job created
     

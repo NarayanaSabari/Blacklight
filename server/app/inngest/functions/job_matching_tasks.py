@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
     trigger=inngest.TriggerCron(cron="0 2 * * *"),  # 2 AM daily
     name="Nightly Job Match Refresh"
 )
-async def nightly_match_refresh_workflow(ctx: inngest.Context):
+async def nightly_match_refresh_workflow(ctx):
     """
     Regenerate job matches for all active candidates across all tenants.
     Runs nightly at 2 AM to ensure matches stay fresh with latest jobs.
@@ -102,7 +102,7 @@ async def nightly_match_refresh_workflow(ctx: inngest.Context):
     trigger=inngest.TriggerEvent(event="job-match/generate-candidate"),
     name="Generate Matches for Single Candidate"
 )
-async def generate_candidate_matches_workflow(ctx: inngest.Context):
+async def generate_candidate_matches_workflow(ctx):
     """
     Generate job matches for a single candidate.
     Triggered by events: new candidate onboarding, profile update, manual trigger.
@@ -201,7 +201,7 @@ async def generate_candidate_matches_workflow(ctx: inngest.Context):
     retries=3,
     name="Match New Jobs to Candidates"
 )
-async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
+async def match_jobs_to_candidates_workflow(ctx) -> dict:
     """
     Match newly imported jobs to candidates with matching preferred roles.
     
@@ -268,8 +268,10 @@ async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
             return []
         
         # Find all candidates linked to this global role
-        candidate_links = CandidateGlobalRole.query.filter_by(
-            global_role_id=global_role_id
+        candidate_links = db.session.scalars(
+            select(CandidateGlobalRole).where(
+                CandidateGlobalRole.global_role_id == global_role_id
+            )
         ).all()
         
         candidates_info = []
@@ -321,10 +323,12 @@ async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
                     continue
                 
                 # Check if match already exists
-                existing = CandidateJobMatch.query.filter_by(
-                    candidate_id=candidate_id,
-                    job_posting_id=job_id
-                ).first()
+                existing = db.session.scalar(
+                    select(CandidateJobMatch).where(
+                        CandidateJobMatch.candidate_id == candidate_id,
+                        CandidateJobMatch.job_posting_id == job_id,
+                    )
+                )
                 
                 if existing:
                     continue
@@ -374,7 +378,7 @@ async def match_jobs_to_candidates_workflow(ctx: inngest.Context) -> dict:
     trigger=inngest.TriggerEvent(event="job-posting/updated"),
     name="Update Job Embeddings on Change"
 )
-async def update_job_embeddings_workflow(ctx: inngest.Context):
+async def update_job_embeddings_workflow(ctx):
     """
     Regenerate embeddings when job posting is updated.
     Triggered automatically when job details change.
@@ -441,23 +445,27 @@ def fetch_active_tenants_step() -> List[Dict[str, Any]]:
 
 
 def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
-    """Process job matches for all candidates in a tenant using UnifiedScorerService"""
+    """
+    Process job matches for all candidates in a tenant using UnifiedScorerService.
+    
+    Uses ROLE-BASED FILTERING: only matches candidates against jobs whose
+    normalized_role_id matches one of the candidate's preferred global roles.
+    This avoids nonsensical matches (e.g., Python developer vs Product Manager job).
+    
+    Also refreshes existing matches (recalculates scores) and removes stale ones.
+    """
     tenant_id = tenant["id"]
     
     try:
         logger.info(f"[INNGEST] Processing matches for tenant {tenant_id} ({tenant['company_name']})")
         
         # Get all active candidates for this tenant
-        candidates = Candidate.query.filter(
-            Candidate.tenant_id == tenant_id,
-            Candidate.status.in_(['approved', 'ready_for_assignment']),
-            Candidate.embedding.isnot(None)
-        ).all()
-        
-        # Get all active jobs with embeddings
-        jobs = JobPosting.query.filter(
-            JobPosting.embedding.isnot(None),
-            JobPosting.status == 'ACTIVE'
+        candidates = db.session.scalars(
+            select(Candidate).where(
+                Candidate.tenant_id == tenant_id,
+                Candidate.status.in_(['approved', 'ready_for_assignment']),
+                Candidate.embedding.isnot(None),
+            )
         ).all()
         
         # Initialize unified scorer
@@ -467,26 +475,61 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
         successful_candidates = 0
         failed_candidates = 0
         total_matches = 0
+        stale_deleted = 0
         
         for candidate in candidates:
             try:
+                # Get candidate's preferred role IDs
+                role_ids = db.session.scalars(
+                    select(CandidateGlobalRole.global_role_id).where(
+                        CandidateGlobalRole.candidate_id == candidate.id
+                    )
+                ).all()
+                
+                if not role_ids:
+                    logger.debug(
+                        f"[INNGEST] Candidate {candidate.id} has no preferred roles, skipping"
+                    )
+                    successful_candidates += 1
+                    continue
+                
+                # Get jobs matching candidate's preferred roles
+                matching_jobs = db.session.scalars(
+                    select(JobPosting).where(
+                        JobPosting.normalized_role_id.in_(role_ids),
+                        JobPosting.embedding.isnot(None),
+                        JobPosting.status == 'ACTIVE'
+                    )
+                ).all()
+                
+                matching_job_ids = {job.id for job in matching_jobs}
+                
+                # Delete stale matches (jobs no longer active or no longer match roles)
+                existing_matches = db.session.scalars(
+                    select(CandidateJobMatch).where(
+                        CandidateJobMatch.candidate_id == candidate.id
+                    )
+                ).all()
+                
+                for existing in existing_matches:
+                    if existing.job_posting_id not in matching_job_ids:
+                        db.session.delete(existing)
+                        stale_deleted += 1
+                
+                # Score all matching jobs (create or update)
                 candidate_matches = 0
-                for job in jobs:
-                    # Check if match already exists
-                    existing = CandidateJobMatch.query.filter_by(
-                        candidate_id=candidate.id,
-                        job_posting_id=job.id
-                    ).first()
-                    
-                    if existing:
-                        continue
-                    
-                    # Calculate and store match
-                    match = unified_scorer.calculate_and_store_match(candidate, job)
-                    if match.match_score >= 50:
-                        candidate_matches += 1
-                    else:
-                        db.session.delete(match)
+                for job in matching_jobs:
+                    try:
+                        match = unified_scorer.calculate_and_store_match(candidate, job)
+                        if match.match_score >= 50:
+                            candidate_matches += 1
+                        else:
+                            db.session.delete(match)
+                    except Exception as e:
+                        logger.error(
+                            f"[INNGEST] Error matching candidate {candidate.id} "
+                            f"to job {job.id}: {e}"
+                        )
                 
                 total_matches += candidate_matches
                 successful_candidates += 1
@@ -496,11 +539,12 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
                 failed_candidates += 1
         
         db.session.commit()
+        db.session.expire_all()
         
         logger.info(
             f"[INNGEST] Tenant {tenant_id} complete: "
             f"{successful_candidates}/{total_candidates} candidates, "
-            f"{total_matches} matches generated"
+            f"{total_matches} matches, {stale_deleted} stale deleted"
         )
         
         return {
@@ -510,7 +554,8 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
             "total_candidates": total_candidates,
             "successful_candidates": successful_candidates,
             "failed_candidates": failed_candidates,
-            "total_matches": total_matches
+            "total_matches": total_matches,
+            "stale_deleted": stale_deleted
         }
         
     except Exception as e:
@@ -604,7 +649,12 @@ def ensure_candidate_embedding_step(candidate_id: int, tenant_id: int) -> Dict[s
 
 
 def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -> Dict[str, Any]:
-    """Generate job matches for a candidate using UnifiedScorerService"""
+    """
+    Generate job matches for a candidate using UnifiedScorerService.
+    
+    Uses ROLE-BASED FILTERING: only matches candidate against jobs whose
+    normalized_role_id matches one of the candidate's preferred global roles.
+    """
     try:
         candidate = db.session.get(Candidate, candidate_id)
         if not candidate or candidate.embedding is None:
@@ -614,10 +664,31 @@ def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -
                 "error": "Candidate not found or has no embedding"
             }
         
-        # Get all active jobs with embeddings
-        jobs = JobPosting.query.filter(
-            JobPosting.embedding.isnot(None),
-            JobPosting.status == 'ACTIVE'
+        # Get candidate's preferred role IDs for role-based filtering
+        role_ids = db.session.scalars(
+            select(CandidateGlobalRole.global_role_id).where(
+                CandidateGlobalRole.candidate_id == candidate_id
+            )
+        ).all()
+        
+        if not role_ids:
+            logger.info(
+                f"[INNGEST] Candidate {candidate_id} has no preferred roles, "
+                f"no jobs to match"
+            )
+            return {
+                "success": True,
+                "total_matches": 0,
+                "message": "No preferred roles configured"
+            }
+        
+        # Get jobs matching candidate's preferred roles
+        jobs = db.session.scalars(
+            select(JobPosting).where(
+                JobPosting.normalized_role_id.in_(role_ids),
+                JobPosting.embedding.isnot(None),
+                JobPosting.status == 'ACTIVE'
+            )
         ).all()
         
         # Initialize unified scorer
@@ -625,16 +696,7 @@ def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -
         total_matches = 0
         
         for job in jobs:
-            # Check if match already exists
-            existing = CandidateJobMatch.query.filter_by(
-                candidate_id=candidate_id,
-                job_posting_id=job.id
-            ).first()
-            
-            if existing:
-                continue
-            
-            # Calculate and store match
+            # Calculate and store match (creates or updates existing)
             try:
                 match = unified_scorer.calculate_and_store_match(candidate, job)
                 if match.match_score >= min_score:
@@ -645,10 +707,12 @@ def generate_matches_step(candidate_id: int, tenant_id: int, min_score: float) -
                 logger.error(f"[INNGEST] Error matching candidate {candidate_id} to job {job.id}: {e}")
         
         db.session.commit()
+        db.session.expire_all()
         
         return {
             "success": True,
-            "total_matches": total_matches
+            "total_matches": total_matches,
+            "jobs_evaluated": len(jobs)
         }
         
     except Exception as e:

@@ -441,9 +441,9 @@ async def manual_sync_workflow(ctx):
         "get-user-integrations", get_user_integrations
     )
 
-    # Trigger sync for each integration
-    for integration in integrations:
-        inngest_client.send_sync(
+    # Trigger sync for each integration (inside step for retry safety)
+    def send_sync_events(ints=None):
+        events = [
             inngest.Event(
                 name="email/sync-user-inbox",
                 data={
@@ -453,7 +453,16 @@ async def manual_sync_workflow(ctx):
                     "manual_trigger": True,
                 },
             )
-        )
+            for integration in ints
+        ]
+        if events:
+            inngest_client.send_sync(events)
+        return len(events)
+
+    events_sent = await ctx.step.run(
+        "send-sync-events",
+        lambda: send_sync_events(integrations),
+    )
 
     return {
         "status": "triggered",
@@ -578,62 +587,142 @@ async def match_email_jobs_to_candidates_workflow(ctx):
         f"embeddings for {embedding_result['jobs_processed']} email jobs"
     )
 
-    # Step 2: Count matchable candidates
-    def count_candidates():
+    # Step 2: Find role-filtered candidate-job pairs
+    def find_role_filtered_pairs():
         from app import create_app
         app = create_app()
         with app.app_context():
             from app import db
+            from app.models.job_posting import JobPosting
             from app.models.candidate import Candidate
-            from sqlalchemy import select, func
+            from app.models.candidate_global_role import CandidateGlobalRole
+            from sqlalchemy import select
 
-            matchable_statuses = [
-                'ready_for_assignment', 'new', 'screening', 'interviewed',
-            ]
-            total = db.session.scalar(
-                select(func.count(Candidate.id)).where(
-                    Candidate.tenant_id == tenant_id,
-                    Candidate.status.in_(matchable_statuses),
-                    Candidate.embedding.isnot(None),
+            matchable_statuses = ['approved', 'ready_for_assignment']
+
+            # Load jobs and their normalized_role_ids
+            jobs = list(db.session.scalars(
+                select(JobPosting).where(
+                    JobPosting.id.in_(job_ids),
+                    JobPosting.embedding.isnot(None),
                 )
-            ) or 0
-            return {"total_candidates": total}
+            ).all())
 
-    candidate_info = await ctx.step.run("count-candidates", count_candidates)
+            if not jobs:
+                return {"pairs": [], "total_candidates": 0, "jobs_with_roles": 0}
 
-    total_candidates = candidate_info["total_candidates"]
-    if total_candidates == 0:
+            # Build mapping: role_id -> list of job_ids
+            role_to_jobs = {}
+            jobs_without_role = []
+            for job in jobs:
+                if job.normalized_role_id:
+                    role_to_jobs.setdefault(job.normalized_role_id, []).append(job.id)
+                else:
+                    jobs_without_role.append(job.id)
+
+            if not role_to_jobs:
+                logger.warning(
+                    f"[INNGEST] None of the {len(jobs)} email jobs have "
+                    f"normalized_role_id, cannot match to candidates"
+                )
+                return {"pairs": [], "total_candidates": 0, "jobs_with_roles": 0}
+
+            # Find candidates whose preferred roles match the jobs' roles
+            role_ids = list(role_to_jobs.keys())
+            candidate_role_links = db.session.execute(
+                select(
+                    CandidateGlobalRole.candidate_id,
+                    CandidateGlobalRole.global_role_id,
+                ).where(
+                    CandidateGlobalRole.global_role_id.in_(role_ids),
+                )
+            ).all()
+
+            if not candidate_role_links:
+                return {"pairs": [], "total_candidates": 0, "jobs_with_roles": len(role_to_jobs)}
+
+            # Get candidate IDs and verify they're matchable
+            candidate_ids = list(set(link[0] for link in candidate_role_links))
+            matchable_candidates = {
+                c.id: c for c in db.session.scalars(
+                    select(Candidate).where(
+                        Candidate.id.in_(candidate_ids),
+                        Candidate.tenant_id == tenant_id,
+                        Candidate.status.in_(matchable_statuses),
+                        Candidate.embedding.isnot(None),
+                    )
+                ).all()
+            }
+
+            # Build pairs: (candidate_id, job_id) based on role matching
+            pairs = []
+            for link in candidate_role_links:
+                cand_id, role_id = link[0], link[1]
+                if cand_id not in matchable_candidates:
+                    continue
+                for jid in role_to_jobs.get(role_id, []):
+                    pairs.append({"candidate_id": cand_id, "job_id": jid})
+
+            # Deduplicate pairs (candidate may have multiple roles matching same job)
+            seen = set()
+            unique_pairs = []
+            for p in pairs:
+                key = (p["candidate_id"], p["job_id"])
+                if key not in seen:
+                    seen.add(key)
+                    unique_pairs.append(p)
+
+            logger.info(
+                f"[INNGEST] Role-filtered matching: {len(unique_pairs)} pairs "
+                f"({len(matchable_candidates)} candidates x {len(role_to_jobs)} roles), "
+                f"{len(jobs_without_role)} jobs skipped (no role)"
+            )
+
+            return {
+                "pairs": unique_pairs,
+                "total_candidates": len(matchable_candidates),
+                "jobs_with_roles": len(role_to_jobs),
+                "jobs_without_roles": len(jobs_without_role),
+            }
+
+    pair_info = await ctx.step.run("find-role-filtered-pairs", find_role_filtered_pairs)
+
+    total_candidates = pair_info["total_candidates"]
+    pairs = pair_info["pairs"]
+
+    if not pairs:
         logger.warning(
-            f"[INNGEST] No matchable candidates in tenant {tenant_id}"
+            f"[INNGEST] No role-filtered candidate-job pairs in tenant {tenant_id}"
         )
         return {
             "status": "completed",
             "jobs_processed": embedding_result["jobs_processed"],
             "embeddings_generated": embedding_result["embeddings_generated"],
-            "candidates_found": 0,
+            "candidates_found": total_candidates,
             "matches_created": 0,
         }
 
-    # Step 3..N: Match candidates in pages
-    page_size = settings.email_sync_candidate_match_page_size
-    total_pages = math.ceil(total_candidates / page_size)
+    # Step 3: Score all role-filtered pairs in chunks
+    chunk_size = 200  # pairs per step
+    total_chunks = math.ceil(len(pairs) / chunk_size)
     total_matches_created = 0
     total_low_score = 0
     total_skipped = 0
     job_match_summaries = []
 
     logger.info(
-        f"[INNGEST] Matching {len(job_ids)} jobs against "
-        f"{total_candidates} candidates in {total_pages} page(s) of {page_size}"
+        f"[INNGEST] Scoring {len(pairs)} role-filtered pairs "
+        f"in {total_chunks} chunk(s) of {chunk_size}"
     )
 
-    for page_num in range(total_pages):
-        offset = page_num * page_size
+    for chunk_idx in range(total_chunks):
+        start = chunk_idx * chunk_size
+        end = start + chunk_size
+        chunk_pairs = pairs[start:end]
 
-        def match_candidate_page(
-            off=offset,
-            lim=page_size,
-            pg=page_num + 1,
+        def match_pair_chunk(
+            c_pairs=chunk_pairs,
+            pg=chunk_idx + 1,
         ):
             from app import create_app
             app = create_app()
@@ -645,130 +734,111 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                 from app.services.unified_scorer_service import UnifiedScorerService
                 from sqlalchemy import select
 
-                matchable_statuses = [
-                    'ready_for_assignment', 'new', 'screening', 'interviewed',
-                ]
+                # Collect unique IDs
+                cand_ids = list(set(p["candidate_id"] for p in c_pairs))
+                jb_ids = list(set(p["job_id"] for p in c_pairs))
 
-                # Load candidate page
-                candidates = list(db.session.scalars(
-                    select(Candidate)
-                    .where(
-                        Candidate.tenant_id == tenant_id,
-                        Candidate.status.in_(matchable_statuses),
-                        Candidate.embedding.isnot(None),
-                    )
-                    .order_by(Candidate.id)
-                    .offset(off)
-                    .limit(lim)
-                ).all())
-
-                if not candidates:
-                    return {
-                        "page": pg,
-                        "candidates_in_page": 0,
-                        "matches_created": 0,
-                    }
-
-                # Load jobs with embeddings
-                jobs = list(db.session.scalars(
-                    select(JobPosting).where(
-                        JobPosting.id.in_(job_ids),
-                        JobPosting.embedding.isnot(None),
-                    )
-                ).all())
-
-                if not jobs:
-                    return {
-                        "page": pg,
-                        "candidates_in_page": len(candidates),
-                        "matches_created": 0,
-                    }
+                # Load all needed candidates and jobs
+                candidates_map = {
+                    c.id: c for c in db.session.scalars(
+                        select(Candidate).where(Candidate.id.in_(cand_ids))
+                    ).all()
+                }
+                jobs_map = {
+                    j.id: j for j in db.session.scalars(
+                        select(JobPosting).where(JobPosting.id.in_(jb_ids))
+                    ).all()
+                }
 
                 # Get existing matches in one query
-                candidate_ids = [c.id for c in candidates]
                 existing = set()
-                if candidate_ids:
-                    existing_stmt = select(
-                        CandidateJobMatch.candidate_id,
-                        CandidateJobMatch.job_posting_id,
-                    ).where(
-                        CandidateJobMatch.candidate_id.in_(candidate_ids),
-                        CandidateJobMatch.job_posting_id.in_(job_ids),
-                    )
-                    for row in db.session.execute(existing_stmt).all():
-                        existing.add((row[0], row[1]))
+                existing_stmt = select(
+                    CandidateJobMatch.candidate_id,
+                    CandidateJobMatch.job_posting_id,
+                ).where(
+                    CandidateJobMatch.candidate_id.in_(cand_ids),
+                    CandidateJobMatch.job_posting_id.in_(jb_ids),
+                )
+                for row in db.session.execute(existing_stmt).all():
+                    existing.add((row[0], row[1]))
 
                 unified_scorer = UnifiedScorerService()
-                page_matches = 0
-                page_low_score = 0
-                page_skipped = 0
-                page_job_details = []
+                chunk_matches = 0
+                chunk_low_score = 0
+                chunk_skipped = 0
+                chunk_job_details = {}
 
-                for job in jobs:
-                    job_matches = []
-                    for candidate in candidates:
-                        try:
-                            if (candidate.id, job.id) in existing:
-                                page_skipped += 1
-                                continue
+                for pair in c_pairs:
+                    cid = pair["candidate_id"]
+                    jid = pair["job_id"]
 
-                            match = (
-                                unified_scorer
-                                .calculate_and_store_match_no_commit(
-                                    candidate, job
-                                )
+                    candidate = candidates_map.get(cid)
+                    job = jobs_map.get(jid)
+
+                    if not candidate or not job:
+                        continue
+                    if candidate.embedding is None or job.embedding is None:
+                        continue
+
+                    if (cid, jid) in existing:
+                        chunk_skipped += 1
+                        continue
+
+                    try:
+                        match = (
+                            unified_scorer
+                            .calculate_and_store_match_no_commit(
+                                candidate, job
                             )
+                        )
 
-                            if match:
-                                if match.match_score >= 50:
-                                    page_matches += 1
-                                    job_matches.append({
-                                        "candidate_id": candidate.id,
-                                        "score": match.match_score,
-                                    })
-                                else:
-                                    page_low_score += 1
+                        if match:
+                            if match.match_score >= 50:
+                                chunk_matches += 1
+                                if jid not in chunk_job_details:
+                                    chunk_job_details[jid] = {
+                                        "job_id": jid,
+                                        "job_title": job.title,
+                                        "matches_in_chunk": 0,
+                                    }
+                                chunk_job_details[jid]["matches_in_chunk"] += 1
+                            else:
+                                chunk_low_score += 1
 
-                        except Exception as e:
-                            logger.error(
-                                f"[INNGEST] Match error: candidate "
-                                f"{candidate.id} x job {job.id}: {e}"
-                            )
-                            continue
-
-                    page_job_details.append({
-                        "job_id": job.id,
-                        "job_title": job.title,
-                        "matches_in_page": len(job_matches),
-                    })
+                    except Exception as e:
+                        logger.error(
+                            f"[INNGEST] Match error: candidate "
+                            f"{cid} x job {jid}: {e}"
+                        )
+                        continue
 
                 db.session.commit()
 
                 return {
-                    "page": pg,
-                    "candidates_in_page": len(candidates),
-                    "matches_created": page_matches,
-                    "low_score": page_low_score,
-                    "skipped_existing": page_skipped,
-                    "job_details": page_job_details,
+                    "chunk": pg,
+                    "pairs_in_chunk": len(c_pairs),
+                    "matches_created": chunk_matches,
+                    "low_score": chunk_low_score,
+                    "skipped_existing": chunk_skipped,
+                    "job_details": list(chunk_job_details.values()),
                 }
 
-        page_result = await ctx.step.run(
-            f"match-candidates-page-{page_num + 1}",
-            match_candidate_page,
+        chunk_result = await ctx.step.run(
+            f"match-pairs-chunk-{chunk_idx + 1}",
+            match_pair_chunk,
         )
 
-        total_matches_created += page_result.get("matches_created", 0)
-        total_low_score += page_result.get("low_score", 0)
-        total_skipped += page_result.get("skipped_existing", 0)
+        total_matches_created += chunk_result.get("matches_created", 0)
+        total_low_score += chunk_result.get("low_score", 0)
+        total_skipped += chunk_result.get("skipped_existing", 0)
 
-        if page_result.get("job_details"):
-            job_match_summaries.extend(page_result["job_details"])
+        if chunk_result.get("job_details"):
+            job_match_summaries.extend(chunk_result["job_details"])
 
         logger.info(
-            f"[INNGEST] Page {page_num + 1}/{total_pages}: "
-            f"{page_result.get('matches_created', 0)} matches from "
-            f"{page_result.get('candidates_in_page', 0)} candidates"
+            f"[INNGEST] Chunk {chunk_idx + 1}/{total_chunks}: "
+            f"{chunk_result.get('matches_created', 0)} matches from "
+            f"{chunk_result.get('pairs_in_chunk', 0)} pairs"
         )
 
     return {
@@ -777,6 +847,7 @@ async def match_email_jobs_to_candidates_workflow(ctx):
         "embeddings_generated": embedding_result["embeddings_generated"],
         "embedding_errors": embedding_result.get("embedding_errors", []),
         "candidates_found": total_candidates,
+        "role_filtered_pairs": len(pairs),
         "matches_created": total_matches_created,
         "low_score_matches": total_low_score,
         "skipped_existing": total_skipped,
