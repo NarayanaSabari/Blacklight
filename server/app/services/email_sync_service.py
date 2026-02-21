@@ -240,7 +240,7 @@ class EmailSyncService:
 
             logger.info(
                 f"Integration {integration.id}: Found {len(preferred_roles)} roles "
-                f"to match: {preferred_roles[:5]}..."
+                f"to match: {list(preferred_roles.keys())[:5]}..."
             )
 
             # Get valid access token
