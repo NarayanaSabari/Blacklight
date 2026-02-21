@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
     name="Sync All Email Integrations",
     retries=1,
 )
-async def sync_all_integrations_workflow(ctx, step):
+async def sync_all_integrations_workflow(ctx):
     """
     Scheduled job to sync all active email integrations.
 
@@ -77,7 +77,7 @@ async def sync_all_integrations_workflow(ctx, step):
                 "page_size": page_size,
             }
 
-    first_page = await step.run("get-integrations-page-0", get_first_page)
+    first_page = await ctx.step.run("get-integrations-page-0", get_first_page)
 
     total = first_page["total"]
     total_pages = math.ceil(total / page_size) if total > 0 else 0
@@ -112,7 +112,7 @@ async def sync_all_integrations_workflow(ctx, step):
             inngest_client.send_sync(events)
         return len(events)
 
-    total_events = await step.run(
+    total_events = await ctx.step.run(
         "send-events-page-0",
         lambda: send_page_events(first_page["integrations"]),
     )
@@ -131,11 +131,11 @@ async def sync_all_integrations_workflow(ctx, step):
                 )
                 return integrations
 
-        page_integrations = await step.run(
+        page_integrations = await ctx.step.run(
             f"get-integrations-page-{page_num}", get_page
         )
 
-        events_sent = await step.run(
+        events_sent = await ctx.step.run(
             f"send-events-page-{page_num}",
             lambda ints=page_integrations: send_page_events(ints),
         )
@@ -173,7 +173,7 @@ async def sync_all_integrations_workflow(ctx, step):
         ),
     ],
 )
-async def sync_user_inbox_workflow(ctx, step):
+async def sync_user_inbox_workflow(ctx):
     """
     Sync emails for a single user's integration.
 
@@ -206,7 +206,7 @@ async def sync_user_inbox_workflow(ctx, step):
             from app.services.email_sync_service import email_sync_service
             return email_sync_service.fetch_and_filter_emails(integration_id)
 
-    sync_result = await step.run("fetch-and-filter", fetch_and_filter)
+    sync_result = await ctx.step.run("fetch-and-filter", fetch_and_filter)
 
     if sync_result.get("error"):
         logger.error(f"[INNGEST] Sync failed: {sync_result['error']}")
@@ -235,7 +235,7 @@ async def sync_user_inbox_workflow(ctx, step):
                 )
                 return {"updated": True}
 
-        await step.run("update-sync-timestamp", update_ts_no_emails)
+        await ctx.step.run("update-sync-timestamp", update_ts_no_emails)
         return {
             "status": "completed",
             "fetched": sync_result.get("fetched", 0),
@@ -313,7 +313,7 @@ async def sync_user_inbox_workflow(ctx, step):
                     "jobs_created": len(batch_jobs),
                 }
 
-        result = await step.run(
+        result = await ctx.step.run(
             f"process-email-chunk-{chunk_idx + 1}",
             process_email_chunk,
         )
@@ -343,7 +343,7 @@ async def sync_user_inbox_workflow(ctx, step):
                 email_sync_service.delete_emails_from_redis(r_key)
                 return {"cleaned": True}
 
-        await step.run("cleanup-redis", cleanup_redis)
+        await ctx.step.run("cleanup-redis", cleanup_redis)
 
     # Step 4: Trigger job matching for created jobs
     if created_job_ids:
@@ -363,7 +363,7 @@ async def sync_user_inbox_workflow(ctx, step):
             )
             return {"triggered": True, "job_count": len(job_ids)}
 
-        await step.run("trigger-matching", trigger_matching)
+        await ctx.step.run("trigger-matching", trigger_matching)
 
     # Step 5: Update sync timestamp (idempotent cursor)
     def update_sync_ts():
@@ -377,7 +377,7 @@ async def sync_user_inbox_workflow(ctx, step):
             )
             return {"updated": True}
 
-    await step.run("update-sync-timestamp", update_sync_ts)
+    await ctx.step.run("update-sync-timestamp", update_sync_ts)
 
     return {
         "status": "completed",
@@ -400,7 +400,7 @@ async def sync_user_inbox_workflow(ctx, step):
     name="Manual Email Sync",
     retries=2,
 )
-async def manual_sync_workflow(ctx, step):
+async def manual_sync_workflow(ctx):
     """
     Manually triggered sync for a specific user.
 
@@ -437,7 +437,7 @@ async def manual_sync_workflow(ctx, step):
                     result.append({"id": i.id, "provider": i.provider})
             return result
 
-    integrations = await step.run(
+    integrations = await ctx.step.run(
         "get-user-integrations", get_user_integrations
     )
 
@@ -475,7 +475,7 @@ async def manual_sync_workflow(ctx, step):
         inngest.Concurrency(limit=10),
     ],
 )
-async def match_email_jobs_to_candidates_workflow(ctx, step):
+async def match_email_jobs_to_candidates_workflow(ctx):
     """
     Generate embeddings for email-sourced jobs and match to candidates.
 
@@ -569,7 +569,7 @@ async def match_email_jobs_to_candidates_workflow(ctx, step):
                 "embedding_errors": embedding_errors,
             }
 
-    embedding_result = await step.run(
+    embedding_result = await ctx.step.run(
         "generate-email-job-embeddings", generate_job_embeddings
     )
 
@@ -599,7 +599,7 @@ async def match_email_jobs_to_candidates_workflow(ctx, step):
             ) or 0
             return {"total_candidates": total}
 
-    candidate_info = await step.run("count-candidates", count_candidates)
+    candidate_info = await ctx.step.run("count-candidates", count_candidates)
 
     total_candidates = candidate_info["total_candidates"]
     if total_candidates == 0:
@@ -753,7 +753,7 @@ async def match_email_jobs_to_candidates_workflow(ctx, step):
                     "job_details": page_job_details,
                 }
 
-        page_result = await step.run(
+        page_result = await ctx.step.run(
             f"match-candidates-page-{page_num + 1}",
             match_candidate_page,
         )
@@ -795,7 +795,7 @@ async def match_email_jobs_to_candidates_workflow(ctx, step):
     name="Cleanup Old Processed Emails",
     retries=2,
 )
-async def cleanup_old_processed_emails_workflow(ctx, step):
+async def cleanup_old_processed_emails_workflow(ctx):
     """
     Clean up old ProcessedEmail records to control table growth.
 
@@ -865,7 +865,7 @@ async def cleanup_old_processed_emails_workflow(ctx, step):
                 "retention_days": RETENTION_DAYS,
             }
 
-    result = await step.run("cleanup-processed-emails", cleanup_old_records)
+    result = await ctx.step.run("cleanup-processed-emails", cleanup_old_records)
 
     logger.info(
         f"[INNGEST] Cleanup completed: deleted {result.get('deleted', 0)} old records"
@@ -888,7 +888,7 @@ async def cleanup_old_processed_emails_workflow(ctx, step):
     name="Check Circuit Breaker Status",
     retries=1,
 )
-async def check_circuit_breaker_status_workflow(ctx, step):
+async def check_circuit_breaker_status_workflow(ctx):
     """
     Check and report distributed circuit breaker status.
     """
