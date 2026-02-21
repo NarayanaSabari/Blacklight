@@ -43,6 +43,12 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { jobPostingApi, type JobPostingWithSource } from '@/lib/jobPostingApi';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { jobMatchApi } from '@/lib/jobMatchApi';
 import { submissionApi } from '@/lib/submissionApi';
 import { candidateApi } from '@/lib/candidateApi';
@@ -402,6 +408,80 @@ export function JobDetailPage() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Matched Candidates */}
+          {job.matched_candidates && job.matched_candidates.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-emerald-600" />
+                  Matched Candidates
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {job.matched_candidates_count || job.matched_candidates.length}
+                  </Badge>
+                </h2>
+                <div className="space-y-2">
+                  {job.matched_candidates.map((match) => {
+                    const gradeColor = match.match_grade?.startsWith('A')
+                      ? 'bg-green-100 text-green-700 border-green-200'
+                      : match.match_grade?.startsWith('B')
+                      ? 'bg-yellow-100 text-yellow-700 border-yellow-200'
+                      : 'bg-orange-100 text-orange-700 border-orange-200';
+                    const scoreBarColor = match.match_grade?.startsWith('A')
+                      ? 'bg-green-500'
+                      : match.match_grade?.startsWith('B')
+                      ? 'bg-yellow-500'
+                      : 'bg-orange-500';
+                    return (
+                      <TooltipProvider key={match.candidate_id}>
+                        <div
+                          className="flex items-center gap-4 p-3 rounded-lg border cursor-pointer hover:bg-slate-50 hover:border-primary/50 transition-all group"
+                          onClick={() => navigate(`/candidates/${match.candidate_id}`)}
+                        >
+                          {/* Avatar */}
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                            {match.name.charAt(0).toUpperCase()}
+                          </div>
+                          {/* Name */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm group-hover:text-primary transition-colors truncate">
+                              {match.name}
+                            </p>
+                          </div>
+                          {/* Score bar */}
+                          <div className="w-24 flex-shrink-0">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${scoreBarColor}`}
+                                  style={{ width: `${Math.round(match.match_score)}%` }}
+                                />
+                              </div>
+                              <span className="text-xs font-medium w-8 text-right">
+                                {Math.round(match.match_score)}%
+                              </span>
+                            </div>
+                          </div>
+                          {/* Grade badge */}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className={`text-xs ${gradeColor}`}>
+                                {match.match_grade}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Match Grade {match.match_grade} - Click to view candidate
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
           )}
 
           <Separator />

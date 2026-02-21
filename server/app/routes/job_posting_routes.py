@@ -13,6 +13,8 @@ from app.models.job_posting import JobPosting
 from app.models.portal_user import PortalUser
 from app.models.processed_email import ProcessedEmail
 from app.models.user_email_integration import UserEmailIntegration
+from app.models.candidate_job_match import CandidateJobMatch
+from app.models.candidate import Candidate
 from app.services.job_posting_service import JobPostingService
 from app.middleware.portal_auth import require_portal_auth
 from app.middleware.tenant_context import with_tenant_context
@@ -141,6 +143,30 @@ def get_job_posting(job_id: int):
         
         job_dict = job.to_dict()
         job_dict = _add_sourced_by_info(job_dict, job)
+        
+        # Fetch matched candidates (score >= 50, top 10, ordered by score desc)
+        match_stmt = (
+            select(CandidateJobMatch, Candidate)
+            .join(Candidate, CandidateJobMatch.candidate_id == Candidate.id)
+            .where(
+                CandidateJobMatch.job_posting_id == job_id,
+                CandidateJobMatch.match_score >= 50
+            )
+            .order_by(CandidateJobMatch.match_score.desc())
+            .limit(10)
+        )
+        match_results = db.session.execute(match_stmt).all()
+        
+        job_dict['matched_candidates'] = [
+            {
+                'candidate_id': match.id,
+                'name': f"{candidate.first_name or ''} {candidate.last_name or ''}".strip() or 'Unknown',
+                'match_score': float(match.match_score),
+                'match_grade': match.match_grade,
+            }
+            for match, candidate in match_results
+        ]
+        job_dict['matched_candidates_count'] = len(match_results)
         
         return jsonify(job_dict), 200
         
