@@ -130,6 +130,17 @@ class Settings(BaseSettings):
     email_sync_initial_lookback_days: int = Field(default=2, env="EMAIL_SYNC_INITIAL_LOOKBACK_DAYS")  # First scan: 2 days
     email_sync_max_emails_per_page: int = Field(default=100, env="EMAIL_SYNC_MAX_EMAILS_PER_PAGE")  # Gmail pagination size
     
+    # Email Sync - Scalability Settings
+    email_sync_integration_page_size: int = Field(default=100, env="EMAIL_SYNC_INTEGRATION_PAGE_SIZE")  # Integrations per fan-out page
+    email_sync_concurrency_limit: int = Field(default=25, env="EMAIL_SYNC_CONCURRENCY_LIMIT")  # Max concurrent sync functions
+    email_sync_tenant_concurrency: int = Field(default=5, env="EMAIL_SYNC_TENANT_CONCURRENCY")  # Max concurrent syncs per tenant
+    email_sync_email_chunk_size: int = Field(default=20, env="EMAIL_SYNC_EMAIL_CHUNK_SIZE")  # Emails per processing chunk
+    email_sync_redis_ttl: int = Field(default=3600, env="EMAIL_SYNC_REDIS_TTL")  # Redis email data TTL (seconds)
+    email_sync_candidate_match_page_size: int = Field(default=200, env="EMAIL_SYNC_CANDIDATE_MATCH_PAGE_SIZE")  # Candidates per matching page
+    
+    # Circuit Breaker - Redis-based distributed settings
+    circuit_breaker_redis_prefix: str = Field(default="cb:", env="CIRCUIT_BREAKER_REDIS_PREFIX")
+    
     # Team Hierarchy Settings
     team_hierarchy_max_depth: int = Field(default=10, env="TEAM_HIERARCHY_MAX_DEPTH")  # Max recursion depth for hierarchy traversal
     

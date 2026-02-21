@@ -43,7 +43,10 @@ from .job_import import (
 from .email_sync import (
     sync_all_integrations_workflow,
     sync_user_inbox_workflow,
-    manual_sync_workflow
+    manual_sync_workflow,
+    match_email_jobs_to_candidates_workflow,
+    cleanup_old_processed_emails_workflow,
+    check_circuit_breaker_status_workflow
 )
 
 # List of all Inngest functions to be registered
@@ -90,6 +93,9 @@ INNGEST_FUNCTIONS = [
     sync_all_integrations_workflow,
     sync_user_inbox_workflow,
     manual_sync_workflow,
+    match_email_jobs_to_candidates_workflow,
+    cleanup_old_processed_emails_workflow,
+    check_circuit_breaker_status_workflow,
 ]
 
 __all__ = ["INNGEST_FUNCTIONS"]
