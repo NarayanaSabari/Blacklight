@@ -281,7 +281,7 @@ class EmailSyncService:
                 # Check if matches job criteria (ROLE-BASED only)
                 subject = email.get("subject", "")
                 sender = email.get("sender", "")
-                matches, match_reason = self._matches_job_criteria(
+                matches, match_reason, global_role_id = self._matches_job_criteria(
                     subject, sender, preferred_roles
                 )
 
@@ -293,6 +293,7 @@ class EmailSyncService:
 
                 logger.info(
                     f"Matched email: subject='{subject[:60]}...', reason={match_reason}"
+                    f"{f', global_role_id={global_role_id}' if global_role_id else ''}"
                 )
 
                 # Serialize received_at for JSON
@@ -308,6 +309,7 @@ class EmailSyncService:
                     "body": email.get("body", ""),
                     "received_at": received_at,
                     "match_reason": match_reason,
+                    "global_role_id": global_role_id,
                 })
 
             # Store matched emails in Redis (not in step output)
@@ -517,7 +519,7 @@ class EmailSyncService:
     # Tenant Roles (cached)
     # ========================================================================
 
-    def _get_tenant_roles_cached(self, tenant_id: int) -> list[str]:
+    def _get_tenant_roles_cached(self, tenant_id: int) -> dict[str, int]:
         """
         Get tenant roles with Redis caching.
 
@@ -527,7 +529,7 @@ class EmailSyncService:
             tenant_id: Tenant ID
 
         Returns:
-            List of role names
+            Dict mapping normalized role keyword -> GlobalRole ID
         """
         from app import redis_client
 
@@ -539,7 +541,13 @@ class EmailSyncService:
                 cached = redis_client.get(cache_key)
                 if cached:
                     logger.debug(f"Cache hit for tenant roles: {tenant_id}")
-                    return json.loads(cached) if isinstance(cached, str) else cached
+                    data = json.loads(cached) if isinstance(cached, str) else cached
+                    if isinstance(data, dict):
+                        return {k: int(v) for k, v in data.items() if v is not None}
+                    # Legacy cache format (list of strings) — invalidate
+                    logger.info(
+                        f"Legacy cache format for tenant {tenant_id}, re-computing"
+                    )
             except Exception as e:
                 logger.warning(f"Redis cache read failed: {e}")
 
@@ -549,7 +557,9 @@ class EmailSyncService:
         # Store in cache
         if redis_client and roles:
             try:
-                redis_client.set(cache_key, json.dumps(roles), ex=TENANT_ROLES_CACHE_TTL)
+                redis_client.set(
+                    cache_key, json.dumps(roles), ex=TENANT_ROLES_CACHE_TTL
+                )
                 logger.debug(f"Cached {len(roles)} roles for tenant {tenant_id}")
             except Exception as e:
                 logger.warning(f"Redis cache write failed: {e}")
@@ -1140,42 +1150,36 @@ class EmailSyncService:
 
         return role_lower
 
-    def _get_tenant_roles(self, tenant_id: int) -> list[str]:
+    def _get_tenant_roles(self, tenant_id: int) -> dict[str, int]:
         """
         Get all roles to search for in this tenant with normalization.
 
+        Returns a mapping of normalized keyword -> GlobalRole ID. Every
+        keyword is derived from a GlobalRole (name or alias), so every
+        match can be directly linked without AI normalization.
+
         Sources:
-        1. Candidate.preferred_roles from all candidates in tenant
-        2. GlobalRole.name for roles linked to candidates in tenant
-        3. GlobalRole.aliases for additional role variations
+        1. GlobalRole.name for roles linked to candidates in tenant
+        2. GlobalRole.aliases for additional role variations
+
+        Note: Candidate.preferred_roles is NOT used here because those
+        roles are already normalized into GlobalRoles via CandidateGlobalRole.
+        The preferred_roles column is a display field for the candidate
+        detail page only.
 
         Args:
             tenant_id: Tenant ID
 
         Returns:
-            List of normalized role names (lowercase, unique)
+            Dict mapping normalized role keyword -> GlobalRole ID
         """
-        roles = set()
+        roles: dict[str, int] = {}
 
         logger.debug(f"Fetching roles for tenant_id={tenant_id}")
 
-        # Source 1: Candidate preferred_roles (ARRAY column)
-        stmt = select(func.unnest(Candidate.preferred_roles)).where(
-            Candidate.tenant_id == tenant_id,
-            Candidate.preferred_roles.isnot(None),
-        ).distinct()
-
-        candidate_roles = list(db.session.scalars(stmt).all())
-        logger.debug(f"Found {len(candidate_roles)} candidate preferred_roles")
-
-        for role in candidate_roles:
-            if role:
-                normalized = self._normalize_role(role)
-                if normalized:
-                    roles.add(normalized)
-
-        # Source 2: GlobalRoles linked to candidates in this tenant
-        stmt = select(GlobalRole.name).join(
+        # Source 1: GlobalRoles linked to candidates in this tenant
+        # These DIRECTLY map to a GlobalRole ID
+        stmt = select(GlobalRole.id, GlobalRole.name).join(
             CandidateGlobalRole,
             CandidateGlobalRole.global_role_id == GlobalRole.id
         ).join(
@@ -1185,17 +1189,18 @@ class EmailSyncService:
             Candidate.tenant_id == tenant_id,
         ).distinct()
 
-        global_roles = list(db.session.scalars(stmt).all())
-        logger.debug(f"Found {len(global_roles)} global roles")
+        global_role_rows = list(db.session.execute(stmt).all())
+        logger.debug(f"Found {len(global_role_rows)} global roles")
 
-        for role in global_roles:
-            if role:
-                normalized = self._normalize_role(role)
+        for role_id, role_name in global_role_rows:
+            if role_name:
+                normalized = self._normalize_role(role_name)
                 if normalized:
-                    roles.add(normalized)
+                    roles[normalized] = role_id
 
-        # Source 3: GlobalRole aliases
-        stmt = select(func.unnest(GlobalRole.aliases)).join(
+        # Source 2: GlobalRole aliases
+        # These also DIRECTLY map to a GlobalRole ID
+        stmt = select(GlobalRole.id, func.unnest(GlobalRole.aliases)).join(
             CandidateGlobalRole,
             CandidateGlobalRole.global_role_id == GlobalRole.id
         ).join(
@@ -1206,21 +1211,21 @@ class EmailSyncService:
             GlobalRole.aliases.isnot(None),
         ).distinct()
 
-        aliases = list(db.session.scalars(stmt).all())
-        logger.debug(f"Found {len(aliases)} global role aliases")
+        alias_rows = list(db.session.execute(stmt).all())
+        logger.debug(f"Found {len(alias_rows)} global role aliases")
 
-        for alias in aliases:
+        for role_id, alias in alias_rows:
             if alias:
                 normalized = self._normalize_role(alias)
                 if normalized:
-                    roles.add(normalized)
+                    roles[normalized] = role_id
 
-        final_roles = sorted(list(roles))
         logger.info(
-            f"Tenant {tenant_id}: Extracted {len(final_roles)} unique normalized roles"
+            f"Tenant {tenant_id}: Extracted {len(roles)} unique normalized roles "
+            f"(all with GlobalRole IDs)"
         )
 
-        return final_roles
+        return roles
 
     def _tokenized_role_match(self, subject: str, role: str) -> bool:
         """
@@ -1266,35 +1271,36 @@ class EmailSyncService:
         self,
         subject: str,
         sender: str,
-        preferred_roles: list[str],
-    ) -> tuple[bool, Optional[str]]:
+        preferred_roles: dict[str, int],
+    ) -> tuple[bool, Optional[str], Optional[int]]:
         """
         Check if email subject matches job criteria using tokenized role matching.
 
         Args:
             subject: Email subject line
             sender: Email sender address
-            preferred_roles: List of normalized roles to match
+            preferred_roles: Dict mapping normalized role keywords to GlobalRole IDs
 
         Returns:
-            Tuple of (matches: bool, reason: str)
+            Tuple of (matches: bool, reason: str, global_role_id: int or None)
+            global_role_id is always set when matches=True.
         """
         subject_lower = subject.lower()
         sender_lower = sender.lower()
 
         for blocked in self.BLOCKED_SENDERS:
             if blocked in sender_lower:
-                return False, f"blocked_sender:{blocked}"
+                return False, f"blocked_sender:{blocked}", None
 
         for pattern in self.BLOCKED_SUBJECT_PATTERNS:
             if re.search(pattern, subject_lower, re.IGNORECASE):
-                return False, f"blocked_subject:{pattern}"
+                return False, f"blocked_subject:{pattern}", None
 
-        for role in preferred_roles:
+        for role, global_role_id in preferred_roles.items():
             if self._tokenized_role_match(subject_lower, role):
-                return True, f"role_match:{role}"
+                return True, f"role_match:{role}", global_role_id
 
-        return False, "no_role_match"
+        return False, "no_role_match", None
 
     # ========================================================================
     # Legacy Methods (kept for backward compatibility)

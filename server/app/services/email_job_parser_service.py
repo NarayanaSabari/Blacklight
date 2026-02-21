@@ -690,6 +690,7 @@ Important:
                 "source": "email",
                 "confidence_score": job_data.get("confidence_score"),
                 "match_reason": email_data.get("match_reason"),
+                "global_role_id": email_data.get("global_role_id"),
                 "integration_id": integration.id,
                 "thread_id": email_data.get("thread_id"),
             },
@@ -726,14 +727,24 @@ Important:
                 logger.error(f"Failed to find job after IntegrityError for email {email_id}")
                 return (None, False)
         
-        # Normalize job title and create RoleJobMapping for candidate matching
-        # This is optional - if it fails, we still want to create the job
+        # Link job to the GlobalRole that matched during email filtering.
+        # Every email keyword is derived from a GlobalRole, so global_role_id
+        # is always present. We skip AI normalization entirely.
+        matched_global_role_id = email_data.get("global_role_id")
         try:
-            self._normalize_and_link_job_role(job)
+            if matched_global_role_id:
+                self._direct_link_job_role(job, matched_global_role_id)
+            else:
+                # Safety: should never happen since all keywords carry a GlobalRole ID.
+                # If it does, log a warning and let the backfill cron handle it.
+                logger.warning(
+                    f"Job {job.id} has no global_role_id from email matching — "
+                    f"skipping role linking, backfill cron will handle it"
+                )
         except Exception as e:
             # If normalization causes a DB error, the session might be in a bad state
             # We need to check and recover
-            logger.warning(f"Role normalization failed for job {job.id}, checking session state: {e}")
+            logger.warning(f"Role linking failed for job {job.id}, checking session state: {e}")
             try:
                 # Test if session is usable by trying a simple operation
                 db.session.execute(db.text("SELECT 1"))
@@ -776,6 +787,7 @@ Important:
                         "source": "email",
                         "confidence_score": job_data.get("confidence_score"),
                         "match_reason": email_data.get("match_reason"),
+                        "global_role_id": email_data.get("global_role_id"),
                         "integration_id": integration.id,
                         "thread_id": email_data.get("thread_id"),
                     },
@@ -783,14 +795,15 @@ Important:
                 db.session.add(job)
                 db.session.flush()
                 logger.info(f"Recovered job creation after session error, new job ID: {job.id}")
-                # Re-attempt role normalization on recovered job
-                try:
-                    self._normalize_and_link_job_role(job)
-                except Exception as norm_err:
-                    logger.warning(
-                        f"Role normalization also failed on recovered job {job.id}, "
-                        f"backfill cron will handle it: {norm_err}"
-                    )
+                # Re-attempt role linking on recovered job
+                if matched_global_role_id:
+                    try:
+                        self._direct_link_job_role(job, matched_global_role_id)
+                    except Exception as norm_err:
+                        logger.warning(
+                            f"Role linking also failed on recovered job {job.id}, "
+                            f"backfill cron will handle it: {norm_err}"
+                        )
         
         return (job, True)  # New job created
     
@@ -892,6 +905,61 @@ Important:
             )
         else:
             logger.warning(f"Failed to normalize job {job.id} title '{job.title}'")
+    
+    def _direct_link_job_role(self, job: JobPosting, global_role_id: int) -> None:
+        """
+        Directly link a job to a known GlobalRole, skipping AI normalization.
+        
+        This is the fast path used when an email was matched via a keyword
+        derived from a GlobalRole (Sources 2 & 3 in _get_tenant_roles).
+        Since we already know which GlobalRole the job belongs to, we skip
+        the expensive AI normalization + embedding comparison entirely.
+        
+        Creates:
+        - Sets job.normalized_role_id to the GlobalRole
+        - Creates a RoleJobMapping record (with unique constraint handling)
+        
+        Args:
+            job: The JobPosting to link
+            global_role_id: The GlobalRole ID to link to
+            
+        Raises:
+            Exception: Re-raises any exception for caller to handle session recovery
+        """
+        from app.models.global_role import GlobalRole
+        from app.models.role_job_mapping import RoleJobMapping
+        
+        # Verify the GlobalRole exists
+        global_role = db.session.get(GlobalRole, global_role_id)
+        if not global_role:
+            logger.warning(
+                f"GlobalRole {global_role_id} not found for job {job.id} — "
+                f"role may have been deleted. Backfill cron will handle it."
+            )
+            return
+        
+        # Set normalized_role_id on the job
+        job.normalized_role_id = global_role_id
+        
+        # Create RoleJobMapping (skip if already exists)
+        existing_stmt = select(RoleJobMapping).where(
+            RoleJobMapping.global_role_id == global_role_id,
+            RoleJobMapping.job_posting_id == job.id,
+        )
+        existing = db.session.scalar(existing_stmt)
+        
+        if not existing:
+            mapping = RoleJobMapping(
+                global_role_id=global_role_id,
+                job_posting_id=job.id,
+            )
+            db.session.add(mapping)
+            db.session.flush()
+        
+        logger.info(
+            f"Job {job.id} '{job.title}' DIRECTLY linked to role "
+            f"'{global_role.name}' (id={global_role_id}) — skipped AI normalization"
+        )
     
     def _record_processed_email(
         self,
