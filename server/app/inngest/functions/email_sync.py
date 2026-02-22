@@ -209,17 +209,27 @@ async def sync_user_inbox_workflow(ctx):
     sync_result = await ctx.step.run("fetch-and-filter", fetch_and_filter)
 
     if sync_result.get("error"):
-        logger.error(f"[INNGEST] Sync failed: {sync_result['error']}")
+        logger.error(f"[INNGEST] Sync failed for integration {integration_id}: {sync_result['error']}")
         return sync_result
 
     if sync_result.get("skipped") is True:
         logger.info(
-            f"[INNGEST] Sync skipped: {sync_result.get('reason', 'unknown')}"
+            f"[INNGEST] Sync skipped for integration {integration_id}: "
+            f"{sync_result.get('reason', 'unknown')}"
         )
         return sync_result
 
     matched_count = sync_result.get("matched", 0)
     redis_key = sync_result.get("redis_key")
+
+    logger.info(
+        f"[INNGEST] Integration {integration_id}: "
+        f"fetched={sync_result.get('fetched', 0)}, "
+        f"matched={matched_count}, "
+        f"already_processed={sync_result.get('already_processed', 0)}, "
+        f"skipped={sync_result.get('skipped_count', 0)}, "
+        f"roles_searched={sync_result.get('roles_searched_count', 0)}"
+    )
 
     if matched_count == 0:
         logger.debug("[INNGEST] No matched emails to process")
@@ -298,19 +308,37 @@ async def sync_user_inbox_workflow(ctx):
                 )
 
                 batch_jobs = []
+                skipped_emails = []
                 for job, email_data in results:
                     if job:
                         batch_jobs.append({
                             "job_id": job.id,
                             "title": job.title,
                             "tenant_id": integration.tenant_id,
+                            "normalized_role_id": job.normalized_role_id,
+                            "global_role_id": email_data.get("global_role_id") if email_data else None,
+                            "match_reason": email_data.get("match_reason") if email_data else None,
                         })
+                    else:
+                        skipped_emails.append({
+                            "subject": (email_data.get("subject", "")[:80]
+                                        if email_data else "unknown"),
+                            "reason": "parse_failed_or_duplicate",
+                        })
+
+                logger.info(
+                    f"[INNGEST] Chunk {chunk_num}: "
+                    f"{len(batch_jobs)} jobs created, "
+                    f"{len(skipped_emails)} emails skipped"
+                )
 
                 return {
                     "jobs": batch_jobs,
                     "chunk": chunk_num,
                     "chunk_size": len(chunk_emails),
                     "jobs_created": len(batch_jobs),
+                    "emails_skipped": len(skipped_emails),
+                    "skipped_details": skipped_emails[:10],
                 }
 
         result = await ctx.step.run(
@@ -329,8 +357,10 @@ async def sync_user_inbox_workflow(ctx):
                 jobs_created += 1
                 created_job_ids.append(job_info["job_id"])
                 logger.info(
-                    f"[INNGEST] Chunk {chunk_idx + 1} created job "
-                    f"{job_info['job_id']}: {job_info['title']}"
+                    f"[INNGEST] Created job {job_info['job_id']}: "
+                    f"'{job_info['title']}' → role_id={job_info.get('normalized_role_id')} "
+                    f"(global_role_id={job_info.get('global_role_id')}, "
+                    f"reason={job_info.get('match_reason')})"
                 )
 
     # Step 3: Clean up Redis email data
@@ -379,11 +409,21 @@ async def sync_user_inbox_workflow(ctx):
 
     await ctx.step.run("update-sync-timestamp", update_sync_ts)
 
+    logger.info(
+        f"[INNGEST] Sync complete for integration {integration_id}: "
+        f"fetched={sync_result.get('fetched', 0)}, "
+        f"matched={sync_result.get('matched', 0)}, "
+        f"already_processed={sync_result.get('already_processed', 0)}, "
+        f"jobs_created={jobs_created}"
+    )
+
     return {
         "status": "completed",
+        "integration_id": integration_id,
         "fetched": sync_result.get("fetched", 0),
         "matched": sync_result.get("matched", 0),
         "already_processed": sync_result.get("already_processed", 0),
+        "roles_searched": sync_result.get("roles_searched_count", 0),
         "jobs_created": jobs_created,
         "job_ids": created_job_ids,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -678,11 +718,30 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                 f"{len(jobs_without_role)} jobs skipped (no role)"
             )
 
+            # Build role breakdown for Inngest portal visibility
+            role_breakdown = {}
+            for rid, jids in role_to_jobs.items():
+                role_name = "unknown"
+                for job in jobs:
+                    if job.normalized_role_id == rid:
+                        from app.models.global_role import GlobalRole as GR
+                        gr = db.session.get(GR, rid)
+                        if gr:
+                            role_name = gr.name
+                        break
+                role_breakdown[role_name] = {
+                    "role_id": rid,
+                    "job_count": len(jids),
+                }
+
             return {
                 "pairs": unique_pairs,
                 "total_candidates": len(matchable_candidates),
                 "jobs_with_roles": len(role_to_jobs),
                 "jobs_without_roles": len(jobs_without_role),
+                "jobs_without_role_ids": jobs_without_role[:20],
+                "role_breakdown": role_breakdown,
+                "candidate_ids": list(matchable_candidates.keys()),
             }
 
     pair_info = await ctx.step.run("find-role-filtered-pairs", find_role_filtered_pairs)
@@ -767,6 +826,7 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                 chunk_low_score = 0
                 chunk_skipped = 0
                 chunk_job_details = {}
+                match_scores = []  # Track individual scores for portal
 
                 for pair in c_pairs:
                     cid = pair["candidate_id"]
@@ -793,6 +853,13 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                         )
 
                         if match:
+                            score_entry = {
+                                "candidate_id": cid,
+                                "job_id": jid,
+                                "job_title": job.title[:60],
+                                "score": round(match.match_score, 1),
+                                "grade": match.match_grade,
+                            }
                             if match.match_score >= 50:
                                 chunk_matches += 1
                                 if jid not in chunk_job_details:
@@ -804,6 +871,9 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                                 chunk_job_details[jid]["matches_in_chunk"] += 1
                             else:
                                 chunk_low_score += 1
+                            # Keep first 20 scores for portal visibility
+                            if len(match_scores) < 20:
+                                match_scores.append(score_entry)
 
                     except Exception as e:
                         logger.error(
@@ -821,6 +891,7 @@ async def match_email_jobs_to_candidates_workflow(ctx):
                     "low_score": chunk_low_score,
                     "skipped_existing": chunk_skipped,
                     "job_details": list(chunk_job_details.values()),
+                    "score_samples": match_scores,
                 }
 
         chunk_result = await ctx.step.run(

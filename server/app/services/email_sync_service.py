@@ -324,15 +324,35 @@ class EmailSyncService:
             integration.last_error = None
             db.session.commit()
 
+            # Build per-role match breakdown for Inngest step output
+            match_breakdown: dict[str, int] = {}
+            for me in matched_emails:
+                reason = me.get("match_reason", "unknown")
+                match_breakdown[reason] = match_breakdown.get(reason, 0) + 1
+
+            # Sample matched subjects (first 10) for debugging in portal
+            matched_samples = [
+                {
+                    "subject": me.get("subject", "")[:100],
+                    "match_reason": me.get("match_reason"),
+                    "global_role_id": me.get("global_role_id"),
+                }
+                for me in matched_emails[:10]
+            ]
+
             result = {
                 "fetched": len(emails),
                 "matched": len(matched_emails),
                 "skipped_count": skipped_count,
                 "already_processed": already_processed_count,
                 "roles_searched_count": len(preferred_roles),
+                "role_keywords_sample": list(preferred_roles.keys())[:20],
+                "match_breakdown": match_breakdown,
+                "matched_samples": matched_samples,
                 "redis_key": redis_key,
                 "integration_id": integration.id,
                 "tenant_id": integration.tenant_id,
+                "provider": integration.provider,
             }
 
             # Store history ID for later update
@@ -1098,6 +1118,15 @@ class EmailSyncService:
     # Role Normalization & Matching
     # ========================================================================
 
+    # Single-word terms that are too generic to use as email subject keywords.
+    # These match far too many unrelated emails and cause mis-linking.
+    BLOCKED_KEYWORDS: set[str] = {
+        'developer', 'engineer', 'analyst', 'architect', 'consultant',
+        'manager', 'associate', 'specialist', 'administrator', 'designer',
+        'coordinator', 'director', 'lead', 'intern', 'technician',
+        'technology', 'support', 'officer', 'executive',
+    }
+
     def _normalize_role(self, role: str) -> str:
         """
         Normalize a role string by extracting the base role name.
@@ -1107,11 +1136,15 @@ class EmailSyncService:
         - "devops engineer with terraform" -> "devops engineer"
         - "sr. devops engineer" -> "devops engineer"
 
+        Returns empty string for results that are too generic (single common
+        word like "developer" or "engineer") — these would match too many
+        unrelated emails and cause mis-linking.
+
         Args:
             role: Original role string
 
         Returns:
-            Normalized base role name
+            Normalized base role name, or empty string if too generic
         """
         role_lower = role.lower().strip()
 
@@ -1124,6 +1157,8 @@ class EmailSyncService:
             r'^entry-level\s+',
             r'^associate\s+',
             r'^lead/senior\s+',
+            r'^principal\s+',
+            r'^staff\s+',
         ]
 
         for prefix_pattern in prefixes_to_remove:
@@ -1147,6 +1182,26 @@ class EmailSyncService:
 
         # Remove trailing punctuation
         role_lower = re.sub(r'[.,;:\-–]+$', '', role_lower).strip()
+
+        # Remove leading non-alpha characters (e.g. "/ lead java developer" → "lead java developer")
+        role_lower = re.sub(r'^[^a-z]+', '', role_lower).strip()
+
+        # Re-apply prefix removal in case separator split exposed a new prefix
+        # e.g. "/ Lead Java Developer" → "lead java developer" → "java developer"
+        for prefix_pattern in prefixes_to_remove:
+            role_lower = re.sub(prefix_pattern, '', role_lower)
+
+        # Reject overly-generic single-word results
+        if role_lower in self.BLOCKED_KEYWORDS:
+            logger.debug(
+                f"Rejecting generic keyword '{role_lower}' "
+                f"(normalized from '{role}')"
+            )
+            return ''
+
+        # Reject results shorter than 3 chars (noise)
+        if len(role_lower) < 3:
+            return ''
 
         return role_lower
 
