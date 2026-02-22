@@ -225,6 +225,10 @@ class EmailSyncService:
             return {"skipped": True, "reason": "inactive"}
 
         try:
+            # Invalidate roles cache to ensure latest _normalize_role() logic
+            # is used (prevents stale generic keywords after deploys).
+            self.invalidate_tenant_roles_cache(integration.tenant_id)
+
             # Get preferred roles for filtering FIRST — skip if none configured
             preferred_roles = self._get_tenant_roles_cached(integration.tenant_id)
 
