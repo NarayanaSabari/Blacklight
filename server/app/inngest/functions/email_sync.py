@@ -222,7 +222,7 @@ async def sync_user_inbox_workflow(ctx):
     redis_key = sync_result.get("redis_key")
 
     if matched_count == 0:
-        logger.info("[INNGEST] No matched emails to process")
+        logger.debug("[INNGEST] No matched emails to process")
         # Still update sync timestamp
         def update_ts_no_emails():
             from app import create_app
@@ -503,7 +503,7 @@ async def match_email_jobs_to_candidates_workflow(ctx):
     tenant_id = event_data.get("tenant_id")
 
     if not job_ids:
-        logger.info("[INNGEST] No email jobs to process for matching")
+        logger.debug("[INNGEST] No email jobs to process for matching")
         return {"status": "completed", "matches_created": 0}
 
     logger.info(

@@ -232,18 +232,19 @@ async def cleanup_stale_sessions_workflow(ctx: inngest.Context) -> dict:
     
     Also resets any RoleLocationQueue entries stuck in 'processing' or 'completed'.
     """
-    logger.info("[INNGEST] Running stale scrape session cleanup")
-    
     # Step 1: Cleanup stale sessions and reset stuck queue entries
     cleanup_result = await ctx.step.run(
         "cleanup-stale-sessions",
         cleanup_stale_sessions_step
     )
     
-    logger.info(
-        f"[INNGEST] Cleanup complete: {cleanup_result.get('sessions_timed_out', 0)} sessions timed out, "
-        f"{cleanup_result.get('role_location_stuck_reset', 0)} stuck queue entries reset"
-    )
+    timed_out = cleanup_result.get('sessions_timed_out', 0)
+    stuck_reset = cleanup_result.get('role_location_stuck_reset', 0)
+    if timed_out > 0 or stuck_reset > 0:
+        logger.info(
+            f"[INNGEST] Cleanup complete: {timed_out} sessions timed out, "
+            f"{stuck_reset} stuck queue entries reset"
+        )
     
     return {
         "cleanup_result": cleanup_result,
@@ -363,7 +364,6 @@ def update_candidate_counts_step() -> int:
     
     db.session.commit()
     
-    logger.info(f"[INNGEST] Updated candidate counts for {len(roles)} roles")
     return len(roles)
 
 
@@ -384,15 +384,14 @@ async def cleanup_stale_credentials_workflow(ctx) -> dict:
     Credentials assigned for more than 60 minutes are released
     to prevent being stuck if a scraper crashes.
     """
-    logger.info("[INNGEST] Running stale scraper credentials cleanup")
-    
     # Step 1: Cleanup stale assignments
     stale_count = await ctx.step.run(
         "cleanup-stale-credentials",
         cleanup_stale_credentials_step
     )
     
-    logger.info(f"[INNGEST] Released {stale_count} stale credentials")
+    if stale_count > 0:
+        logger.info(f"[INNGEST] Released {stale_count} stale credentials")
     
     return {
         "credentials_released": stale_count,
@@ -413,15 +412,14 @@ async def clear_credential_cooldowns_workflow(ctx) -> dict:
     Credentials in 'cooldown' status with expired cooldown_until
     are moved back to 'available'.
     """
-    logger.info("[INNGEST] Running credential cooldown expiry check")
-    
     # Step 1: Clear expired cooldowns
     cleared_count = await ctx.step.run(
         "clear-expired-cooldowns",
         clear_expired_cooldowns_step
     )
     
-    logger.info(f"[INNGEST] Cleared cooldown for {cleared_count} credentials")
+    if cleared_count > 0:
+        logger.info(f"[INNGEST] Cleared cooldown for {cleared_count} credentials")
     
     return {
         "cooldowns_cleared": cleared_count,
@@ -470,7 +468,7 @@ async def backfill_orphaned_job_roles_workflow(ctx) -> dict:
     )
 
     if not orphaned_jobs:
-        logger.info("[INNGEST] No orphaned jobs found")
+        logger.debug("[INNGEST] No orphaned jobs found")
         return {"orphaned_found": 0, "normalized": 0, "failed": 0}
 
     logger.info(f"[INNGEST] Found {len(orphaned_jobs)} orphaned jobs to normalize")
