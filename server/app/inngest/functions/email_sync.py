@@ -198,6 +198,49 @@ async def sync_user_inbox_workflow(ctx):
         f"(manual={manual_trigger})"
     )
 
+    # Step 0: Load context (integration details, tenant name, user email)
+    # for richer logging throughout the workflow.
+    def load_context():
+        from app import create_app
+        app = create_app()
+        with app.app_context():
+            from app import db
+            from app.models.user_email_integration import UserEmailIntegration
+            from app.models.tenant import Tenant
+            from app.models.portal_user import PortalUser
+
+            integration = db.session.get(UserEmailIntegration, integration_id)
+            if not integration:
+                return {"error": "Integration not found"}
+
+            tenant = db.session.get(Tenant, integration.tenant_id)
+            user = db.session.get(PortalUser, integration.user_id)
+
+            return {
+                "integration_id": integration.id,
+                "provider": integration.provider,
+                "email_address": integration.email_address,
+                "is_active": integration.is_active,
+                "tenant_id": integration.tenant_id,
+                "tenant_name": tenant.name if tenant else "Unknown",
+                "user_id": integration.user_id,
+                "user_email": user.email if user else "Unknown",
+                "user_name": f"{user.first_name} {user.last_name}" if user else "Unknown",
+            }
+
+    ctx_info = await ctx.step.run("load-context", load_context)
+
+    if ctx_info.get("error"):
+        logger.error(f"[INNGEST] Context load failed: {ctx_info['error']}")
+        return ctx_info
+
+    # Build a short label for log lines
+    sync_label = (
+        f"[{ctx_info['provider'].upper()}] "
+        f"{ctx_info['email_address'] or 'no-email'} "
+        f"(tenant={ctx_info['tenant_name']}, user={ctx_info['user_name']})"
+    )
+
     # Step 1: Fetch and filter emails, store matched emails in Redis
     def fetch_and_filter():
         from app import create_app
@@ -209,21 +252,21 @@ async def sync_user_inbox_workflow(ctx):
     sync_result = await ctx.step.run("fetch-and-filter", fetch_and_filter)
 
     if sync_result.get("error"):
-        logger.error(f"[INNGEST] Sync failed for integration {integration_id}: {sync_result['error']}")
-        return sync_result
+        logger.error(f"[INNGEST] {sync_label} Sync failed: {sync_result['error']}")
+        return {**sync_result, **ctx_info}
 
     if sync_result.get("skipped") is True:
         logger.info(
-            f"[INNGEST] Sync skipped for integration {integration_id}: "
+            f"[INNGEST] {sync_label} Sync skipped: "
             f"{sync_result.get('reason', 'unknown')}"
         )
-        return sync_result
+        return {**sync_result, **ctx_info}
 
     matched_count = sync_result.get("matched", 0)
     redis_key = sync_result.get("redis_key")
 
     logger.info(
-        f"[INNGEST] Integration {integration_id}: "
+        f"[INNGEST] {sync_label}: "
         f"fetched={sync_result.get('fetched', 0)}, "
         f"matched={matched_count}, "
         f"already_processed={sync_result.get('already_processed', 0)}, "
@@ -232,7 +275,7 @@ async def sync_user_inbox_workflow(ctx):
     )
 
     if matched_count == 0:
-        logger.debug("[INNGEST] No matched emails to process")
+        logger.debug(f"[INNGEST] {sync_label}: No matched emails to process")
         # Still update sync timestamp
         def update_ts_no_emails():
             from app import create_app
@@ -248,6 +291,7 @@ async def sync_user_inbox_workflow(ctx):
         await ctx.step.run("update-sync-timestamp", update_ts_no_emails)
         return {
             "status": "completed",
+            **ctx_info,
             "fetched": sync_result.get("fetched", 0),
             "matched": 0,
             "jobs_created": 0,
@@ -260,7 +304,7 @@ async def sync_user_inbox_workflow(ctx):
     created_job_ids = []
 
     logger.info(
-        f"[INNGEST] Processing {matched_count} matched emails in "
+        f"[INNGEST] {sync_label}: Processing {matched_count} matched emails in "
         f"{total_chunks} chunk(s) of {chunk_size}"
     )
 
@@ -410,7 +454,7 @@ async def sync_user_inbox_workflow(ctx):
     await ctx.step.run("update-sync-timestamp", update_sync_ts)
 
     logger.info(
-        f"[INNGEST] Sync complete for integration {integration_id}: "
+        f"[INNGEST] {sync_label}: Sync complete — "
         f"fetched={sync_result.get('fetched', 0)}, "
         f"matched={sync_result.get('matched', 0)}, "
         f"already_processed={sync_result.get('already_processed', 0)}, "
@@ -419,7 +463,7 @@ async def sync_user_inbox_workflow(ctx):
 
     return {
         "status": "completed",
-        "integration_id": integration_id,
+        **ctx_info,
         "fetched": sync_result.get("fetched", 0),
         "matched": sync_result.get("matched", 0),
         "already_processed": sync_result.get("already_processed", 0),
