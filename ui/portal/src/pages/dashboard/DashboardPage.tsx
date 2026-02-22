@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import {
   Users,
   UserCheck,
@@ -22,8 +23,11 @@ import {
   UserPlus,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
+  XCircle,
 } from 'lucide-react';
 import { dashboardApi } from '@/lib/dashboardApi';
+import { emailIntegrationApi, type EmailIntegration } from '@/lib/emailIntegrationApi';
 
 const ONBOARDING_STATUS_COLORS: Record<string, string> = {
   PENDING_ASSIGNMENT: 'bg-gray-100 text-gray-700',
@@ -51,6 +55,19 @@ export function DashboardPage() {
     refetchInterval: 60000,
   });
 
+  // Fetch integration status to show warnings for failed integrations
+  const { data: integrations } = useQuery({
+    queryKey: ['email-integrations-dashboard'],
+    queryFn: emailIntegrationApi.listIntegrations,
+    refetchInterval: 300000, // Check every 5 minutes
+    staleTime: 60000,
+  });
+
+  // Filter integrations that have errors
+  const failedIntegrations = integrations?.filter(
+    (i: EmailIntegration) => i.last_error !== null
+  ) ?? [];
+
   if (!user) {
     return null;
   }
@@ -71,6 +88,47 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Integration Failure Warning */}
+      {failedIntegrations.length > 0 && (
+        <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-900 font-semibold">
+            {failedIntegrations.length === 1
+              ? 'Email integration issue'
+              : `${failedIntegrations.length} email integration issues`}
+          </AlertTitle>
+          <AlertDescription className="text-amber-800">
+            <div className="mt-1 space-y-1.5">
+              {failedIntegrations.map((integration: EmailIntegration) => (
+                <div key={integration.id} className="flex items-start gap-2 text-sm">
+                  <XCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-600" />
+                  <span>
+                    <span className="font-medium capitalize">{integration.provider}</span>
+                    {integration.email_address && (
+                      <span className="text-amber-700"> ({integration.email_address})</span>
+                    )}
+                    {!integration.is_active && (
+                      <span className="text-red-700 font-medium"> - Deactivated</span>
+                    )}
+                    <span className="text-amber-700"> — {integration.last_error}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <Link to="/settings/integrations">
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 border-amber-400 text-amber-900 hover:bg-amber-100"
+              >
+                View Integrations
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Welcome Header */}
       <div className="flex items-center justify-between">
         <div>
