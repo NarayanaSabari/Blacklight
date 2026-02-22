@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app import db
 from app.inngest import inngest_client
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantStatus
 from app.models.candidate import Candidate
 from app.models.job_posting import JobPosting
 from app.models.global_role import GlobalRole
@@ -111,14 +111,14 @@ async def generate_candidate_matches_workflow(ctx):
     {
         "candidate_id": 123,
         "tenant_id": 456,
-        "min_score": 50.0,
+        "min_score": 30.0,
         "trigger": "onboarding" | "profile_update" | "manual"
     }
     """
     event_data = ctx.event.data
     candidate_id = event_data.get("candidate_id")
     tenant_id = event_data.get("tenant_id")
-    min_score = event_data.get("min_score", 50.0)
+    min_score = event_data.get("min_score", 30.0)
     trigger = event_data.get("trigger", "manual")
     
     logger.info(
@@ -339,7 +339,7 @@ async def match_jobs_to_candidates_workflow(ctx) -> dict:
                     match = unified_scorer.calculate_and_store_match(candidate, job)
                     
                     # Only count if score is above threshold
-                    if match.match_score >= 50:
+                    if match.match_score >= 30:
                         total_matches += 1
                     else:
                         # Remove match if below threshold
@@ -439,14 +439,14 @@ async def update_job_embeddings_workflow(ctx):
 
 def fetch_active_tenants_step() -> List[Dict[str, Any]]:
     """Fetch all active tenants"""
-    query = select(Tenant).where(Tenant.is_active == True)
+    query = select(Tenant).where(Tenant.status == TenantStatus.ACTIVE)
     tenants = db.session.execute(query).scalars().all()
     
     return [
         {
             "id": tenant.id,
-            "company_name": tenant.company_name,
-            "subdomain": tenant.subdomain
+            "name": tenant.name,
+            "slug": tenant.slug
         }
         for tenant in tenants
     ]
@@ -465,7 +465,7 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
     tenant_id = tenant["id"]
     
     try:
-        logger.info(f"[INNGEST] Processing matches for tenant {tenant_id} ({tenant['company_name']})")
+        logger.info(f"[INNGEST] Processing matches for tenant {tenant_id} ({tenant['name']})")
         
         # Get all active candidates for this tenant
         candidates = db.session.scalars(
@@ -538,7 +538,7 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
                 for job in matching_jobs:
                     try:
                         match = unified_scorer.calculate_and_store_match(candidate, job)
-                        if match.match_score >= 50:
+                        if match.match_score >= 30:
                             candidate_matches += 1
                         else:
                             db.session.delete(match)
@@ -566,7 +566,7 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
         
         return {
             "tenant_id": tenant_id,
-            "tenant_name": tenant["company_name"],
+            "tenant_name": tenant["name"],
             "status": "success",
             "total_candidates": total_candidates,
             "successful_candidates": successful_candidates,
@@ -579,7 +579,7 @@ def process_tenant_matches_step(tenant: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"[INNGEST] Error processing tenant {tenant_id}: {str(e)}")
         return {
             "tenant_id": tenant_id,
-            "tenant_name": tenant["company_name"],
+            "tenant_name": tenant["name"],
             "status": "error",
             "error": str(e),
             "total_candidates": 0,

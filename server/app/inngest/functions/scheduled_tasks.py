@@ -136,7 +136,7 @@ def send_reminder_email_step(invitation: dict) -> bool:
 def calculate_daily_stats_step() -> dict:
     """Calculate daily statistics for all tenants"""
     from app import db
-    from app.models.tenant import Tenant
+    from app.models.tenant import Tenant, TenantStatus
     from app.models.candidate import Candidate
     from app.models.candidate_invitation import CandidateInvitation
     from sqlalchemy import select, func
@@ -145,7 +145,7 @@ def calculate_daily_stats_step() -> dict:
     today = datetime.utcnow()
     
     # Get all active tenants
-    tenants = db.session.execute(select(Tenant).where(Tenant.is_active == True)).scalars().all()
+    tenants = db.session.execute(select(Tenant).where(Tenant.status == TenantStatus.ACTIVE)).scalars().all()
     
     all_stats = {}
     
@@ -179,7 +179,7 @@ def calculate_daily_stats_step() -> dict:
         ) or 0
         
         all_stats[tenant.id] = {
-            "tenant_name": tenant.company_name,
+            "tenant_name": tenant.name,
             "date": yesterday.strftime("%Y-%m-%d"),
             "new_candidates": new_candidates,
             "new_invitations": new_invitations,
